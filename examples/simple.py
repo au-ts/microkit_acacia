@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from sdfgenpy.arch import aarch64
-from sdfgenpy import ProtectionDomain, MemoryRegion, Map, ConventionalIRQ, System
+from sdfgenpy import ProtectionDomain, MemoryRegion, Map, ConventionalIRQ, IRQ, System
 import xml.etree.ElementTree as et
 
 sdf = System(aarch64, 0x10000)
@@ -13,7 +13,6 @@ serial_virt_tx = ProtectionDomain(
 )
 
 clk_driver = ProtectionDomain("clk_driver", "clk_driver.elf", priority=240)
-
 timer_driver = ProtectionDomain("timer_driver", "timer_driver.elf", priority=254)
 i2c_driver = ProtectionDomain("i2c_driver", "i2c_driver.elf", priority=3)
 i2c_virt = ProtectionDomain("i2c_virt", "i2c_virt.elf", priority=2)
@@ -29,20 +28,12 @@ clk_ccm_analog_map = Map(clk_ccm_analog_mr, 0x3300000, "rw")
 clk_driver.add_map(clk_ccm_map)
 clk_driver.add_map(clk_ccm_analog_map)
 
+# Add dummy interrupts
+clk_irq = ConventionalIRQ(0, 15, IRQ.Trigger.EDGE)
+i2c_irq = ConventionalIRQ(1, 16, IRQ.Trigger.LEVEL)
 
-# i2c_system = Sddf.I2c(sdf, i2c_node, i2c_driver, i2c_virt)
-# i2c_system.add_client(client_ds3231)
-# i2c_system.add_client(client_pn532)
-#
-# timer_system = Sddf.Timer(sdf, timer_node, timer_driver)
-# timer_system.add_client(client_pn532)
-# timer_system.add_client(client_ds3231)
-
-# serial_system = Sddf.Serial(
-#     sdf, serial_node, serial_driver, serial_virt_tx, enable_color=False
-# )
-# serial_system.add_client(client_pn532)
-# serial_system.add_client(client_ds3231)
+clk_driver.add_irq(clk_irq)
+i2c_driver.add_irq(i2c_irq)
 
 pds = [
     serial_driver,
@@ -56,13 +47,6 @@ pds = [
 ]
 for pd in pds:
     sdf.add_pd(pd)
-
-# assert i2c_system.connect()
-# assert i2c_system.serialise_config(output_dir)
-# assert serial_system.connect()
-# assert serial_system.serialise_config(output_dir)
-# assert timer_system.connect()
-# assert timer_system.serialise_config(output_dir)
 
 # Make element tree and indent
 xml = sdf.render()

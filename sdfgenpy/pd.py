@@ -1,7 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional
+from typing import Optional, Set
 from dataclasses import dataclass
 from abc import ABC
 import xml.etree.ElementTree as et
@@ -118,7 +118,7 @@ class ProtectionDomain(Entity):
         self.prog_image = prog_image
         self.stack_size = stack_size
         self.cpu = cpu
-        self.irqs: List[IRQ] = []
+        self.irqs: Set[IRQ] = set()
 
     def render(self, system_root: et.Element):
         pd = super().render(system_root, "protection_domain")
@@ -130,8 +130,15 @@ class ProtectionDomain(Entity):
             pd.set("stack_size", str(self.stack_size))
         if self.cpu is not None:
             pd.set("cpu", str(self.cpu))
+        for i in self.irqs:
+            i.render(pd)
 
         return pd
+
+    def add_irq(self, irq: IRQ):
+        if irq in self.irqs:
+            raise RuntimeError("Cannot add the same IRQ to a PD twice!")
+        self.irqs.add(irq)
 
 class VMProtectionDomain(Entity):
     """
