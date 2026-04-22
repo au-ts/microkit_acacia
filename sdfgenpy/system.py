@@ -6,6 +6,7 @@ from .arch import Arch, ArchID, SDFMemoryAllocator
 from .pd import ProtectionDomain
 from .channel import Channel
 from .memory import MemoryRegion, Map
+from .subsystem import Subsystem
 import xml.etree.ElementTree as et
 
 class System:
@@ -20,7 +21,8 @@ class System:
         self.pds: Set[PD] = set()
         self.mrs: Set[MemoryRegion] = set()
         self.channels: Set[Channel] = set()
-        self.subsystems = [] #todo
+        self.subsystems: List[Subsystem] = [] #todo
+        self.subsystems_constructed = False
 
     def add_pd(self, pd: ProtectionDomain):
         # We technically don't need to raise this error, but it's better to
@@ -38,6 +40,36 @@ class System:
         if mr in self.mrs:
             raise RuntimeError("Cannot add one memory region to the same system multiple times!")
         self.mrs.add(mr)
+
+    def add_subsystem(self, subsystem: Subsystem):
+        self.subsystems.append(subsystem)
+
+    def resolve_subsystems(self):
+        """
+        Construct all subsystems and their client connections. This method
+        builds a dependency graph, topologically sorts it, and then
+        connects dependencies one at a time. This method will assert
+        that all dependencies are of strictly ascending priority order.
+
+        Subsystems are built from highest priority to lowest priority.
+        """
+        top_sorted = Subsystem.topological_sort(self.subsystems)
+
+        # Check if all subsystems in dependency graph are present. We
+        # do not yet support automatic adding of external dependencies.
+        if set(top_sorted) != set(self.subsystems):
+            raise NotImplementedError("External dependency resolution not implemented")
+
+        max_prio = 254
+        for s in top_sorted:
+            max_prio = s.build(max_prio) - 1
+            for pd in s.get_pds():
+                self.add_pd(pd)
+            for mr in s.get_mrs():
+                self.add_mr(mr)
+            for channel in s.get_channels():
+                self.add_channel(channel)
+
 
     def render(self) -> et.Element:
         system = et.Element("system")
