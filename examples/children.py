@@ -30,9 +30,5 @@ sdf.add_channel(ch)
 # Only add parent to system
 sdf.add_pd(parent)
 
-xml = sdf.render()
-et.indent(xml, level=0)
-tree = et.ElementTree(xml)
-et.indent(tree, space='\t', level=0)
-tree.write("children.system", encoding="utf-8", xml_declaration=True)
+sdf.write_xml_file("children.system")
 

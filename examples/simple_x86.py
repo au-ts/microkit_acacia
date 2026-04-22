@@ -107,10 +107,4 @@ pds = [
 for pd in pds:
     sdf.add_pd(pd)
 
-xml = sdf.render()
-et.indent(xml, level=0)
-
-tree = et.ElementTree(xml)
-et.indent(tree, space='\t', level=0)
-tree.write("simple_x86.system", encoding="utf-8", xml_declaration=True)
-
+sdf.write_xml_file("simple_x86.system")

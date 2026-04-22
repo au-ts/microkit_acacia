@@ -55,3 +55,11 @@ class System:
 
 
         return system
+
+    def write_xml_file(self, path):
+        xml = self.render()
+        et.indent(xml, level=0)
+
+        tree = et.ElementTree(xml)
+        et.indent(tree, space='\t', level=0)
+        tree.write(path, encoding="utf-8", xml_declaration=True)
