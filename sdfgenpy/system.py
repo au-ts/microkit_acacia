@@ -42,17 +42,16 @@ class System:
     def render(self) -> et.Element:
         system = et.Element("system")
 
-        # Add MRs first.
         for mr in self.mrs:
             # Allocate paddr if needed
             mr.allocate_paddr(self.allocator)
-
-            # Render
             mr.render(system)
 
-        # Add each PD
         for pd in self.pds:
             pd.render(system)
+
+        for ch in self.channels:
+            ch.render(system)
 
 
         return system
