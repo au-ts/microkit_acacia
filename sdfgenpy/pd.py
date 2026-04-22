@@ -1,7 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Set, Union
+from typing import Optional, Set, Union, List
 from dataclasses import dataclass
 from abc import ABC
 import xml.etree.ElementTree as et
@@ -10,6 +10,8 @@ from .arch import SDFMemoryAllocator
 from .irq import IRQ
 from .x86 import IOPort
 # from .constraint import DependentField, FieldSpec, UINT64_MAX
+
+MAX_IDS = 62 # matches microkit. limit for child pds, ioports, irqs and channel IDs
 
 @dataclass
 class SchedulingProperties:
@@ -100,6 +102,7 @@ class Entity:
 
         return entity
 
+
 class ProtectionDomain(Entity):
     """
     A PD running native code
@@ -128,11 +131,18 @@ class ProtectionDomain(Entity):
         self.irqs: Set[IRQ] = set()
         self.ioports: List[IOPort] = []
         self.assigned_ids = []
+        self.assigned_child_ids = []
+        self.children: List[ProtectionDomain] = []
+        self.child_id = None    # Assigned if this PD is made a child.
 
-    def render(self, system_root: et.Element):
-        pd = super().render(system_root, "protection_domain")
+    def render(self, parent: et.Element):
+        pd = super().render(parent, "protection_domain")
         prog_image = et.SubElement(pd, "program_image")
         prog_image.set("path", self.prog_image)
+
+        if self.child_id is not None:
+            # If we are a child, include id.
+            pd.set("id", str(self.child_id))
 
         # Only insert stack size, CPU and SMC if defined
         if self.stack_size is not None:
@@ -143,6 +153,8 @@ class ProtectionDomain(Entity):
             i.render(pd)
         for iop in self.ioports:
             iop.render(pd)
+        for c in self.children:
+            c.render(pd)
 
         return pd
 
@@ -161,10 +173,25 @@ class ProtectionDomain(Entity):
                 raise RuntimeError("Requested ID is not available!")
 
         else:
-            new_id = next(i for i in range(254) if i not in self.assigned_ids)
+            new_id = next(i for i in range(MAX_IDS) if i not in self.assigned_ids)
             self.assigned_ids.append(new_id)
             return new_id
 
+    def allocate_child_pd_id(self, requested_id: Optional[int] = None):
+        """
+        Allocate an ID (or test a requested id) for a child PD
+        """
+        if requested_id is not None:
+            if requested_id not in self.assigned_child_ids:
+                self.assigned_child_ids.append(requested_id)
+                return requested_id
+            else:
+                raise RuntimeError("Requested ID is not available!")
+
+        else:
+            new_id = next(i for i in range(MAX_IDS) if i not in self.assigned_child_ids)
+            self.assigned_child_ids.append(new_id)
+            return new_id
 
     def add_irq(self, irq: IRQ):
         if irq in self.irqs:
@@ -176,6 +203,14 @@ class ProtectionDomain(Entity):
     def add_ioport(self, ioport: IOPort):
         ioport.id = self.allocate_id(ioport.id)   # Allocate and reserve ID
         self.ioports.append(ioport)
+
+    def add_child_pd(self, child, child_id: Optional[int]=None):
+        if child in self.children:
+            raise RuntimeError("Cannot make the same PD a child multiple times!")
+        child_id = self.allocate_child_pd_id(child_id)
+        child.child_id = child_id
+        self.children.append(child)
+
 
 
 class VMProtectionDomain(Entity):
