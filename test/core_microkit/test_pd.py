@@ -3,7 +3,7 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from sdfgenpy.pd import ProtectionDomain, SchedulingProperties, VMProtectionDomain, MAX_IDS
+from sdfgenpy.pd import ProtectionDomain, SchedulingProperties, MAX_IDS, VirtualMachine
 from sdfgenpy.memory import MemoryRegion, Map
 
 
@@ -313,4 +313,120 @@ class TestChildPdIntegration:
         assert irq_elem is not None
         assert irq_elem.get("id") is not None
 
-# class TestVMProtectionDomain:
+
+class TestVCPU:
+    def test_valid_vcpu(self):
+        v = VirtualMachine.VCPU(id=5, cpu=2)
+        assert v.id == 5
+        assert v.cpu == 2
+
+    def test_vcpu_optional_cpu(self):
+        v = VirtualMachine.VCPU(id=3)
+        assert v.cpu is None
+
+    def test_vcpu_negative_id_rejected(self):
+        with pytest.raises(RuntimeError, match="VCPU ID.*is invalid"):
+            VirtualMachine.VCPU(id=-1)
+
+    def test_vcpu_id_exceeds_max(self):
+        with pytest.raises(RuntimeError, match="VCPU ID.*is invalid"):
+            VirtualMachine.VCPU(id=63)  # MAX_IDS is 62
+
+    def test_vcpu_render(self):
+        v = VirtualMachine.VCPU(id=4, cpu=1)
+        parent = et.Element("parent")
+        v.render(parent)
+        vcpu_elem = parent.find("vcpu")
+        assert vcpu_elem.get("id") == "4"
+        assert vcpu_elem.get("cpu") == "1"
+
+    def test_vcpu_render_no_cpu(self):
+        v = VirtualMachine.VCPU(id=2)
+        parent = et.Element("parent")
+        v.render(parent)
+        vcpu_elem = parent.find("vcpu")
+        assert vcpu_elem.get("cpu") is None
+
+
+class TestVirtualMachine:
+    def test_init_with_single_vcpu(self):
+        v = VirtualMachine.VCPU(id=0)
+        vm = VirtualMachine("vm1", SchedulingProperties(priority=100), vcpus=v)
+        assert isinstance(vm.vcpus, list)
+        assert len(vm.vcpus) == 1
+
+    def test_init_with_vcpu_list(self):
+        vcpus = [VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)]
+        vm = VirtualMachine("vm2", SchedulingProperties(priority=100), vcpus=vcpus)
+        assert len(vm.vcpus) == 2
+
+    def test_duplicate_vcpu_ids_rejected(self):
+        vcpus = [VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=0)]
+        with pytest.raises(RuntimeError, match="unique per VM"):
+            VirtualMachine("vm3", SchedulingProperties(priority=100), vcpus=vcpus)
+
+    def test_too_many_vcpus_rejected(self):
+        vcpus = [VirtualMachine.VCPU(id=i) for i in range(63)]  # MAX_IDS is 62
+        with pytest.raises(RuntimeError, match="supported at max"):
+            VirtualMachine("vm4", SchedulingProperties(priority=100), vcpus=vcpus)
+
+    def test_vm_inherits_entity_maps(self):
+        vm = VirtualMachine("vm5", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        mr = MemoryRegion("test_mr", 0x1000)
+        m = Map(mr, 0x40000000, "rw")
+        vm.add_map(m)
+        assert len(vm.maps) == 1
+
+    def test_vm_render_structure(self):
+        vm = VirtualMachine("guest", SchedulingProperties(priority=50, budget=1000, period=2000), vcpus=[VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)])
+        parent = et.Element("parent")
+        vm.render(parent)
+        vm_elem = parent.find("virtual_machine")
+        assert vm_elem is not None
+        assert vm_elem.get("name") == "guest"
+        assert vm_elem.get("priority") == "50"
+        assert vm_elem.get("budget") == "1000"
+        assert vm_elem.get("period") == "2000"
+        # Check VirtualMachine.VCPUs rendered inside
+        vcpus = vm_elem.findall("vcpu")
+        assert len(vcpus) == 2
+
+
+class TestProtectionDomainVM:
+    def test_set_vm_success(self):
+        pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
+        vm = VirtualMachine("guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        pd.set_vm(vm)
+        assert pd.vm is vm
+
+    def test_set_vm_twice_rejected(self):
+        pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
+        vm1 = VirtualMachine("guest1", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        vm2 = VirtualMachine("guest2", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=1))
+        pd.set_vm(vm1)
+        with pytest.raises(RuntimeError, match="Can only have one VM per PD!"):
+            pd.set_vm(vm2)
+
+    def test_vm_rendered_inside_pd(self):
+        pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
+        vm = VirtualMachine("guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        pd.set_vm(vm)
+        root = et.Element("system")
+        pd.render(root)
+        pd_elem = root.find("protection_domain")
+        vm_elem = pd_elem.find("virtual_machine")
+        assert vm_elem is not None
+        assert vm_elem.get("name") == "guest"
+
+    def test_vm_with_maps_rendered(self):
+        pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
+        mr = MemoryRegion("ram", 0x1000)
+        vm = VirtualMachine("guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        vm.add_map(Map(mr, 0x40000000, "rw"))
+        pd.set_vm(vm)
+        root = et.Element("system")
+        pd.render(root)
+        vm_elem = root.find("protection_domain").find("virtual_machine")
+        map_elem = vm_elem.find("map")
+        assert map_elem is not None
+        assert map_elem.get("vaddr") == "0x40000000"

@@ -103,6 +103,51 @@ class Entity:
         return entity
 
 
+
+
+class VirtualMachine(Entity):
+    """
+    An instance of a VM belonging to a PD. This inherits from entity as
+    VMs can be targeted with maps and has scheduling parameters.
+    """
+    @dataclass
+    class VCPU:
+        id: int
+        cpu: Optional[int] = None
+
+        def __post_init__(self):
+            if self.id is None or self.id < 0 or self.id > MAX_IDS:
+                raise RuntimeError(f"VCPU ID={self.id} is invalid!")
+            # todo: validate cpu field. Not entirely clear what this should be?
+
+        def render(self, parent: et.Element):
+            entity = et.SubElement(parent, "vcpu")
+            entity.set("id", str(self.id))
+            if self.cpu is not None:
+                entity.set("cpu", str(self.cpu))
+
+    def __init__(self,
+                 name: str,
+                 scheduling: SchedulingProperties,
+                 vcpus: [Union[List[VCPU], VCPU]]):
+        super().__init__(name, scheduling)
+        if type(vcpus) is not list:
+            self.vcpus = [vcpus]
+        else:
+            # Check all IDs are unique
+            ids = [x.id for x in vcpus]
+            if len(ids) != len(set(ids)):
+                raise RuntimeError("All VCPU IDs must be unique per VM!")
+            if len(ids) > MAX_IDS:
+                raise RuntimeError(f"{MAX_IDS} VCPUs are supported at max!")
+            self.vcpus = vcpus
+
+    def render(self, parent: et.Element):
+        vm = super().render(parent, "virtual_machine")
+        for vcpu in self.vcpus:
+            vcpu.render(vm)
+
+
 class ProtectionDomain(Entity):
     """
     A PD running native code
@@ -131,9 +176,14 @@ class ProtectionDomain(Entity):
         self.irqs: Set[IRQ] = set()
         self.ioports: List[IOPort] = []
         self.assigned_ids = []
+
+        # Parental responsibilities
         self.assigned_child_ids = []
         self.children: List[ProtectionDomain] = []
         self.child_id = None    # Assigned if this PD is made a child.
+
+        # VM
+        self.vm: Optional[VirtualMachine] = None
 
     def render(self, parent: et.Element):
         pd = super().render(parent, "protection_domain")
@@ -155,6 +205,8 @@ class ProtectionDomain(Entity):
             iop.render(pd)
         for c in self.children:
             c.render(pd)
+        if self.vm:
+            self.vm.render(pd)
 
         return pd
 
@@ -204,16 +256,18 @@ class ProtectionDomain(Entity):
         ioport.id = self.allocate_id(ioport.id)   # Allocate and reserve ID
         self.ioports.append(ioport)
 
-    def add_child_pd(self, child, child_id: Optional[int]=None):
+    def add_child_pd(self, child, child_id: Optional[int] = None):
         if child in self.children:
             raise RuntimeError("Cannot make the same PD a child multiple times!")
         child_id = self.allocate_child_pd_id(child_id)
         child.child_id = child_id
         self.children.append(child)
 
+    def set_vm(self, vm: VirtualMachine):
+        if self.vm is not None:
+            raise RuntimeError("Can only have one VM per PD!")
+        self.vm = vm
 
 
-class VMProtectionDomain(Entity):
-    """
-    """
-    pass
+
+
