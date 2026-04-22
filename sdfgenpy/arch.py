@@ -25,13 +25,13 @@ class Arch:
     arch: ArchID
 
     def is_arm(self) -> bool:
-        return self.arch in [ArchID.aarch32, ArchId.aarch64]
+        return self.arch in [ArchID.aarch32, ArchID.aarch64]
 
     def is_riscv(self) -> bool:
-        return self.arch in [ArchID.riscv32, ArchId.riscv64]
+        return self.arch in [ArchID.riscv32, ArchID.riscv64]
 
     def is_x86(self) -> bool:
-        return self.arch in [ArchID.x86, ArchId.x86_64]
+        return self.arch in [ArchID.x86, ArchID.x86_64]
 
     def is_64_bit(self) -> bool:
         return self.arch in [ArchID.aarch64, ArchID.riscv64, ArchID.x86_64]

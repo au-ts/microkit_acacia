@@ -26,7 +26,7 @@ class MemoryRegion:
         self.size = size
         if paddr is not None:
             physical = True
-            self.paddr = paddr
+        self.paddr = paddr
         self.physical = physical
         self.cached = cached
 

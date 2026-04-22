@@ -36,7 +36,7 @@ class SchedulingProperties:
 
         # If we have a period, we must also have a budget
         if self.period is not None:
-            if (self.budget > self.period):
+            if self.budget and self.period and (self.budget > self.period):
                 raise ValueError("Budget cannot be greater than period!")
         # Passive PDs may not have a period or budget
         if self.passive and (self.period is not None or self.budget is not None):
@@ -58,10 +58,19 @@ class Entity:
         self.name = name.strip()
         self.scheduling = scheduling
         # self.priority = DependentField(0, 254).set_val(scheduling.priority)
-        self.priority = scheduling.priority
-        self.budget = scheduling.budget
-        self.period = scheduling.period
         self.maps: List[Map] = []
+
+    @property
+    def priority(self):
+        return self.scheduling.priority if self.scheduling is not None else None
+
+    @property
+    def budget(self):
+        return self.scheduling.budget if self.scheduling is not None else None
+
+    @property
+    def period(self):
+        return self.scheduling.period if self.scheduling is not None else None
 
     def add_map(self, map: Map):
         self.maps.append(map)

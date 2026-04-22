@@ -14,9 +14,9 @@ class Channel:
         can_notify: bool
         can_pp: bool
         ch_id: Optional[int] = None
-        def __post_init(self):
-            if ch_id is not None and ch_id < 0 or ch_id > 255:
-                raise ValueError(f"Invalid channel id {ch_id}!")
+        def __post_init__(self):
+            if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
+                raise ValueError(f"Invalid channel id {self.ch_id}!")
 
     def __init__(
                  self,
@@ -43,14 +43,13 @@ class Channel:
             end = et.SubElement(channel, "end")
             end.set("pd", e.pd.name)
             end.set("id", str(e.ch_id))
-            # We only set notify if it's false for some reason
+            # Only set notify and pp if it changes the meaning from
+            # microkit's default mode.
             if not e.can_notify:
                 end.set("notify", "false")
-            # We only set pp if it's true for some reason
-            if not e.can_pp:
+            if e.can_pp:
                 end.set("pp", "true")
 
-            # note: "some reason" defined by microkit, not us.
         return channel
 
 
