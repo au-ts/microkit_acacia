@@ -268,6 +268,9 @@ class ProtectionDomain(Entity):
             raise RuntimeError("Can only have one VM per PD!")
         self.vm = vm
 
+    def __repr__(self):
+        return f"<ProtectionDomain {self.name} at {hex(id(self))}>"
+
 
 
 

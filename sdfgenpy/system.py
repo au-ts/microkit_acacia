@@ -6,7 +6,7 @@ from .arch import Arch, ArchID, SDFMemoryAllocator
 from .pd import ProtectionDomain
 from .channel import Channel
 from .memory import MemoryRegion, Map
-from .subsystem import Subsystem
+from .subsystem import Subsystem, get_dependency_map
 import xml.etree.ElementTree as et
 
 class System:
@@ -21,7 +21,8 @@ class System:
         self.pds: Set[PD] = set()
         self.mrs: Set[MemoryRegion] = set()
         self.channels: Set[Channel] = set()
-        self.subsystems: List[Subsystem] = [] #todo
+        # We only support one instance of a subsystem at a time currently.
+        self.subsystems: List[Subsystem] = []
         self.subsystems_constructed = False
 
     def add_pd(self, pd: ProtectionDomain):
@@ -42,9 +43,11 @@ class System:
         self.mrs.add(mr)
 
     def add_subsystem(self, subsystem: Subsystem):
+        if type(subsystem) in [type(s) for s in self.subsystems]:
+            raise NotImplementedError("Multiple copies of subsystems are not currently supported")
         self.subsystems.append(subsystem)
 
-    def resolve_subsystems(self):
+    def resolve_subsystems(self, auto_build_external_deps=False):
         """
         Construct all subsystems and their client connections. This method
         builds a dependency graph, topologically sorts it, and then
@@ -53,25 +56,83 @@ class System:
 
         Subsystems are built from highest priority to lowest priority.
         """
-        top_sorted = Subsystem.topological_sort(self.subsystems)
+        # of highest dependency order first.
+        ss_types = [type(x) for x in self.subsystems]
 
-        # Check if all subsystems in dependency graph are present. We
-        # do not yet support automatic adding of external dependencies.
-        if set(top_sorted) != set(self.subsystems):
-            raise NotImplementedError("External dependency resolution not implemented")
+        # Top sort returns a list of types, not class objects.
+        top_sorted = [x for x in get_dependency_map().topological_sort(filter=ss_types)]
+        subsystem_list = self.subsystems.copy()
 
-        max_prio = 254
-        for s in top_sorted:
-            max_prio = s.build(max_prio) - 1
+        # match top sort output to classes we have. if there are more types
+        # in the top sort than the input, the topological sort found external
+        # dependencies! (i.e. the user didn't provide instances of a required
+        # dependency).
+        if len(top_sorted) > len(ss_types):
+            if not auto_build_external_deps:
+                raise RuntimeError("Subsystem graph has external dependencies!")
+            # Construct instances of external deps
+            # TODO: this. This won't be that simple, since configuring drivers
+            # with things like notification IDs etc. can get complex. Will come
+            # back to this later.
+            # TODO: amend subsystem_list with new instances
+            raise NotImplementedError("pysdfgen cannot handle automatic external deps yet!")
+
+        else:
+            expected_cnt = len(subsystem_list)
+            # Map types to instances and build!
+            ss_to_build = []
+
+            # Sort in order of topological sort with dumb(ish) insertion sort.
+            # This should still get O(n log n) due to shortening the list.
+            for t in top_sorted:
+                victim = None
+                for ss in range(len(subsystem_list)):
+                    if type(subsystem_list[ss]) == t:
+                        victim = ss
+                        break
+                # This will error if no victim is found... on purpose!
+                ss_to_build.append(subsystem_list.pop(victim))
+
+            # Make sure all items were sorted in
+            assert len(ss_to_build) == expected_cnt
+
+        # TODO: handle forced max priorities
+        min_prio = max([x.priority for x in self.pds])+1 if len(self.pds) > 0 else 0
+        for s in ss_to_build:
+            print(f"Installing {s} with priority min={min_prio}...")
+            # Collect dependencies list and match to instances
+            dep_types = get_dependency_map().dep_map[type(s)]
+            deps = {}
+            for d in dep_types:
+                deps[d] = next(x for x in ss_to_build if type(x) == d)
+
+            # Build subsystem and record entities
+            min_prio = s.build(min_prio, deps) +1
             for pd in s.get_pds():
+                print(f"\tadding pd {pd}...")
                 self.add_pd(pd)
             for mr in s.get_mrs():
+                print(f"\tadding mr {mr}...")
                 self.add_mr(mr)
             for channel in s.get_channels():
+                print(f"\tadding ch {channel}...")
                 self.add_channel(channel)
+            for client in s.get_clients():
+                if client in self.pds:
+                    print(f"\tSkipping client {client} which is already installed.")
+                else:
+                    print(f"\tadding client {client}...")
+                    self.add_pd(client)
+
+        self.subsystems_constructed = True
 
 
-    def render(self) -> et.Element:
+    def render(self, construct_subsystems=True) -> et.Element:
+        if construct_subsystems and not self.subsystems_constructed:
+            print("System::render - auto-resolving subsystems")
+            self.resolve_subsystems()
+        elif not construct_subsystems:
+            raise RuntimeWarning("Tried to render system without constructing subsystems!")
         system = et.Element("system")
 
         for mr in self.mrs:
@@ -84,7 +145,6 @@ class System:
 
         for ch in self.channels:
             ch.render(system)
-
 
         return system
 
