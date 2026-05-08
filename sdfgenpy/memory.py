@@ -53,9 +53,9 @@ class MemoryRegion:
 class Map:
     @dataclass(frozen=True)
     class Permissions:
-        r: bool
-        w: bool
-        x: bool
+        r: bool = False
+        w: bool = False
+        x: bool = False
         def __str__(self):
             return "".join([e[1] for e in
                 zip([self.r, self.w, self.x], ['r', 'w', 'x']) if e[0]])

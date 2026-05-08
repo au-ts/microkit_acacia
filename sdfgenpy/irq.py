@@ -38,7 +38,7 @@ class ConventionalIRQ(IRQ):
     """
     IRQs on ARM and RISC-V machines.
     """
-    def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int]):
+    def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int]=None):
         super().__init__(irq_num, id=id)
         self.irq_num = irq_num
         self._trigger = trigger

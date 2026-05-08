@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from functools import wraps
 from .pd import ProtectionDomain
 from .util import parameterised_decorator
+from .configstruct import ConfigStruct
 
 
 class DependencyDefinitionError(Exception): ...
+
+
+class SubsystemBuildError(Exception):
+    ...
 
 
 class __DependencyMap:
@@ -300,6 +305,15 @@ class Subsystem(ABC):
             int: largest priority used.
         """
         ...
+
+    def generate_config_structs(self) -> List[ConfigStruct]:
+        """
+        Generate any config structs this subsystem requires and return
+        them as a list. Subsystems that utilise them should override
+        this parent method. This method is not abstract to allow classes
+        with no config structs to ignore this.
+        """
+        return []
 
     def build(self, min_priority: int, dependencies: Dict[Type["Subsystem"], "Subsystem"]) -> int:
         """

@@ -1,9 +1,9 @@
-from sdfgenpy import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
-from sdfgenpy.subsystem import subsystem_register_dependency, get_dependency_map, forced_max_priority
-from sdfgenpy.arch import aarch64
+# Copyright 2026, UNSW
+# SPDX-License-Identifier: BSD-2-Clause
 
-class SubsystemBuildError(Exception):
-    ...
+from sdfgenpy import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
+from sdfgenpy.subsystem import subsystem_register_dependency, get_dependency_map, forced_max_priority, SubsystemBuildError
+from sdfgenpy.arch import aarch64
 
 class DummyClock(Subsystem):
     def __init__(self):
@@ -137,7 +137,9 @@ clk = DummyClock()
 # Client
 
 client = ProtectionDomain("client", "client.elf", priority=1)
-sdf.add_pd(client)
+# Adding a client to the sdf is optional ... if it's a child of a subsystem
+# it will be added when the subsystem is.
+# sdf.add_pd(client)
 
 i2c.add_client(client)
 pmic.add_client(client)
@@ -145,6 +147,7 @@ timer.add_client(client)
 
 # Do topological sort in isolation
 top_sorted = dep_map.topological_sort()
+print(top_sorted)
 
 # Check top sort is sane
 assert top_sorted.index(DummyPMIC) < top_sorted.index(DummyI2C)
@@ -153,6 +156,10 @@ assert top_sorted.index(DummyI2C) < top_sorted.index(DummyClock)
 
 # Build!
 for s in [i2c, pmic, timer, clk]:
-    sdf.add_subsystem(s)
+    sdf.add_unresolved_subsystem(s)
+
+sdf.resolve_subsystems()
+for p in sdf.pds:
+    print(p)
 
 sdf.write_xml_file("dummysubsystems.system")

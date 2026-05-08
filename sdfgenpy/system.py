@@ -18,7 +18,7 @@ class System:
         self.allocator = SDFMemoryAllocator(sys_arch, paddr_top, sys_arch.default_page_size())
 
         # We store sets, not lists. No duplicates allowed!
-        self.pds: Set[PD] = set()
+        self.pds: Set[ProtectionDomain] = set()
         self.mrs: Set[MemoryRegion] = set()
         self.channels: Set[Channel] = set()
         # We only support one instance of a subsystem at a time currently.
@@ -113,7 +113,7 @@ class System:
                 self.add_pd(pd)
             for mr in s.get_mrs():
                 print(f"\tadding mr {mr}...")
-                self.add_mr(mr)
+                self.add_memory_region(mr)
             for channel in s.get_channels():
                 print(f"\tadding ch {channel}...")
                 self.add_channel(channel)

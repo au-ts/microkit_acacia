@@ -251,6 +251,7 @@ class ProtectionDomain(Entity):
 
         irq.id = self.allocate_id(irq.id)   # Allocate and reserve ID
         self.irqs.add(irq)
+        return irq.id
 
     def add_ioport(self, ioport: IOPort):
         ioport.id = self.allocate_id(ioport.id)   # Allocate and reserve ID
@@ -269,7 +270,7 @@ class ProtectionDomain(Entity):
         self.vm = vm
 
     def __repr__(self):
-        return f"<ProtectionDomain {self.name} at {hex(id(self))}>"
+        return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
 
 
 
