@@ -57,11 +57,12 @@ class DummyI2C(Subsystem):
             end = next(x.end_a for x in self.channels if x.end_a.pd is client_pd)
             ch_id = end.ch_id
             fields = {
-                    "driver_id": 77
+                    "driver_id": ch_id
             }
             return ConfigStruct("i2c_client_config_t", client_pd.prog_image, "i2c_client_config", fields=fields)
 
-        client_structs = [client_struct_factory(c,n) for n,c in enumerate(self.clients)]
+        # client_structs = [client_struct_factory(c,n) for n,c in enumerate(self.clients)]
+        client_structs = []
         return [devresource] + client_structs
 
 sdf = System(aarch64, 0x100000000)

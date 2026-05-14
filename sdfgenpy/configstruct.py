@@ -24,6 +24,9 @@ DEVICE_MAX_IRQS = 64
 # WARNING: currently assumes target is 64 bit!
 # Sidenote: the Zig sdfgen made both of these assumptions too...
 
+# NOTE: The code here that maps the ConfigStruct values into the binary blob
+# can do with a bit more love.
+
 class ConfigStruct:
     """
     Python representation of a config struct. This is
@@ -366,9 +369,29 @@ class ConfigStructResolver:
     def get_structs_by_file(self, target_file: str):
         return self.files[target_file]
 
-    def _serialise_ctype(self, value, ctype_cls) -> bytes:
+    @staticmethod
+    def _check_int_fits(value: int, ctype_cls, field_name: str):
+        size_bits = sizeof(ctype_cls) * 8
+        if issubclass(ctype_cls, (c_int8, c_int16, c_int32, c_int64)):
+            lo = -(1 << (size_bits - 1))
+            hi = (1 << (size_bits - 1)) - 1
+            if not (lo <= value <= hi):
+                raise ValueError(
+                    f"Field '{field_name}': signed value {value} out of range for "
+                    f"{ctype_cls.__name__} ({lo}..{hi})"
+                )
+        else:
+            hi = (1 << size_bits) - 1
+            if not (0 <= value <= hi):
+                raise ValueError(
+                    f"Field '{field_name}': unsigned value {value} out of range for "
+                    f"{ctype_cls.__name__} (0..{hi})"
+                )
+
+
+    def _serialize_ctype(self, value, ctype_cls) -> bytes:
         """
-        Serialise a single Python value into explicit little-endian raw bytes.
+        Serialize a single Python value into explicit little-endian raw bytes.
         Width is taken from ctypes via sizeof(), and signedness is derived from
         the ctypes class so we do not rely on host struct layout.
         """
@@ -380,7 +403,6 @@ class ConfigStructResolver:
             return bytes([int(value) & 0xff])
 
         size = sizeof(ctype_cls)
-        # c_int* types are signed; everything else (including c_void_p) is unsigned.
         signed = issubclass(ctype_cls, (c_int8, c_int16, c_int32, c_int64))
         return int(value).to_bytes(size, byteorder='little', signed=signed)
 
@@ -404,10 +426,16 @@ class ConfigStructResolver:
         Nested structs are inlined field-by-field; no ctypes.Structure layout
         is used, so host struct padding/alignment rules are never involved.
         """
-        # Walk members in address order
-        dwarf_struct.members.sort(key=lambda m: m.offset)
+        # (a) Every key supplied by the user must exist in the DWARF layout.
+        member_names = {m.field_name for m in dwarf_struct.members}
+        for field_name in py_fields.keys():
+            if field_name not in member_names:
+                raise ValueError(
+                    f"ConfigStruct field '{field_name}' not found in DWARF struct "
+                    f"'{dwarf_struct.typedef_name}' (members: {sorted(member_names)})"
+                )
 
-        for member in dwarf_struct.members:
+        for member in sorted(dwarf_struct.members, key=lambda m: m.offset):
             abs_offset = base_offset + member.offset
             field_name = member.field_name
             entries = int(member.entries)
@@ -422,17 +450,21 @@ class ConfigStructResolver:
                 ctype_cls = BaseTypesMap[resolved_type]
                 type_size = sizeof(ctype_cls)
 
-                if isinstance(py_val, (str, bytes)):
-                    if ctype_cls is not c_char:
+                if ctype_cls is c_char:
+                    if isinstance(py_val, str):
+                        data = py_val.encode('utf-8')
+                    elif isinstance(py_val, bytes):
+                        data = py_val
+                    else:
                         raise TypeError(
-                            f"String/bytes value provided for non-char field '{field_name}'"
+                            f"Field '{field_name}': expected str or bytes for char type, "
+                            f"got {type(py_val).__name__}"
                         )
-                    data = py_val.encode('utf-8') if isinstance(py_val, str) else py_val
                     total_extent = type_size * entries
                     if len(data) > total_extent:
                         raise ValueError(
-                            f"Data for '{field_name}' ({len(data)} bytes) exceeds "
-                            f"field extent ({total_extent} bytes)"
+                            f"Field '{field_name}': data length {len(data)} exceeds "
+                            f"char array extent {total_extent}"
                         )
                     self._insert_bytes(blob, abs_offset, data)
                     if len(data) < total_extent:
@@ -442,35 +474,49 @@ class ConfigStructResolver:
                 elif isinstance(py_val, list):
                     if len(py_val) > entries:
                         raise ValueError(
-                            f"List for '{field_name}' has {len(py_val)} elements, "
+                            f"Field '{field_name}': list has {len(py_val)} elements, "
                             f"but DWARF expects at most {entries}"
                         )
                     for i, elem in enumerate(py_val):
                         elem_offset = abs_offset + i * type_size
-                        self._insert_bytes(blob, elem_offset, self._serialise_ctype(elem, ctype_cls))
+                        if not isinstance(elem, int):
+                            raise TypeError(
+                                f"Field '{field_name}': array element must be int, "
+                                f"got {type(elem).__name__}"
+                            )
+                        self._check_int_fits(elem, ctype_cls, field_name)
+                        self._insert_bytes(blob, elem_offset, self._serialize_ctype(elem, ctype_cls))
 
                 elif isinstance(py_val, int):
                     if entries != 1:
                         raise ValueError(
-                            f"Scalar integer provided for array field '{field_name}' "
-                            f"(expected {entries} entries)"
+                            f"Field '{field_name}': scalar integer provided for array "
+                            f"field (expected {entries} entries)"
                         )
-                    self._insert_bytes(blob, abs_offset, self._serialise_ctype(py_val, ctype_cls))
+                    self._check_int_fits(py_val, ctype_cls, field_name)
+                    self._insert_bytes(blob, abs_offset, self._serialize_ctype(py_val, ctype_cls))
 
                 else:
                     raise TypeError(
-                        f"Unsupported Python value type for primitive field '{field_name}': {type(py_val)}"
+                        f"Field '{field_name}': unsupported Python type {type(py_val).__name__} "
+                        f"for primitive ctype {ctype_cls.__name__}"
                     )
 
             else:
-                # Struct field (possibly an array of structs)
-                child_struct = self.dwarfdump.get_struct_by_typedef(target_file, member.type_name)
+                # Struct type (or array of structs) – recurse after looking up layout.
+                try:
+                    child_struct = self.dwarfdump.get_struct_by_typedef(target_file, member.type_name)
+                except (KeyError, RuntimeError) as e:
+                    raise RuntimeError(
+                        f"Field '{field_name}': unable to resolve struct type "
+                        f"'{resolved_type}' (typedef '{member.type_name}')"
+                    ) from e
 
                 if isinstance(py_val, ConfigStruct):
                     if entries != 1:
                         raise ValueError(
-                            f"Scalar ConfigStruct provided for array field '{field_name}' "
-                            f"(expected {entries} entries)"
+                            f"Field '{field_name}': scalar ConfigStruct provided for "
+                            f"array field (expected {entries} entries)"
                         )
                     self._flatten_and_write(blob, child_struct, abs_offset,
                                             py_val.fields, target_file)
@@ -478,7 +524,7 @@ class ConfigStructResolver:
                 elif isinstance(py_val, list):
                     if len(py_val) > entries:
                         raise ValueError(
-                            f"List for '{field_name}' has {len(py_val)} elements, "
+                            f"Field '{field_name}': list has {len(py_val)} elements, "
                             f"but DWARF expects at most {entries}"
                         )
                     stride = child_struct.size
@@ -486,14 +532,16 @@ class ConfigStructResolver:
                         elem_offset = abs_offset + i * stride
                         if not isinstance(elem, ConfigStruct):
                             raise TypeError(
-                                f"Expected ConfigStruct in list for '{field_name}', got {type(elem)}"
+                                f"Field '{field_name}': expected ConfigStruct in list, "
+                                f"got {type(elem).__name__}"
                             )
                         self._flatten_and_write(blob, child_struct, elem_offset,
                                                 elem.fields, target_file)
 
                 else:
                     raise TypeError(
-                        f"Unsupported Python value type for struct field '{field_name}': {type(py_val)}"
+                        f"Field '{field_name}': unsupported Python type {type(py_val).__name__} "
+                        f"for struct field"
                     )
 
 
