@@ -77,6 +77,34 @@ class Entity:
     def add_map(self, map: Map):
         self.maps.append(map)
 
+    def create_automap(self, mr: MemoryRegion, perms: Map.Permissions,
+                       start_vaddr=0x20_000_000):
+        """
+        Given a memory region, automatically create a map and assign it a vaddr
+        that doesn't overlap with any existing maps.
+
+        Args:
+            mr: MemoryRegion to map
+            perms: Map permissions - read, write, execute
+            start_vaddr: lowest address to auto-allocate map. Default: 0x20_000_000
+
+        NOTE: This replaces `getMapVaddr` in zig sdfgen.
+        """
+        if len(self.maps) != 0:
+            # python sorted() is adaptive, so this doesn't waste much time on repeats!
+            self.maps = sorted(self.maps, key=lambda m: m.vaddr)
+            last_vaddr_end = self.maps[-1].vaddr + self.maps[-1].size
+
+            # pad by one page.
+            # TODO: support doing this with the architecture page size. Currently,
+            # we don't support any page sizes other than 0x1000 in general throughout
+            # this codebase.
+            next_vaddr = (last_vaddr_end % 0x1000) + 0x1000
+        else:
+            next_vaddr = start_vaddr
+
+        self.add_map(Map(mr, next_vaddr, perms))
+
     def name(self):
         return self.name
 

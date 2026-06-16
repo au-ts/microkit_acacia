@@ -88,6 +88,10 @@ class Map:
         self.setvar_vaddr = setvar_vaddr
         self.vaddr = vaddr
 
+    @property
+    def size(self):
+        return self.mr.size
+
     def render(self, parent: et.Element) -> et.Element:
         map = et.SubElement(parent, "map")
         map.set("mr", self.mr.name)
