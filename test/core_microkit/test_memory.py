@@ -3,8 +3,8 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from sdfgenpy.memory import MemoryRegion, Map
-from sdfgenpy.arch import SDFMemoryAllocator, aarch64
+from acacia.memory import MemoryRegion, Map
+from acacia.arch import SDFMemoryAllocator, aarch64
 
 
 class TestMemoryRegion:

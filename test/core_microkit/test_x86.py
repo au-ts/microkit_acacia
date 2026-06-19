@@ -3,7 +3,7 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from sdfgenpy.x86 import IrqIoapic, IrqMsi, IOPort
+from acacia.x86 import IrqIoapic, IrqMsi, IOPort
 
 
 class TestIrqIoapic:

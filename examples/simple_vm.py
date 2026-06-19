@@ -1,8 +1,8 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from sdfgenpy.arch import aarch64
-from sdfgenpy import System, ProtectionDomain, MemoryRegion, Map, VirtualMachine, SchedulingProperties
+from acacia.arch import aarch64
+from acacia import System, ProtectionDomain, MemoryRegion, Map, VirtualMachine, SchedulingProperties
 
 sdf = System(aarch64, 0x10000)
 

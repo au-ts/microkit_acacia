@@ -3,7 +3,7 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from sdfgenpy.irq import ConventionalIRQ, IRQ
+from acacia.irq import ConventionalIRQ, IRQ
 
 
 class TestConventionalIRQ:

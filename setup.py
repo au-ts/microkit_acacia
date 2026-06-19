@@ -1,11 +1,11 @@
 from setuptools import setup
 
 setup(
-        name="sdfgen_py",
+        name="acacia",
         version="0.1",
         author="Lesley Rossouw",
         author_email="lesley.rossouw@unsw.edu.au",
-        packages=["sdfgenpy"],
+        packages=["acacia"],
         install_requires=[]
 )
 

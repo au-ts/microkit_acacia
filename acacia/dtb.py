@@ -5,10 +5,11 @@ import libfdt
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Optional
 from functools import cache
 from typing import List, Tuple
 from .arch import Arch
-from .irq import IRQ
+from .irq import IRQ, ConventionalIRQ
 
 class DTB_IRQ_Controller(ABC):
     @abstractmethod

@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import pytest
-from sdfgenpy.arch import Arch, ArchID, PageSizeID, SDFMemoryAllocator
-from sdfgenpy import aarch64, x86_64, riscv32
+from typing import Optional
+from acacia.arch import Arch, ArchID, PageSizeID, SDFMemoryAllocator
+from acacia import aarch64, x86_64, riscv32
 from enum import Enum
 
 class TestArch:

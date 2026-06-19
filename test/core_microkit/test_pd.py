@@ -3,8 +3,8 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from sdfgenpy.pd import ProtectionDomain, SchedulingProperties, MAX_IDS, VirtualMachine
-from sdfgenpy.memory import MemoryRegion, Map
+from acacia.pd import ProtectionDomain, SchedulingProperties, MAX_IDS, VirtualMachine
+from acacia.memory import MemoryRegion, Map
 
 
 class TestSchedulingProperties:
@@ -132,7 +132,7 @@ class TestProtectionDomainIdAllocation:
 
 class TestProtectionDomainIrq:
     def test_add_irq_allocates_id(self):
-        from sdfgenpy.irq import ConventionalIRQ
+        from acacia.irq import ConventionalIRQ
         pd = ProtectionDomain("test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
         pd.add_irq(irq)
@@ -140,14 +140,14 @@ class TestProtectionDomainIrq:
         assert irq.id in pd.assigned_ids
 
     def test_add_irq_specific_id(self):
-        from sdfgenpy.irq import ConventionalIRQ
+        from acacia.irq import ConventionalIRQ
         pd = ProtectionDomain("test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=7)
         pd.add_irq(irq)
         assert irq.id == 7
 
     def test_add_same_irq_twice_rejected(self):
-        from sdfgenpy.irq import ConventionalIRQ
+        from acacia.irq import ConventionalIRQ
         pd = ProtectionDomain("test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
         pd.add_irq(irq)
@@ -287,7 +287,7 @@ class TestChildPdRendering:
 
 class TestChildPdIntegration:
     def test_child_with_maps_and_irqs(self):
-        from sdfgenpy.irq import ConventionalIRQ
+        from acacia.irq import ConventionalIRQ
 
         parent = ProtectionDomain("parent", "parent.elf", priority=100)
         child = ProtectionDomain("child", "child.elf", priority=50)

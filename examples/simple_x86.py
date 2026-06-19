@@ -1,9 +1,9 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from sdfgenpy.arch import x86_64
-from sdfgenpy import ProtectionDomain, MemoryRegion, Map, System, Channel
-from sdfgenpy.x86 import IrqIoapic, IrqMsi, IOPort
+from acacia.arch import x86_64
+from acacia import ProtectionDomain, MemoryRegion, Map, System, Channel
+from acacia.x86 import IrqIoapic, IrqMsi, IOPort
 import xml.etree.ElementTree as et
 
 sdf = System(x86_64, 0x10000)

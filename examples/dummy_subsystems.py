@@ -1,9 +1,9 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from sdfgenpy import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
-from sdfgenpy.subsystem import subsystem_register_dependency, get_dependency_map, forced_max_priority, SubsystemBuildError
-from sdfgenpy.arch import aarch64
+from acacia import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
+from acacia.subsystem import subsystem_register_dependency, get_dependency_map, forced_max_priority, SubsystemBuildError
+from acacia.arch import aarch64
 
 class DummyClock(Subsystem):
     def __init__(self):

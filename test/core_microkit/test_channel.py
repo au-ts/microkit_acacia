@@ -3,8 +3,8 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from sdfgenpy.channel import Channel
-from sdfgenpy.pd import ProtectionDomain
+from acacia.channel import Channel
+from acacia.pd import ProtectionDomain
 
 
 class TestChannelEnd:

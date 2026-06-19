@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import pytest
+from typing import Optional
 from unittest.mock import MagicMock, patch
-import sdfgenpy.subsystem as subsystem_module
-from sdfgenpy.subsystem import (
+import acacia.subsystem as subsystem_module
+from acacia.subsystem import (
     Subsystem,
     __DependencyMap,
     DependencyDefinitionError,
@@ -12,7 +13,7 @@ from sdfgenpy.subsystem import (
     forced_max_priority,
     get_dependency_map,
 )
-from sdfgenpy.pd import ProtectionDomain
+from acacia.pd import ProtectionDomain
 
 
 @pytest.fixture(autouse=True)

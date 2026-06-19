@@ -1,8 +1,8 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from sdfgenpy.arch import aarch64
-from sdfgenpy import ProtectionDomain, MemoryRegion, Map, System, Channel
+from acacia.arch import aarch64
+from acacia import ProtectionDomain, MemoryRegion, Map, System, Channel
 import xml.etree.ElementTree as et
 
 sdf = System(aarch64, 0x10000)
