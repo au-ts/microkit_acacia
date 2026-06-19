@@ -2,6 +2,8 @@
 
 Acacia is a framework for easily generating seL4 Microkit system description files (SDFs) driven by a simple Python interface. This project succeeds [sdf_gen](https://github.com/au-ts/microkit_sdf_gen/). Acacia is implemented entirely in Python3.
 
+![acacia](./acacia.png)
+
 Acacia is intended to be used as a part of a build system (see [sDDF examples](https://github.com/au-ts/sddf)). After compiling the relevant source code, Acacia helps developers compose compiled protection domains into a Microkit SDF using an *acaciafile* (formerly `metaprogram`).
 
 As well as aiding composition of a collection of ELF files into a Microkit binary, Acacia allows developers to create *Subsystems* of various PDs such as driver classes, OS services and more. Acacia offers functionality for auto-generating instances of subsystems, connecting them with client programs, and injecting configuration data into compiled code.
