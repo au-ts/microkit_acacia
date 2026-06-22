@@ -151,7 +151,7 @@ class DeviceTreeBlob:
             self.fdt = libfdt.Fdt(f.read())
 
         # libfdt makes nothing easy for us. enumerate!
-        self.nodes: Dict[DTBNode] = []  # offset -> DTBNode
+        self.nodes: Dict[DTBNode] = {}  # offset -> DTBNode
         self.__enumerate_nodes()
 
     def __enumerate_nodes(self):
@@ -191,6 +191,9 @@ class DeviceTreeBlob:
 
     @cache
     def get_node_by_path(self, path_str: str) -> DTBNode:
+        # defensive: enforce that path starts with /
+        if path_str[0] != '/':
+            path_str = '/' + path_str
         return DTBNode(self.fdt.path_offset(path_str), path_str)
 
     def get_node_prop(self, node: DTBNode, prop_name: str):

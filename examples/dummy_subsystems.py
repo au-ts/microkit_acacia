@@ -156,7 +156,7 @@ assert top_sorted.index(DummyI2C) < top_sorted.index(DummyClock)
 
 # Build!
 for s in [i2c, pmic, timer, clk]:
-    sdf.add_unresolved_subsystem(s)
+    sdf.add_subsystem(s)
 
 sdf.resolve_subsystems()
 for p in sdf.pds:
