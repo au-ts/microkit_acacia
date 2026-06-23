@@ -6,9 +6,13 @@ from acacia.subsystem import subsystem_register_dependency, get_dependency_map, 
 from acacia.arch import aarch64
 
 class DummyClock(Subsystem):
-    def __init__(self):
+    def __init__(self, prio):
         super().__init__("clk")
         self.driver = None
+        # Make driver
+        self.driver = ProtectionDomain("clk_driver", "clk_driver.elf", scheduling=SchedulingProperties(prio, passive=True))
+        self.pds.append(self.driver)
+
 
     def connect_clients(self):
         assert self.driver is not None
@@ -24,14 +28,8 @@ class DummyClock(Subsystem):
             )
             self.channels.append(ch)
 
-    def construct_infrastructure(self, min_prio, max_prio, dependencies):
-        # Make driver
-        self.driver = ProtectionDomain("clk_driver", "clk_driver.elf", scheduling=SchedulingProperties(min_prio, passive=True))
-        self.pds.append(self.driver)
-        return min_prio
 
 
-@forced_max_priority
 class DummyTimer(Subsystem):
     def __init__(self):
         super().__init__("timer")
@@ -42,7 +40,7 @@ class DummyTimer(Subsystem):
         # Clients are connected with a channel allowing PPs and nothing else
         for c in self.clients:
             if c.priority >= self.driver.priority:
-                raise SubsystemBuildError(f"Client {c} has a priority higher "
+                raise RuntimeError(f"Client {c} has a priority higher "
                                           f"than driver's ({self.driver.priority})!")
             # Make channel
             ch = Channel(
@@ -123,8 +121,6 @@ class DummyPMIC(Subsystem):
         dependencies[DummyI2C].add_client(self.driver)
         return min_prio
 
-dep_map = get_dependency_map()
-print(f"Dependency map: {dep_map}")
 
 # Make system and subsystems
 sdf = System(aarch64, 0x100000000)
