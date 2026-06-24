@@ -7,13 +7,14 @@ from .pd import ProtectionDomain
 from .channel import Channel
 from .memory import MemoryRegion, Map
 from .subsystem import Subsystem
+from .dtb import DeviceTreeBlob
 import xml.etree.ElementTree as et
 
 class System:
     """
     A Microkit system.
     """
-    def __init__(self, sys_arch: Arch, paddr_top: int):
+    def __init__(self, sys_arch: Arch, paddr_top: int, dtb: DeviceTreeBlob=None):
         self.arch = sys_arch
         self.allocator = SDFMemoryAllocator(sys_arch, paddr_top, sys_arch.default_page_size())
 
@@ -23,6 +24,7 @@ class System:
         self.channels: Set[Channel] = set()
         self.subsystems: List[Subsystem] = []
         self.subsystems_constructed = False
+        self.dtb = dtb
 
     def add_pd(self, pd: ProtectionDomain):
         # We technically don't need to raise this error, but it's better to

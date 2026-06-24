@@ -200,13 +200,17 @@ class DeviceTreeBlob:
         """
         Get a property from a DTB node. This will return the
         raw contents of the property as a bytearray.
+
+        Returns None if property doesn't exist
         """
-        return self.fdt.getprop(node.offset, prop_name)
+        if self.fdt.hasprop(node.offset, prop_name):
+            return self.fdt.getprop(node.offset, prop_name)
+        else:
+            return None
 
     def get_node_parent(self, node: DTBNode) -> DTBNode:
         return self.nodes[self.fdt.parent_offset(node.offset)]
 
-    @cache
     def get_size_and_addr_cells(self, node: DTBNode) -> Tuple[int]:
         """
         Get the size and addr cells values of a node (node its parent).
@@ -237,6 +241,8 @@ class DeviceTreeBlob:
         )
 
         regs_raw = self.get_node_prop(node, "reg")
+        if regs_raw is None:
+            raise RuntimeError(f"Node {node} has no regs property, cannot get regs!")
         if len(regs_raw) % 4 != 0:
             raise RuntimeError(f"Regs field {regs_raw} isn't 32 bit aligned!")
 
@@ -295,18 +301,7 @@ class DeviceTreeBlob:
 
         return parsed
 
-
-    def get_reg_paddr(self, arch: Arch, paddr: int) -> int:
-        """
-        Given an address from a DTB node's 'reg' property, convert it to a
-        mappable MMIO address. This involves traversing any higher-level busses
-        to find the CPU visible address rather than some address relative to the
-        particular bus the address is on. We also align to the smallest page size;
-        """
-        ... # TODO: this
-
-
-def get_reg_paddr(self, arch: Arch, node: DTBNode, paddr: int) -> int:
+    def get_reg_paddr(self, arch: Arch, node: DTBNode, paddr: int) -> int:
         """
         Given an address from a DTB node's 'reg' property, convert it to a
         mappable MMIO address. This involves traversing any higher-level busses
