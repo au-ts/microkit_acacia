@@ -15,7 +15,7 @@ class IRQ:
         LEVEL = 1
 
         def __str__(self):
-            return str(self.value)
+            return "edge" if self.value == self.EDGE.value else "level"
 
     def __init__(self, irq: int, id: Optional[int] = None):
         self.id = id
@@ -47,6 +47,7 @@ class ConventionalIRQ(IRQ):
         if self.id is None:
             raise RuntimeError("ID must be set before rendering an IRQ!")
         irq = et.SubElement(parent, "irq")
+        irq.set("irq", str(self.irq_num))
         irq.set("id", str(self.id))
         irq.set("trigger", str(self.trigger))
 

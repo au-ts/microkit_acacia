@@ -8,6 +8,7 @@ from .channel import Channel
 from .memory import MemoryRegion, Map
 from .subsystem import Subsystem
 from .dtb import DeviceTreeBlob
+from .configstruct import ConfigStruct, ConfigStructResolver
 import xml.etree.ElementTree as et
 from unittest.mock import MagicMock
 class System:
@@ -59,7 +60,7 @@ class System:
         self.__system_subclass_check(subsystem, Subsystem)
         self.subsystems.append(subsystem)
 
-    def resolve_subsystems(self, auto_build_external_deps=False):
+    def resolve_subsystems(self):
         """
         Construct all subsystems and their client connections.
         """
@@ -84,6 +85,17 @@ class System:
                     self.add_pd(client)
 
         self.subsystems_constructed = True
+
+    def make_config_structs(self, build_dir: str="./"):
+        # We can't get config structs without resolving subsystems first
+        if not self.subsystems_constructed:
+            print("System::make_config_structs - auto-resolving systems")
+            self.resolve_subsystems()
+        # TODO: support big endian?
+        resolver = ConfigStructResolver(build_dir, endian='little')
+        for s in self.subsystems:
+            resolver.add_structs(s.generate_config_structs())
+        resolver.resolve_all()
 
 
     def render(self, construct_subsystems=True) -> et.Element:

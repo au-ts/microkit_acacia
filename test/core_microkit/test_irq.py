@@ -29,14 +29,14 @@ class TestConventionalIRQ:
         irq.render(parent)
         irq_elem = parent.find("irq")
         assert irq_elem.get("id") == "1"
-        assert irq_elem.get("trigger") == "0"  # EDGE = 0
+        assert irq_elem.get("trigger") == "edge"
 
     def test_render_level_trigger(self):
         irq = ConventionalIRQ(42, IRQ.Trigger.LEVEL, id=2)
         parent = et.Element("parent")
         irq.render(parent)
         irq_elem = parent.find("irq")
-        assert irq_elem.get("trigger") == "1"  # LEVEL = 1
+        assert irq_elem.get("trigger") == "level"
 
 
 class TestIRQTriggerEnum:
@@ -47,6 +47,6 @@ class TestIRQTriggerEnum:
         assert IRQ.Trigger.LEVEL.value == 1
 
     def test_str_representation(self):
-        assert str(IRQ.Trigger.EDGE) == "0"
-        assert str(IRQ.Trigger.LEVEL) == "1"
+        assert str(IRQ.Trigger.EDGE) == "edge"
+        assert str(IRQ.Trigger.LEVEL) == "level"
 

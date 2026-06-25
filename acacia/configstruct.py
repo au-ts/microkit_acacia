@@ -106,6 +106,9 @@ class DwarfStruct:
         return True
 
 
+# BUG: we currently have a hard time resolving some types from the C library and I'm
+# not sure why. I have added uintptr_t, size_t and void * here as a hack to get around
+# this for now.
 BaseTypesMap = {
     "char": c_char,
     "uint64_t": c_uint64,
@@ -116,6 +119,7 @@ BaseTypesMap = {
     "int32_t": c_int32,
     "int16_t": c_int16,
     "int8_t": c_int8,
+    "size_t": c_uint64,     # HACK: probs should handle this differently
     "uintptr_t": c_uint64,  # HACK: probs should handle this differently
     "void *": c_uint64      # HACK: probs should handle this differently
 }
