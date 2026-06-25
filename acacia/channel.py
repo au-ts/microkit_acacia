@@ -52,4 +52,16 @@ class Channel:
 
         return channel
 
+    def id_for_pd(self, end_pd) -> int:
+        """
+        Return the channel ID for this channel for the given PD.
+        This is a convenience function to make config serialisation less ambiguous.
+        We can also avoid programming errors related to remembering end_a vs. end_b
+        this way.
+        """
+        if self.end_a.pd is end_pd:
+            return self.end_a.ch_id
+        if self.end_b.pd is end_pd:
+            return self.end_b.ch_id
+        raise RuntimeError(f"PD {end_pd} isn't in this channel!")
 

@@ -77,8 +77,8 @@ class Entity:
     def add_map(self, map: Map):
         self.maps.append(map)
 
-    def create_automap(self, mr: MemoryRegion, perms: Map.Permissions,
-                       start_vaddr=0x20_000_000):
+    def create_automap(self, mr: MemoryRegion, perms: Union[Map.Permissions, str],
+                       start_vaddr=0x20_000_000) -> Map:
         """
         Given a memory region, automatically create a map and assign it a vaddr
         that doesn't overlap with any existing maps.
@@ -87,6 +87,9 @@ class Entity:
             mr: MemoryRegion to map
             perms: Map permissions - read, write, execute
             start_vaddr: lowest address to auto-allocate map. Default: 0x20_000_000
+
+        Returns:
+            Map: created map object.
 
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """
@@ -103,7 +106,9 @@ class Entity:
         else:
             next_vaddr = start_vaddr
 
-        self.add_map(Map(mr, next_vaddr, perms))
+        m = Map(mr, next_vaddr, perms)
+        self.add_map(m)
+        return m
 
     def name(self):
         return self.name
@@ -129,8 +134,6 @@ class Entity:
             map.render(entity)
 
         return entity
-
-
 
 
 class VirtualMachine(Entity):

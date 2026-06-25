@@ -272,7 +272,12 @@ class DeviceTreeBlob:
         attempt to concetenate the u32s or anything here, since the meaning
         of the field is entirely dependent on architecture.
         """
+        # TODO: should we handle extended-interrupts? The DTS spec implies
+        # we should use extended instead of interrupts if it exists.
+        # Old sdfgen didn't do this either.
         irqs_raw = self.get_node_prop(node, "interrupts")
+        if irqs_raw is None:
+            return []
         num_u32s = len(irqs_raw) // 4
 
         # just a bunch of u32s ... unpack using struct and return

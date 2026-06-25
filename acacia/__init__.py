@@ -8,4 +8,4 @@ from .system import System
 from .arch import Arch, ArchID, aarch64, aarch32, x86, x86_64, riscv32, riscv64
 from .subsystem import Subsystem
 from .dtb import DTBNode, DeviceTreeBlob
-
+from .configstruct import ConfigStruct, ConfigStructResolver

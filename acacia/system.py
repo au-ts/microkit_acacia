@@ -9,7 +9,7 @@ from .memory import MemoryRegion, Map
 from .subsystem import Subsystem
 from .dtb import DeviceTreeBlob
 import xml.etree.ElementTree as et
-
+from unittest.mock import MagicMock
 class System:
     """
     A Microkit system.
@@ -26,24 +26,37 @@ class System:
         self.subsystems_constructed = False
         self.dtb = dtb
 
+    def __system_subclass_check(self, to_check, expected_type):
+        if isinstance(to_check, MagicMock):
+            # sort of a hack ... ignore mocks used by unit tests.
+            return
+
+        if not isinstance(to_check, expected_type):
+            raise RuntimeError(f"Tried to add {to_check} as a {expected_type}, "\
+                               f"but it is a {type(to_check)}!")
+
     def add_pd(self, pd: ProtectionDomain):
         # We technically don't need to raise this error, but it's better to
         # alert the user. Sets silently drop duplicates by default.
+        self.__system_subclass_check(pd, ProtectionDomain)
         if pd in self.pds:
             raise RuntimeError("Cannot add one PD to the same system multiple times!")
         self.pds.add(pd)
 
     def add_channel(self, channel: Channel):
+        self.__system_subclass_check(channel, Channel)
         if channel in self.channels:
             raise RuntimeError("Cannot add one channel to the same system multiple times!")
         self.channels.add(channel)
 
     def add_memory_region(self, mr: MemoryRegion):
+        self.__system_subclass_check(mr, MemoryRegion)
         if mr in self.mrs:
             raise RuntimeError("Cannot add one memory region to the same system multiple times!")
         self.mrs.add(mr)
 
     def add_subsystem(self, subsystem: Subsystem):
+        self.__system_subclass_check(subsystem, Subsystem)
         self.subsystems.append(subsystem)
 
     def resolve_subsystems(self, auto_build_external_deps=False):

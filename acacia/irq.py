@@ -52,7 +52,10 @@ class ConventionalIRQ(IRQ):
 
     @property
     def number(self):
-        return self.irq
+        return self.irq_num
+
+    def set_number(self, n: int):
+        self.irq_num = n
 
     @property
     def trigger(self):
