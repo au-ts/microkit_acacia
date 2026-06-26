@@ -18,7 +18,7 @@ class MemoryRegion:
                  name: str,
                  size: int,
                  paddr: Optional[int] = None,
-                 cached: bool = False,
+                 cached: bool = True,
                  physical: bool = False):
         self.name = name
         if size <= 0:

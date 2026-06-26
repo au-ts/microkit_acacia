@@ -103,7 +103,10 @@ class Entity:
             # TODO: support doing this with the architecture page size. Currently,
             # we don't support any page sizes other than 0x1000 in general throughout
             # this codebase.
-            next_vaddr = (last_vaddr_end - (last_vaddr_end % 0x1000)) + 0x1000
+            if last_vaddr_end % 0x1000:
+                next_vaddr = (last_vaddr_end - (last_vaddr_end % 0x1000)) + 0x1000
+            else:
+                next_vaddr = last_vaddr_end
         else:
             next_vaddr = start_vaddr
 

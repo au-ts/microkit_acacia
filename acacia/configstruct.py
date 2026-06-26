@@ -445,13 +445,13 @@ class ConfigStructResolver:
             field_name = member.field_name
             entries = int(member.entries)
 
-            if field_name not in py_fields:
-                continue
-
-            py_val = py_fields[field_name]
-            resolved_type = self.dwarfdump.get_typedef_base_type(target_file, member.type_name)
-
             try:
+                if field_name not in py_fields:
+                    raise ValueError(f"Field {field_name} isn't in ConfigStruct but is in DWARF!")
+
+                py_val = py_fields[field_name]
+                resolved_type = self.dwarfdump.get_typedef_base_type(target_file, member.type_name)
+
                 if resolved_type in BaseTypesMap:
                     ctype_cls = BaseTypesMap[resolved_type]
                     type_size = sizeof(ctype_cls)
@@ -526,6 +526,12 @@ class ConfigStructResolver:
                             )
                         self._flatten_and_write(blob, child_struct, abs_offset,
                                                 py_val.fields, target_file)
+                    elif isinstance(py_val, int):
+                        # Special case: allow assignment of 0 to structs that are unused
+                        if py_val == 0:
+                            pass
+                        else:
+                            raise TypeError("Cannot assign a non-zero int to a struct field!")
 
                     elif isinstance(py_val, list):
                         if len(py_val) > entries:
@@ -574,7 +580,6 @@ class ConfigStructResolver:
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, 'wb') as f:
                 f.write(blob)
-
 
 
     def resolve_all(self):
