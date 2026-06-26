@@ -107,6 +107,6 @@ class IOPort:
             raise RuntimeError("ID must be set before rendering an ioport!")
         ioport = et.SubElement(parent, "ioport")
         ioport.set("id", str(self.id))
-        ioport.set("addr", hex(self.addr))
-        ioport.set("size", hex(self.size))
+        ioport.set("addr", str(self.addr))
+        ioport.set("size", str(self.size))
 
