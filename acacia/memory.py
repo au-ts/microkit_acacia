@@ -48,6 +48,9 @@ class MemoryRegion:
         mr = et.SubElement(system_root, "memory_region")
         mr.set("name", self.name)
         mr.set("size", hex(self.size))
+        # TODO: add unit test for paddr
+        if self.paddr is not None:
+            mr.set("phys_addr", hex(self.paddr))
 
 
 class Map:

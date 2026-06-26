@@ -63,8 +63,8 @@ class ConfigStruct:
         self.typedef_name = typedef_name
         self.target_file = target_file
         self.section_name = section_name
-        # Validate fields are sane
-        # TODO: this
+        # TODO: add datatype validation for fields. Not strictly needed as this should fail when
+        # serialising anyway.
         self.fields = fields
 
 
@@ -106,8 +106,8 @@ class DwarfStruct:
         return True
 
 
-# BUG: we currently have a hard time resolving some types from the C library and I'm
-# not sure why. I have added uintptr_t, size_t and void * here as a hack to get around
+# BUG: we currently have a hard time resolving some types from the C library
+# I have added uintptr_t, size_t and void * here as a hack to get around
 # this for now.
 BaseTypesMap = {
     "char": c_char,
@@ -121,7 +121,8 @@ BaseTypesMap = {
     "int8_t": c_int8,
     "size_t": c_uint64,     # HACK: probs should handle this differently
     "uintptr_t": c_uint64,  # HACK: probs should handle this differently
-    "void *": c_uint64      # HACK: probs should handle this differently
+    "void *": c_uint64,     # HACK: probs should handle this differently
+    "_Bool": c_uint8,        # HACK: probs should handle this differently
 }
 
 class ConfigStructDwarfDumper:
@@ -450,103 +451,107 @@ class ConfigStructResolver:
             py_val = py_fields[field_name]
             resolved_type = self.dwarfdump.get_typedef_base_type(target_file, member.type_name)
 
-            if resolved_type in BaseTypesMap:
-                ctype_cls = BaseTypesMap[resolved_type]
-                type_size = sizeof(ctype_cls)
+            try:
+                if resolved_type in BaseTypesMap:
+                    ctype_cls = BaseTypesMap[resolved_type]
+                    type_size = sizeof(ctype_cls)
 
-                if ctype_cls is c_char:
-                    if isinstance(py_val, str):
-                        data = py_val.encode('utf-8')
-                    elif isinstance(py_val, bytes):
-                        data = py_val
+                    if ctype_cls is c_char:
+                        if isinstance(py_val, str):
+                            data = py_val.encode('utf-8')
+                        elif isinstance(py_val, bytes):
+                            data = py_val
+                        else:
+                            raise TypeError(
+                                f"Field '{field_name}': expected str or bytes for char type, "
+                                f"got {type(py_val).__name__}"
+                            )
+                        total_extent = type_size * entries
+                        if len(data) > total_extent:
+                            raise ValueError(
+                                f"Field '{field_name}': data length {len(data)} exceeds "
+                                f"char array extent {total_extent}"
+                            )
+                        self._insert_bytes(blob, abs_offset, data)
+                        if len(data) < total_extent:
+                            blob[abs_offset + len(data):abs_offset + total_extent] = \
+                                b'\x00' * (total_extent - len(data))
+
+                    elif isinstance(py_val, list):
+                        if len(py_val) > entries:
+                            raise ValueError(
+                                f"Field '{field_name}': list has {len(py_val)} elements, "
+                                f"but DWARF expects at most {entries}"
+                            )
+                        for i, elem in enumerate(py_val):
+                            elem_offset = abs_offset + i * type_size
+                            if not isinstance(elem, int):
+                                raise TypeError(
+                                    f"Field '{field_name}': array element must be int, "
+                                    f"got {type(elem).__name__}"
+                                )
+                            self._check_int_fits(elem, ctype_cls, field_name)
+                            self._insert_bytes(blob, elem_offset, self._serialize_ctype(elem, ctype_cls))
+
+                    elif isinstance(py_val, int):
+                        if entries != 1:
+                            raise ValueError(
+                                f"Field '{field_name}': scalar integer provided for array "
+                                f"field (expected {entries} entries)"
+                            )
+                        self._check_int_fits(py_val, ctype_cls, field_name)
+                        self._insert_bytes(blob, abs_offset, self._serialize_ctype(py_val, ctype_cls))
+
                     else:
                         raise TypeError(
-                            f"Field '{field_name}': expected str or bytes for char type, "
-                            f"got {type(py_val).__name__}"
+                            f"Field '{field_name}' of {member}: unsupported Python type {type(py_val).__name__} "
+                            f"for primitive ctype {ctype_cls.__name__}"
                         )
-                    total_extent = type_size * entries
-                    if len(data) > total_extent:
-                        raise ValueError(
-                            f"Field '{field_name}': data length {len(data)} exceeds "
-                            f"char array extent {total_extent}"
-                        )
-                    self._insert_bytes(blob, abs_offset, data)
-                    if len(data) < total_extent:
-                        blob[abs_offset + len(data):abs_offset + total_extent] = \
-                            b'\x00' * (total_extent - len(data))
-
-                elif isinstance(py_val, list):
-                    if len(py_val) > entries:
-                        raise ValueError(
-                            f"Field '{field_name}': list has {len(py_val)} elements, "
-                            f"but DWARF expects at most {entries}"
-                        )
-                    for i, elem in enumerate(py_val):
-                        elem_offset = abs_offset + i * type_size
-                        if not isinstance(elem, int):
-                            raise TypeError(
-                                f"Field '{field_name}': array element must be int, "
-                                f"got {type(elem).__name__}"
-                            )
-                        self._check_int_fits(elem, ctype_cls, field_name)
-                        self._insert_bytes(blob, elem_offset, self._serialize_ctype(elem, ctype_cls))
-
-                elif isinstance(py_val, int):
-                    if entries != 1:
-                        raise ValueError(
-                            f"Field '{field_name}': scalar integer provided for array "
-                            f"field (expected {entries} entries)"
-                        )
-                    self._check_int_fits(py_val, ctype_cls, field_name)
-                    self._insert_bytes(blob, abs_offset, self._serialize_ctype(py_val, ctype_cls))
 
                 else:
-                    raise TypeError(
-                        f"Field '{field_name}': unsupported Python type {type(py_val).__name__} "
-                        f"for primitive ctype {ctype_cls.__name__}"
-                    )
+                    # Struct type (or array of structs) – recurse after looking up layout.
+                    try:
+                        child_struct = self.dwarfdump.get_struct_by_typedef(target_file, member.type_name)
+                    except (KeyError, RuntimeError) as e:
+                        raise RuntimeError(
+                            f"Field '{field_name}': unable to resolve struct type "
+                            f"'{resolved_type}' (typedef '{member.type_name}')"
+                        ) from e
 
-            else:
-                # Struct type (or array of structs) – recurse after looking up layout.
-                try:
-                    child_struct = self.dwarfdump.get_struct_by_typedef(target_file, member.type_name)
-                except (KeyError, RuntimeError) as e:
-                    raise RuntimeError(
-                        f"Field '{field_name}': unable to resolve struct type "
-                        f"'{resolved_type}' (typedef '{member.type_name}')"
-                    ) from e
-
-                if isinstance(py_val, ConfigStruct):
-                    if entries != 1:
-                        raise ValueError(
-                            f"Field '{field_name}': scalar ConfigStruct provided for "
-                            f"array field (expected {entries} entries)"
-                        )
-                    self._flatten_and_write(blob, child_struct, abs_offset,
-                                            py_val.fields, target_file)
-
-                elif isinstance(py_val, list):
-                    if len(py_val) > entries:
-                        raise ValueError(
-                            f"Field '{field_name}': list has {len(py_val)} elements, "
-                            f"but DWARF expects at most {entries}"
-                        )
-                    stride = child_struct.size
-                    for i, elem in enumerate(py_val):
-                        elem_offset = abs_offset + i * stride
-                        if not isinstance(elem, ConfigStruct):
-                            raise TypeError(
-                                f"Field '{field_name}': expected ConfigStruct in list, "
-                                f"got {type(elem).__name__}"
+                    if isinstance(py_val, ConfigStruct):
+                        if entries != 1:
+                            raise ValueError(
+                                f"Field '{field_name}': scalar ConfigStruct provided for "
+                                f"array field (expected {entries} entries)"
                             )
-                        self._flatten_and_write(blob, child_struct, elem_offset,
-                                                elem.fields, target_file)
+                        self._flatten_and_write(blob, child_struct, abs_offset,
+                                                py_val.fields, target_file)
 
-                else:
-                    raise TypeError(
-                        f"Field '{field_name}': unsupported Python type {type(py_val).__name__} "
-                        f"for struct field"
-                    )
+                    elif isinstance(py_val, list):
+                        if len(py_val) > entries:
+                            raise ValueError(
+                                f"Field '{field_name}': list has {len(py_val)} elements, "
+                                f"but DWARF expects at most {entries}"
+                            )
+                        stride = child_struct.size
+                        for i, elem in enumerate(py_val):
+                            elem_offset = abs_offset + i * stride
+                            if not isinstance(elem, ConfigStruct):
+                                raise TypeError(
+                                    f"Field '{field_name}': expected ConfigStruct in list, "
+                                    f"got {type(elem).__name__}"
+                                )
+                            self._flatten_and_write(blob, child_struct, elem_offset,
+                                                    elem.fields, target_file)
+
+                    else:
+                        raise TypeError(
+                            f"Field '{field_name}': unsupported Python type {type(py_val).__name__} "
+                            f"for struct field"
+                        )
+            except Exception as e:
+                e_type = type(e)
+                raise e_type(f"While parsing {member} of {dwarf_struct} \n\n-> {e}") from e
 
 
     def resolve_file(self, target_file: str):

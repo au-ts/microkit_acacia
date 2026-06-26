@@ -7,6 +7,9 @@ from collections import defaultdict, deque
 from .pd import ProtectionDomain
 from .configstruct import ConfigStruct
 
+class SubsystemBuildError(RuntimeError):
+    ...
+
 class Subsystem(ABC):
     """
     A subsystem is a grouping of PDs, as well as channels,
