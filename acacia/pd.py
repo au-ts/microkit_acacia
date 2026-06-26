@@ -94,6 +94,7 @@ class Entity:
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """
         if len(self.maps) != 0:
+            print(self.maps)
             # python sorted() is adaptive, so this doesn't waste much time on repeats!
             self.maps = sorted(self.maps, key=lambda m: m.vaddr)
             last_vaddr_end = self.maps[-1].vaddr + self.maps[-1].size
@@ -102,7 +103,7 @@ class Entity:
             # TODO: support doing this with the architecture page size. Currently,
             # we don't support any page sizes other than 0x1000 in general throughout
             # this codebase.
-            next_vaddr = (last_vaddr_end % 0x1000) + 0x1000
+            next_vaddr = (last_vaddr_end - (last_vaddr_end % 0x1000)) + 0x1000
         else:
             next_vaddr = start_vaddr
 
