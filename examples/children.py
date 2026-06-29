@@ -5,7 +5,7 @@ from acacia.arch import aarch64
 from acacia import ProtectionDomain, MemoryRegion, Map, System, Channel
 import xml.etree.ElementTree as et
 
-sdf = System(aarch64, 0x10000)
+sdf = System(aarch64, paddr_top=0x10000)
 
 parent = ProtectionDomain("driver", "driver.elf", priority=200)
 client_a = ProtectionDomain("client_a", "client_a.elf", priority=100)
@@ -31,4 +31,3 @@ sdf.add_channel(ch)
 sdf.add_pd(parent)
 
 sdf.write_xml_file("children.system")
-

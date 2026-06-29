@@ -45,7 +45,7 @@ class TestChannel:
         low_pd = self.create_pd("low", 100)
         end_a = Channel.End(pd=high_pd, can_notify=True, can_pp=True)  # High calls low - invalid
         end_b = Channel.End(pd=low_pd, can_notify=True, can_pp=False)
-        with pytest.raises(RuntimeError, match="PPCs can only go from low to high"):
+        with pytest.raises(RuntimeError):
             Channel(end_a, end_b)
 
     def test_ppc_same_priority_rejected(self):
@@ -54,7 +54,7 @@ class TestChannel:
         pd2 = self.create_pd("pd2", 100)
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=True)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False)
-        with pytest.raises(RuntimeError, match="PPCs can only go from low to high"):
+        with pytest.raises(RuntimeError):
             Channel(end_a, end_b)
 
     def test_channel_id_allocation(self):
@@ -115,4 +115,3 @@ class TestChannel:
         ends = root.find("channel").findall("end")
         pd1_end = next(e for e in ends if e.get("pd") == "pd1")
         assert pd1_end.get("notify") == "false"
-

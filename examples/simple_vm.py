@@ -4,7 +4,7 @@
 from acacia.arch import aarch64
 from acacia import System, ProtectionDomain, MemoryRegion, Map, VirtualMachine, SchedulingProperties
 
-sdf = System(aarch64, 0x10000)
+sdf = System(aarch64, paddr_top=0x10000)
 
 vmm = ProtectionDomain("vmm", "vmm.elf", priority=254, cpu=0)
 vm_ram = MemoryRegion("vm_ram", 0x40000000)

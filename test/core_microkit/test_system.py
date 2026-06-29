@@ -48,7 +48,7 @@ class TestSystemInitialization:
 
     def test_init_creates_allocator_with_page_size(self, mock_allocator, arch):
         sys_ = System(arch, paddr_top=0xDEAD_0000)
-        mock_allocator.assert_called_once_with(arch, 0xDEAD_0000, 0x1000)
+        mock_allocator.assert_called_once_with(arch, 0xDEAD_0000)
         assert sys_.allocator is mock_allocator.return_value
 
     def test_init_empty_collections(self, sys_):
@@ -322,4 +322,3 @@ class TestWriteXmlFile:
 
         content = out.read_text(encoding="utf-8")
         assert content.startswith("<?xml")
-

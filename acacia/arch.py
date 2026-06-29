@@ -6,16 +6,16 @@ from enum import Enum
 import xml.etree.ElementTree as et
 
 class ArchID(Enum):
-    aarch32 = 0
-    aarch64 = 1
-    riscv32 = 2
-    riscv64 = 3
-    x86 = 4
-    x86_64 = 5
+    aarch32 = 1
+    aarch64 = 2
+    riscv32 = 3
+    riscv64 = 4
+    x86 = 5
+    x86_64 = 6
 
 class PageSizeID(Enum):
-    small = 0
-    large = 1
+    small = 1
+    large = 2
 
 @dataclass
 class Arch:
@@ -45,11 +45,11 @@ class Arch:
 
     def roundup_to_page(self, n: int) -> int:
         p_sz = self.default_page_size()
-        return p_sz if n < p_sz else n if n % p_sz == 0 else n + p_sz - (n % p_sz)
+        return n if n % p_sz == 0 else n + p_sz - (n % p_sz)
 
     def rounddown_to_page(self, n: int) -> int:
         p_sz = self.default_page_size()
-        return 0 if n < p_sz else n if n % p_sz == 0 else n - (n % p_sz)
+        return n - (n % p_sz)
 
     def get_page_size(self, page_size: PageSizeID) -> int:
         if page_size is PageSizeID.small:
@@ -67,12 +67,10 @@ x86_64 = Arch(ArchID.x86_64)
 
 class SDFMemoryAllocator:
     """
-    Class encapsulating the memory map of the system. Used for:
-    a. Assigning physical addresses to physical MRs,
-    b. Assigning virtual addresses to maps,
-    c. Containing valid page sizes.
+    Class encapsulating the physical memory map of the system.
+    Used for assigning physical addresses to physical MRs
     """
-    def __init__(self, arch: Arch, paddr_top: int, page_sz):
+    def __init__(self, arch: Arch, paddr_top: int):
         self.arch = arch
         self.paddr_top = paddr_top
 
@@ -83,4 +81,3 @@ class SDFMemoryAllocator:
         if new > self.paddr_top:
             raise RuntimeError("Paddr top should only decrement!")
         self.paddr_top = new
-

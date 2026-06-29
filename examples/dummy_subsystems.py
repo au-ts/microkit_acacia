@@ -89,7 +89,7 @@ class DummyI2C(Subsystem):
 
 
 # Make system and subsystems
-sdf = System(aarch64, 0x100000000)
+sdf = System(aarch64, paddr_top=0x100000000)
 
 i2c = DummyI2C()
 timer = DummyTimer()

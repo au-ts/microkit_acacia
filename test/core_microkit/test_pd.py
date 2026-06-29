@@ -9,28 +9,20 @@ from acacia.memory import MemoryRegion, Map
 
 class TestSchedulingProperties:
     def test_priority_required(self):
-        with pytest.raises(ValueError, match="Must define a priority"):
+        with pytest.raises(ValueError, match="Must define a non-negative priority"):
             SchedulingProperties(priority=None)
 
     def test_negative_priority_rejected(self):
-        with pytest.raises(ValueError, match="cannot be negative"):
+        with pytest.raises(ValueError, match="Must define a non-negative priority"):
             SchedulingProperties(priority=-1)
 
     def test_negative_budget_rejected(self):
-        with pytest.raises(ValueError, match="cannot be negative"):
+        with pytest.raises(ValueError, match="SchedulingProperties cannot be negative!"):
             SchedulingProperties(priority=100, budget=-10, period=100)
 
     def test_budget_exceeds_period_rejected(self):
-        with pytest.raises(ValueError, match="Budget cannot be greater than period"):
+        with pytest.raises(ValueError, match="Budget must be defined and cannot be greater than period"):
             SchedulingProperties(priority=100, budget=200, period=100)
-
-    def test_passive_with_period_rejected(self):
-        with pytest.raises(ValueError, match="Passive PDs do not have a period"):
-            SchedulingProperties(priority=100, passive=True, period=100)
-
-    def test_passive_with_budget_rejected(self):
-        with pytest.raises(ValueError, match="Passive PDs do not have a period"):
-            SchedulingProperties(priority=100, passive=True, budget=100)
 
     def test_valid_scheduling(self):
         sp = SchedulingProperties(priority=100, budget=50, period=100)

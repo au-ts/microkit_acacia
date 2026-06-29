@@ -58,17 +58,16 @@ class TestArch:
 
 class TestSDFMemoryAllocator:
     def test_initialization(self):
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000, None)
+        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
         assert alloc.paddr_top == 0x80000000
         assert alloc.arch == aarch64
 
     def test_update_paddr_top_decrements(self):
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000, None)
+        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
         alloc.update_paddr_top(0x70000000)
         assert alloc.paddr_top == 0x70000000
 
     def test_update_paddr_top_increase_rejected(self):
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000, None)
+        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
         with pytest.raises(RuntimeError, match="only decrement"):
             alloc.update_paddr_top(0x90000000)
-

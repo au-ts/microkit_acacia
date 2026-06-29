@@ -54,12 +54,16 @@ class MemoryRegion:
 
 
 class Map:
+    """
+    A mapping of a MemoryRegion into a PD or VM.
+    """
     @dataclass(frozen=True)
     class Permissions:
         r: bool = False
         w: bool = False
         x: bool = False
         def __str__(self):
+            # "if [r,w,x] in thing, include corresponding char"
             return "".join([e[1] for e in
                 zip([self.r, self.w, self.x], ['r', 'w', 'x']) if e[0]])
 
@@ -68,10 +72,6 @@ class Map:
             if not self.r and not self.x and self.w:
                 raise ValueError("Cannot define write-only pages!")
 
-
-    """
-    A mapping of a MemoryRegion into a PD or VM.
-    """
     def __init__(self,
                  mr: MemoryRegion,
                  vaddr: int,
@@ -105,6 +105,3 @@ class Map:
         if self.setvar_vaddr is not None:
             map.set("setvar_vaddr",  str(self.setvar_vaddr))
         return map
-
-
-

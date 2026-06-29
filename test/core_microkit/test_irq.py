@@ -49,4 +49,3 @@ class TestIRQTriggerEnum:
     def test_str_representation(self):
         assert str(IRQ.Trigger.EDGE) == "edge"
         assert str(IRQ.Trigger.LEVEL) == "level"
-

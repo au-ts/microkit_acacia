@@ -3,7 +3,8 @@
 
 import pytest
 import xml.etree.ElementTree as et
-from acacia.x86 import IrqIoapic, IrqMsi, IOPort
+from acacia.x86 import IOPort
+from acacia.irq import IrqIoapic, IrqMsi
 
 
 class TestIrqIoapic:
@@ -115,4 +116,3 @@ class TestIOPort:
         assert iop_elem.get("id") == "3"
         assert iop_elem.get("addr") == "1016"
         assert iop_elem.get("size") == "8"
-

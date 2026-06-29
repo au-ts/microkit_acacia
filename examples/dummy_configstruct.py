@@ -63,7 +63,7 @@ class DummyI2C(Subsystem):
         client_structs = []
         return [devresource] + client_structs
 
-sdf = System(aarch64, 0x100000000)
+sdf = System(aarch64, paddr_top=0x100000000)
 
 i2c = DummyI2C()
 client1 = ProtectionDomain("client1", "client1.elf", priority=1)
@@ -92,29 +92,11 @@ for s in structs:
 
 # Test struct dumper
 dumper = r.dwarfdump
-# dumper._parse_file(i2c.driver.prog_image)
-# print("Typedef mappings for driver:")
-# for k in dumper.file_typedef_to_type[i2c.driver.prog_image].keys():
-#     print(f"\t{k} -> {dumper.file_typedef_to_type[i2c.driver.prog_image][k]} "
-#           f"base_type={dumper.get_typedef_base_type(i2c.driver.prog_image, k)}")
-
-# dumper._parse_file(client1.prog_image)
-# print("Typedef mappings for client")
-# for k in dumper.file_typedef_to_type[client1.prog_image].keys():
-#     print(f"\t{k} -> {dumper.file_typedef_to_type[client1.prog_image][k]} "
-#           f"base_type={dumper.get_typedef_base_type(client1.prog_image, k)}")
-
-# print("\nList of all structs (driver):")
-# for s in dumper.file_structs[i2c.driver.prog_image]:
-#     print(f"\t{s}")
-#     for m in dumper.file_structs[i2c.driver.prog_image][s].members:
-#         print(f"\t\t{m}")
 
 # Try resolve our config structs
 print("Dwarf structs matching config of dummy i2c driver:")
 driver_dwarf_structs = dumper.find_struct_and_children(i2c.driver.prog_image, structs[0].typedef_name)
 print(driver_dwarf_structs)
-
 
 # try find i2c configs structs
 sdf.make_config_structs("./dummy_configstruct_build/")

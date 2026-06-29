@@ -26,23 +26,20 @@ class SchedulingProperties:
 
     def __post_init__(self):
         # Enforce sane values
-        if self.priority is None:
-            raise ValueError("Must define a priority!")
-        for field in [self.priority, self.budget]:
+        if self.priority is None or self.priority < 0:
+            raise ValueError("Must define a non-negative priority!")
+        for field in [self.period, self.budget]:
             if field is None:
                 continue
             if not isinstance(field, int):
-                raise ValueError(f"Int field given {type(field)} instead!")
+                raise ValueError(f"SchedulingProperties int field given {type(field)} instead!")
             if field < 0:
                 raise ValueError("SchedulingProperties cannot be negative!")
 
-        # If we have a period, we must also have a budget
+        # If we have a period, we must also have a budget, and the b
         if self.period is not None:
-            if self.budget and self.period and (self.budget > self.period):
-                raise ValueError("Budget cannot be greater than period!")
-        # Passive PDs may not have a period or budget
-        if self.passive and (self.period is not None or self.budget is not None):
-            raise ValueError("Passive PDs do not have a period or budget!")
+            if self.budget is None or self.budget > self.period:
+                raise ValueError("Budget must be defined and cannot be greater than period!")
 
 
 class Entity:
@@ -59,7 +56,6 @@ class Entity:
     ):
         self.name = name.strip()
         self.scheduling = scheduling
-        # self.priority = DependentField(0, 254).set_val(scheduling.priority)
         self.maps: List[Map] = []
 
     @property
@@ -78,7 +74,7 @@ class Entity:
         self.maps.append(map)
 
     def create_automap(self, mr: MemoryRegion, perms: Union[Map.Permissions, str],
-                       start_vaddr=0x20_000_000) -> Map:
+                       start_vaddr=0x20_000_000, page_size=0x1000) -> Map:
         """
         Given a memory region, automatically create a map and assign it a vaddr
         that doesn't overlap with any existing maps.
@@ -87,6 +83,7 @@ class Entity:
             mr: MemoryRegion to map
             perms: Map permissions - read, write, execute
             start_vaddr: lowest address to auto-allocate map. Default: 0x20_000_000
+            page_size: page size used. Defaults to 0x1000.
 
         Returns:
             Map: created map object.
@@ -94,19 +91,18 @@ class Entity:
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """
         if len(self.maps) != 0:
-            print(self.maps)
             # python sorted() is adaptive, so this doesn't waste much time on repeats!
             self.maps = sorted(self.maps, key=lambda m: m.vaddr)
             last_vaddr_end = self.maps[-1].vaddr + self.maps[-1].size
 
-            # pad by one page.
-            # TODO: support doing this with the architecture page size. Currently,
-            # we don't support any page sizes other than 0x1000 in general throughout
-            # this codebase.
-            if last_vaddr_end % 0x1000:
-                next_vaddr = (last_vaddr_end - (last_vaddr_end % 0x1000)) + 0x1000
+            # pad by one page
+            if last_vaddr_end % page_size:
+                next_vaddr = (last_vaddr_end - (last_vaddr_end % page_size)) + page_size 
             else:
                 next_vaddr = last_vaddr_end
+
+            # Add space for a guard page
+            next_vaddr += page_size
         else:
             next_vaddr = start_vaddr
 
@@ -127,8 +123,6 @@ class Entity:
         # Only add passive bool if true
         if self.scheduling.passive:
             entity.set("passive", "true")
-        # Invariant: SchedulingProperties dataclass prevents us from having
-        # periods and budgets while also being passive
         if self.period is not None:
             entity.set("period", str(self.period))
         if self.budget is not None:
@@ -154,7 +148,6 @@ class VirtualMachine(Entity):
         def __post_init__(self):
             if self.id is None or self.id < 0 or self.id > MAX_IDS:
                 raise RuntimeError(f"VCPU ID={self.id} is invalid!")
-            # todo: validate cpu field. Not entirely clear what this should be?
 
         def render(self, parent: et.Element):
             entity = et.SubElement(parent, "vcpu")
@@ -247,9 +240,6 @@ class ProtectionDomain(Entity):
 
         return pd
 
-    # NOTE: Doing this incrementally is fragile. Especially with dependency resolution, we should
-    # maybe refactor channel/irq ID allocation to happen all at once when rendering, or maybe at am
-    # "implement" step.
     def allocate_id(self, requested_id: Optional[int] = None):
         """
         Allocate an ID (or test a requested id) for a channel or IRQ.
@@ -308,7 +298,3 @@ class ProtectionDomain(Entity):
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
-
-
-
-

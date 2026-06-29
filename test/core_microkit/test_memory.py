@@ -43,20 +43,20 @@ class TestMemoryRegion:
 
     def test_allocate_paddr_assigns(self):
         mr = MemoryRegion("test", 0x1000, physical=True)
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000, None)
+        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
         mr.allocate_paddr(alloc)
         assert mr.paddr == 0x7ffff000  # 0x80000000 - 0x1000
 
     def test_allocate_paddr_already_assigned(self):
         mr = MemoryRegion("test", 0x1000, paddr=0x40000000)
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000, None)
+        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
         # Should return without error or modification
         mr.allocate_paddr(alloc)
         assert mr.paddr == 0x40000000
 
     def test_allocate_paddr_virtual_noop(self):
         mr = MemoryRegion("test", 0x1000)  # Not physical
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000, None)
+        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
         mr.allocate_paddr(alloc)
         assert mr.paddr is None
 
@@ -133,4 +133,3 @@ class TestMap:
         m.render(parent)
         map_elem = parent.find("map")
         assert map_elem.get("setvar_vaddr") == "my_vaddr"
-

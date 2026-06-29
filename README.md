@@ -13,7 +13,7 @@ As well as aiding composition of a collection of ELF files into a Microkit binar
 To install Acacia for development:
 1. Create a virtual environment to store Acacia and its dependencies. `python3 -m venv (venv_name)`
 2. Activate your virtual environment. `source (venv_name)/bin/activate`
-3. Install dependencies. From the root directory of Acacia: `pip install -r requirements.txt`
+3. Install dependencies. From the root directory of Acacia: `pip install -r requirements.txt` and `pip install -r dev-requirements.txt` (for unit testing, etc.)
 4. Install Acacia to the virtual environment. From the root directory of Acacia: `pip install .`.
 
 You now have Acacia installed and active in a virtual environment! Note that virtual environments are scoped to your current terminal, hence you must run `source (venv_name)/bin/activate` on each terminal where you intend to use it.

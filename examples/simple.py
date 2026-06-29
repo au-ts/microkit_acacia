@@ -5,7 +5,7 @@ from acacia.arch import aarch64
 from acacia import ProtectionDomain, MemoryRegion, Map, ConventionalIRQ, IRQ, System, Channel
 import xml.etree.ElementTree as et
 
-sdf = System(aarch64, 0x10000)
+sdf = System(aarch64, paddr_top=0x10000)
 
 serial_driver = ProtectionDomain("serial_driver", "serial_driver.elf", priority=200)
 serial_virt_tx = ProtectionDomain(

@@ -6,6 +6,5 @@ setup(
         author="Lesley Rossouw",
         author_email="lesley.rossouw@unsw.edu.au",
         packages=["acacia"],
-        install_requires=[]
+        install_requires=["pylibfdt"]
 )
-

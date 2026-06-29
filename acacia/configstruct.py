@@ -595,59 +595,6 @@ class ConfigStructResolver:
             self.resolve_file(f)
 
 
-    # These methods are stubs of an implementation using pyelftools...
-    # def _index_dwarf(self, dwarf) -> Dict[str, Any]:
-    #     """
-    #     Index typedefs by DIE and return dict of names:dies
-    #     """
-    #     typedefs = {}
-    #     for cu in dwarf.iter_CUs():
-    #         for die in cu.iter_DIEs():
-    #             if die.tag == 'DW_TAG_typedef' and 'DW_AT_name' in die.attributes:
-    #                 name = die.attributes['DW_AT_name'].value
-    #                 if isinstance(name, bytes):
-    #                     name = name.decode('utf-8', errors='replace')
-    #                 typedefs[name] = die
-    #     return typedefs
-
-    # def _index_symbols(self, elf) -> Dict[str, Any]:
-    #     """
-    #     Index symbols in ELF and return dict of names:symbols
-    #     """
-    #     symbols = {}
-    #     for section in elf.iter_sections():
-    #         if isinstance(section, SymbolTableSection):
-    #             for sym in section.iter_symbols():
-    #                 if sym.name:
-    #                     symbols[sym.name] = sym
-    #     return symbols
-
-    # def resolve_file(self, target_file: str):
-    #     # Open file
-    #     elf_path = os.path.join(build_dir, target_file)
-    #     try:
-    #         self._elf = ELFFile(open(elf_path, 'rb'))
-    #     except FileNotFoundError:
-    #         raise RuntimeError(f"ELF file not found: {elf_path}")
-    #
-    #     dwarf = self._elf.get_dwarf_info()
-    #     endian = 'little' if self._elf.little_endian else 'big'
-    #     if endian == 'big':
-    #         # Note: this will be really trivial to add.
-    #         raise NotImplementedError("SDFgen doesn't currently support big "
-    #                                   "endian systems for struct generation!")
-    #
-    #     pointer_size = self._elf.elfclass // 8
-    #
-    #     typedefs: Dict[str, Any] = None
-    #     if dwarf is not None:
-    #         typedefs = self._index_dwarf(dwarf)
-    #     else:
-    #         raise RuntimeError(f"Target file {target_file} doesn't have DWARF symbols!")
-    #
-    #     symbols = self._index_symbols()
-
-
 def RegionResourceFactory(map: Map, section_name: Optional[str] = None):
     fields = {
         "vaddr": map.vaddr,

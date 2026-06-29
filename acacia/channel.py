@@ -31,7 +31,8 @@ class Channel:
             if not pp_caller.can_pp:
                 continue
             if pp_caller.pd.priority >= pp_receiver.pd.priority:
-                raise RuntimeError("PPCs can only go from low to high priorty!")
+                raise RuntimeError(f"PPC from {pp_caller} to {pp_receiver} cannot have "\
+                                   f"descending priorities!")
 
         # Allocate channel IDs
         for end in [end_a, end_b]:
@@ -64,4 +65,3 @@ class Channel:
         if self.end_b.pd is end_pd:
             return self.end_b.ch_id
         raise RuntimeError(f"PD {end_pd} isn't in this channel!")
-

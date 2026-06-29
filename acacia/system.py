@@ -17,7 +17,7 @@ class System:
     """
     def __init__(self, sys_arch: Arch, paddr_top: int, dtb: DeviceTreeBlob=None):
         self.arch = sys_arch
-        self.allocator = SDFMemoryAllocator(sys_arch, paddr_top, sys_arch.default_page_size())
+        self.allocator = SDFMemoryAllocator(sys_arch, paddr_top)
 
         # We store sets, not lists. No duplicates allowed!
         self.pds: Set[ProtectionDomain] = set()
@@ -126,5 +126,5 @@ class System:
         et.indent(xml, level=0)
 
         tree = et.ElementTree(xml)
-        et.indent(tree, space='\t', level=0)
+        et.indent(tree, space='    ', level=0)
         tree.write(path, encoding="utf-8", xml_declaration=True)

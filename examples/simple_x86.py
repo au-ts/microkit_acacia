@@ -6,7 +6,7 @@ from acacia import ProtectionDomain, MemoryRegion, Map, System, Channel
 from acacia.x86 import IrqIoapic, IrqMsi, IOPort
 import xml.etree.ElementTree as et
 
-sdf = System(x86_64, 0x10000)
+sdf = System(x86_64, paddr_top=0x10000)
 
 # PDs
 net_driver = ProtectionDomain("net_driver", "net_driver.elf", priority=200)

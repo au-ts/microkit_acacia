@@ -207,4 +207,3 @@ class TestSubsystemAbstractMethods:
                 pass
 
         Minimal("minimal")  # Must not raise
-

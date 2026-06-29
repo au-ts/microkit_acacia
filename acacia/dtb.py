@@ -10,6 +10,7 @@ from functools import cache
 from typing import List, Tuple
 from .arch import Arch
 from .irq import IRQ, ConventionalIRQ
+from .util import ctz
 
 class DTB_IRQ_Controller(ABC):
     @abstractmethod
@@ -313,7 +314,7 @@ class DeviceTreeBlob:
         to find the CPU visible address rather than some address relative to the
         particular bus the address is on. We also align to the smallest page size.
         """
-        page_bits = (arch.default_page_size()).bit_length() - 1
+        page_bits = ctz(arch.default_page_size())
 
         # align page size
         device_paddr = paddr & ~((1 << page_bits) - 1)
@@ -387,11 +388,3 @@ class DeviceTreeBlob:
         # TODO: make sure this works...
 
         return device_paddr
-
-
-
-
-
-
-
-
