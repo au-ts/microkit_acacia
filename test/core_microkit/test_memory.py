@@ -24,13 +24,13 @@ class TestMemoryRegion:
         assert not mr.physical
         assert mr.paddr is None
 
-    def test_cached_false_default(self):
+    def test_cached_true_default(self):
         mr = MemoryRegion("test", 0x1000)
-        assert not mr.cached
-
-    def test_cached_true(self):
-        mr = MemoryRegion("test", 0x1000, cached=True)
         assert mr.cached
+
+    def test_cached_false(self):
+        mr = MemoryRegion("test", 0x1000, cached=False)
+        assert not mr.cached
 
     def test_render(self):
         mr = MemoryRegion("test_mr", 0x2000)
@@ -116,7 +116,7 @@ class TestMap:
         parent = et.Element("parent")
         m.render(parent)
         map_elem = parent.find("map")
-        assert map_elem.get("cached") == "false"
+        assert map_elem.get("cached") is None
 
     def test_render_cached_true_omitted(self):
         mr = MemoryRegion("test_mr", 0x1000, cached=True)

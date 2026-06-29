@@ -113,6 +113,6 @@ class TestIOPort:
         ioport.render(parent)
         iop_elem = parent.find("ioport")
         assert iop_elem.get("id") == "3"
-        assert iop_elem.get("addr") == "0x3f8"
-        assert iop_elem.get("size") == "0x8"
+        assert iop_elem.get("addr") == "1016"
+        assert iop_elem.get("size") == "8"
 

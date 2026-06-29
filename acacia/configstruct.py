@@ -145,7 +145,11 @@ class ConfigStructDwarfDumper:
 
     def _eat_dwarf(self, target_file):
         # Goblin delicacy
-        ret = subprocess.run([self.bin, target_file], capture_output=True, text=True, check=True)
+        try:
+            ret = subprocess.run([self.bin, target_file], capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to eat DWARF from {target_file}! Does file exist?")\
+            from e
         if ret.returncode != 0:
             raise RuntimeError(f"Couldn't dump {target_file} -> {ret.stderr}")
         return ret
@@ -557,7 +561,7 @@ class ConfigStructResolver:
                         )
             except Exception as e:
                 e_type = type(e)
-                raise e_type(f"While parsing {member} of {dwarf_struct} \n\n-> {e}") from e
+                raise e_type(f"While parsing {dwarf_struct.type_name}->{member} of {dwarf_struct} \n\n-> {e}") from e
 
 
     def resolve_file(self, target_file: str):
