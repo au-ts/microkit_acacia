@@ -106,15 +106,17 @@ class System:
             raise RuntimeWarning("Tried to render system without constructing subsystems!")
         system = et.Element("system")
 
-        for mr in self.mrs:
+        # QoL: sort memory everything by name
+        for mr in sorted(self.mrs, key=lambda m: m.name):
             # Allocate paddr if needed
             mr.allocate_paddr(self.allocator)
             mr.render(system)
 
-        for pd in self.pds:
+        for pd in sorted(self.pds, key=lambda p: p.name):
             pd.render(system)
 
-        for ch in self.channels:
+        # Arrange channels by the first PD's name.
+        for ch in sorted(self.channels, key=lambda c: c.end_a.pd.name):
             ch.render(system)
 
         return system

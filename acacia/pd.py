@@ -134,7 +134,8 @@ class Entity:
         if self.budget is not None:
             entity.set("budget", str(self.budget))
 
-        for map in self.maps:
+        # Render maps in ascending order of vaddr
+        for map in sorted(self.maps, key=lambda m: m.vaddr):
             map.render(entity)
 
         return entity
@@ -230,15 +231,16 @@ class ProtectionDomain(Entity):
             pd.set("id", str(self.child_id))
 
         # Only insert stack size, CPU and SMC if defined
+        # QoL: render elements in name/val order
         if self.stack_size is not None:
             pd.set("stack_size", str(self.stack_size))
         if self.cpu is not None:
             pd.set("cpu", str(self.cpu))
-        for i in self.irqs:
+        for i in sorted(self.irqs, key=lambda ir: ir.id):
             i.render(pd)
-        for iop in self.ioports:
+        for iop in sorted(self.ioports, key=lambda i: i.addr):
             iop.render(pd)
-        for c in self.children:
+        for c in sorted(self.children, key=lambda c: c.name):
             c.render(pd)
         if self.vm:
             self.vm.render(pd)
