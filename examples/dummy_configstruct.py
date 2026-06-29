@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from acacia import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
-from acacia.subsystem import subsystem_register_dependency, get_dependency_map, forced_max_priority, SubsystemBuildError
 from acacia.arch import aarch64
 from acacia.configstruct import ConfigStruct, DeviceResourcesFactory, ConfigStructResolver
 from acacia.irq import IRQ, ConventionalIRQ
@@ -14,6 +13,7 @@ class DummyI2C(Subsystem):
         self.driver = None
         self.magic = "dmi2c"
         self.irq_type = irq_type
+        self.construct_infrastructure(200)
 
     def connect_clients(self):
         assert self.driver is not None
@@ -29,9 +29,9 @@ class DummyI2C(Subsystem):
             )
             self.channels.append(ch)
 
-    def construct_infrastructure(self, min_prio, max_prio, dependencies):
+    def construct_infrastructure(self, driver_prio: int):
         # Make driver
-        self.driver = ProtectionDomain("i2c_driver", "i2c_driver.elf", scheduling=SchedulingProperties(min_prio, passive=True))
+        self.driver = ProtectionDomain("i2c_driver", "i2c_driver.elf", scheduling=SchedulingProperties(driver_prio, passive=True))
         self.pds.append(self.driver)
 
         dev_mem = MemoryRegion("i2c_ctrl", 0x1000, paddr=0x37370000)
@@ -42,8 +42,6 @@ class DummyI2C(Subsystem):
 
         dev_irq = self.irq_type(1, IRQ.Trigger.EDGE)
         self.irq_id = self.driver.add_irq(dev_irq)
-
-        return min_prio
 
     def generate_config_structs(self):
         # This is just for testing, so we take the laziest option.
@@ -119,4 +117,4 @@ print(driver_dwarf_structs)
 
 
 # try find i2c configs structs
-r.resolve_all()
+sdf.make_config_structs("./dummy_configstruct_build/")
