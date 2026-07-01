@@ -1,0 +1,76 @@
+# Copyright 2026, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
+# Actions to *only* run on GitHub pull requests
+
+name: PR
+
+on: [pull_request]
+
+jobs:
+  whitespace:
+    name: 'Trailing Whitespace'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: seL4/ci-actions/git-diff-check@master
+
+  style_python:
+    name: Style (Python)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: psf/black@stable
+        with:
+          # black guarantees formatting stability within a calendar year version
+          version: "~= 25.0"
+
+  lint_python:
+    name: Lint (Python)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup mypy
+        run: |
+          pip3 install -r dev-requirements.txt
+      - name: Run mypy
+        run: |
+          mypy -p acacia
+
+  test_self:
+    name: Run self-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        # oldest python version we support is 3.9
+        version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14', '3.x']
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.version }}
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Install acacia
+        run: |
+          pip install .
+      - name: Basic acacia import check
+        run: |
+          python -c 'import acacia; print(dir(acacia))'
+
+      - name: Install dev dependencies
+        # pytest does not support py3.9
+        if: ${{ matrix.version != '3.9' }}
+        run: |
+          pip3 install -r dev-requirements.txt
+
+      - name: Run tests
+        if: ${{ matrix.version != '3.9' }}
+        run: |
+          pytest .
