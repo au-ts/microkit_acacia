@@ -1,7 +1,11 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+import pathlib
+import xml.etree.ElementTree as et
 from typing import List, Set, Optional
+from unittest.mock import MagicMock
+
 from .arch import Arch, ArchID, SDFMemoryAllocator
 from .pd import ProtectionDomain
 from .channel import Channel
@@ -9,8 +13,8 @@ from .memory import MemoryRegion, Map
 from .subsystem import Subsystem
 from .dtb import DeviceTreeBlob
 from .configstruct import ConfigStruct, ConfigStructResolver
-import xml.etree.ElementTree as et
-from unittest.mock import MagicMock
+
+
 class System:
     """
     A Microkit system.
@@ -37,9 +41,9 @@ class System:
                                f"but it is a {type(to_check)}!")
 
     def add_pd(self, pd: ProtectionDomain):
+        self.__system_subclass_check(pd, ProtectionDomain)
         # We technically don't need to raise this error, but it's better to
         # alert the user. Sets silently drop duplicates by default.
-        self.__system_subclass_check(pd, ProtectionDomain)
         if pd in self.pds:
             raise RuntimeError("Cannot add one PD to the same system multiple times!")
         self.pds.add(pd)
@@ -86,7 +90,7 @@ class System:
 
         self.subsystems_constructed = True
 
-    def make_config_structs(self, build_dir: str="./"):
+    def make_config_structs(self, build_dir: pathlib.Path=pathlib.Path("./")):
         # We can't get config structs without resolving subsystems first
         if not self.subsystems_constructed:
             print("System::make_config_structs - auto-resolving systems")
@@ -95,15 +99,13 @@ class System:
         resolver = ConfigStructResolver(build_dir, endian='little')
         for s in self.subsystems:
             resolver.add_structs(s.generate_config_structs())
-        resolver.resolve_all()
+        resolver.resolve_and_create_all()
 
 
-    def render(self, construct_subsystems=True) -> et.Element:
-        if construct_subsystems and not self.subsystems_constructed:
+    def render(self) -> et.Element:
+        if not self.subsystems_constructed:
             print("System::render - auto-resolving subsystems")
             self.resolve_subsystems()
-        elif not construct_subsystems:
-            raise RuntimeWarning("Tried to render system without constructing subsystems!")
         system = et.Element("system")
 
         # QoL: sort memory everything by name
@@ -121,7 +123,7 @@ class System:
 
         return system
 
-    def write_xml_file(self, path):
+    def write_xml_file(self, path:pathlib.Path):
         xml = self.render()
         et.indent(xml, level=0)
 

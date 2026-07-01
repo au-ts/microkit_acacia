@@ -4,6 +4,7 @@
 from typing import List, ClassVar, Optional, Union, Type, Dict
 from abc import abstractmethod, abstractclassmethod, ABC
 from collections import defaultdict, deque
+
 from .pd import ProtectionDomain
 from .configstruct import ConfigStruct
 
@@ -19,7 +20,9 @@ class Subsystem(ABC):
 
     At init, the subsystem is just a container to add clients to.
     """
-    def __init__(self, name: str, clients_allowed: bool = True, forced_prio: Optional[int] = None):
+    def __init__(self, name: str, clients_allowed: bool = True):
+        if type(self) == Subsystem:
+            raise TypeError("Cannot instantiate abstract base class!")
         self.name = name
         self.built = False  # "have we added all clients and connected them?"
         self.clients: List[ProtectionDomain] = []
@@ -36,9 +39,41 @@ class Subsystem(ABC):
         e.g. assigning MAC addresses for networking or I2C addresses for I2C.
         """
         if not self.clients_allowed:
-            raise RuntimeError(f"{self.__repr__} does not allow clients!")
+            raise RuntimeError(f"{self} does not allow clients!")
         if client not in self.clients:
             self.clients.append(client)
+
+    def add_pd(self, pd: ProtectionDomain):
+        """
+        Add a non-client PD, e.g. drivers, virtualisers, PDs as a part of an application.
+        This should be used on PDs which do not require any connection as clients.
+        """
+        if pd not in self.pds:
+            self.pds.append(pd)
+
+    def add_pd(self, pd: ProtectionDomain):
+        """
+        Add a non-client PD, e.g. drivers, virtualisers, PDs as a part of an application.
+        This should be used on PDs which do not require any connection as clients.
+        """
+        if pd not in self.pds:
+            self.pds.append(pd)
+
+    def add_mr(self, mr: MemoryRegion):
+        """
+        Add a memory region used by this subsystem to the list of MRs to hand off
+        to render in System.
+        """
+        if mr not in self.mrs:
+            self.mrs.append(mr)
+
+    def add_channel(self, channel: Channel):
+        """
+        Add a channel used by this subsystem to the list of channels to hand off
+        to render in System.
+        """
+        if channel not in self.channels:
+            self.channels.append(channel)
 
     def get_pds(self):
         """
@@ -64,11 +99,9 @@ class Subsystem(ABC):
             return self.channels
         raise RuntimeError("Cannot get channels from an unbuilt subsystem!")
 
-    @abstractmethod
     def connect_clients(self):
         """
-        Attempt to connect clients to the PDs that compose this subsystem. This should be
-        called after `construct_infrastructure()`.
+        Attempt to connect clients to the PDs that compose this subsystem.
 
         This method shouldn't need to be called directly, Subsystem.build() automates this.
         """

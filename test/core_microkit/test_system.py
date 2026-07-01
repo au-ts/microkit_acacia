@@ -248,11 +248,6 @@ class TestRender:
 
         ss.build.assert_not_called()
 
-    def test_render_without_construct_raises(self, sys_):
-        # construct_subsystems=False on an unconstructed system is a hard error.
-        with pytest.raises(RuntimeWarning, match="without constructing subsystems"):
-            sys_.render(construct_subsystems=False)
-
     def test_render_allocates_and_renders_mrs(self, sys_):
         mr = MagicMock(name="mr")
         sys_.add_memory_region(mr)

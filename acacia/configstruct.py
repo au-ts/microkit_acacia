@@ -564,7 +564,7 @@ class ConfigStructResolver:
                 raise e_type(f"While parsing {dwarf_struct.type_name}->{member} of {dwarf_struct} \n\n-> {e}") from e
 
 
-    def resolve_file(self, target_file: str):
+    def resolve_file_and_create_structs(self, target_file: str):
         """
         Resolve all structs for a given file, and emit binary blobs to patch in for
         all configstructs currently available. Blobs written directly to self.build_dir.
@@ -586,13 +586,13 @@ class ConfigStructResolver:
                 f.write(blob)
 
 
-    def resolve_all(self):
+    def resolve_and_create_all(self):
         """
         Try generate data files for all currently known config structs. Output
         will be placed in `self.build_dir`.
         """
         for f in self.files.keys():
-            self.resolve_file(f)
+            self.resolve_file_and_create_structs(f)
 
 
 def RegionResourceFactory(map: Map, section_name: Optional[str] = None):

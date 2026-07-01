@@ -36,13 +36,6 @@ class TestSubsystemInitialization:
         ss = create_concrete_subsystem("noclients", clients_allowed=False)
         assert ss.clients_allowed is False
 
-    def test_forced_prio_accepted_but_not_stored(self):
-        # forced_prio remains in the signature for API compatibility but is
-        # no longer persisted onto the instance. Passing it must not error,
-        # and must not create the attribute.
-        ss = create_concrete_subsystem("test", forced_prio=50)
-        assert not hasattr(ss, "forced_prio")
-
 
 class TestSubsystemClientManagement:
     def test_add_client_success(self):
@@ -189,15 +182,6 @@ class TestSubsystemAbstractMethods:
     def test_cannot_instantiate_abstract(self):
         with pytest.raises(TypeError):
             Subsystem("abstract")
-
-    def test_missing_connect_clients_is_abstract(self):
-        # connect_clients is the only abstract method; a subclass that omits
-        # it cannot be instantiated.
-        class Incomplete(Subsystem):
-            pass
-
-        with pytest.raises(TypeError):
-            Incomplete("incomplete")
 
     def test_generate_config_structs_not_abstract(self):
         # A subclass providing only connect_clients is concrete, proving
