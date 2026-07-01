@@ -1,13 +1,11 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-import libfdt
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
-from functools import cache
-from typing import List, Tuple
+import libfdt
+from typing import List, Tuple, Dict, Optional
 from .arch import Arch
 from .irq import IRQ, ConventionalIRQ
 from .util import ctz
@@ -25,7 +23,10 @@ class Arm_GIC(DTB_IRQ_Controller):
         V2 = 2
         V3 = 3
 
-    def __init__(self, version: int, cpu_paddr: Optional[int], vcpu_paddr: Optional[int], vcpu_size: Optional[int]):
+    def __init__(self, version: int,
+                 cpu_paddr: Optional[int]=None,
+                 vcpu_paddr: Optional[int]=None,
+                 vcpu_size: Optional[int]=None):
         self.version = version
         self.cpu_paddr = cpu_paddr
         self.vcpu_paddr = vcpu_paddr
@@ -98,20 +99,18 @@ def _arm_gic_irq_type(irq_type_val: int) -> str:
 def _arm_gic_irq_number(number: int, irq_type: str) -> int:
     if irq_type == "spi":
         return number + 32
-    elif irq_type == "ppi":
+    if irq_type == "ppi":
         return number + 16
-    else:
-        raise RuntimeError(f"Unsupported IRQ type for number offset: {irq_type}")
+    raise RuntimeError(f"Unsupported IRQ type for number offset: {irq_type}")
 
 def _arm_gic_trigger(trigger: int) -> IRQ.Trigger:
     # Only bits 0-3 are for the trigger
     t = trigger & 0xF
     if t in [0x1, 0x2]:
         return IRQ.Trigger.EDGE
-    elif t in [0x4, 0x8]:
+    if t in [0x4, 0x8]:
         return IRQ.Trigger.LEVEL
-    else:
-        raise RuntimeError(f"Unexpected trigger value: {trigger}")
+    raise RuntimeError(f"Unexpected trigger value: {trigger}")
 
 @dataclass
 class DTBNode:
@@ -131,14 +130,13 @@ def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
         trigger = _arm_gic_trigger(irq_cells[2])
         return ConventionalIRQ(num, trigger)
 
-    elif arch.is_riscv():
+    if arch.is_riscv():
         if len(irq_cells) != 1:
             raise RuntimeError(f"RISC-V expected 1 interrupt cell, found {len(irq_cells)}")
         # RISC-V usually implies level triggered, defaults in spec often not strict
         return ConventionalIRQ(irq_cells[0], IRQ.Trigger.LEVEL)
 
-    else:
-        raise RuntimeError(f"Unsupported architecture for IRQ parsing: {arch.arch}")
+    raise RuntimeError(f"Unsupported architecture for IRQ parsing: {arch.arch}")
 
 
 class DeviceTreeBlob:
@@ -167,7 +165,7 @@ class DeviceTreeBlob:
                 path = self.fdt.get_path(offset)
             except libfdt.FdtException:
                 break   # No more to enumerate
-            self.nodes[offset] = (DTBNode(offset, path))
+            self.nodes[offset] = DTBNode(offset, path)
 
     def get_compatible(self, node: DTBNode) -> List[str]:
         """
@@ -180,17 +178,14 @@ class DeviceTreeBlob:
                 in self.get_node_prop(node, "compatible").split(b'\x00')
                 if len(x) != 0
             ]
-        else:
-            return []
+        return []
 
-    @cache
     def get_nodes_by_compatible(self, compatible_str) -> List[DTBNode]:
         """
         Try find a node with a matching compatible string.
         """
         return [n for n in self.nodes.values() if compatible_str in self.get_compatible(n)]
 
-    @cache
     def get_node_by_path(self, path_str: str) -> DTBNode:
         # defensive: enforce that path starts with /
         if path_str[0] != '/':
@@ -206,8 +201,7 @@ class DeviceTreeBlob:
         """
         if self.fdt.hasprop(node.offset, prop_name):
             return self.fdt.getprop(node.offset, prop_name)
-        else:
-            return None
+        return None
 
     def get_node_parent(self, node: DTBNode) -> DTBNode:
         return self.nodes[self.fdt.parent_offset(node.offset)]
@@ -256,7 +250,8 @@ class DeviceTreeBlob:
         # Group fields +
         # merge u32s in field to create appropriately sized words
         # note: assumes MSW in w_l[0]
-        merge_u32s = lambda w_l: sum(x << (32 * (len(w_l)-i-1)) for i, x in enumerate(w_l))
+        def merge_u32s(w_l):
+            return sum(x << (32 * (len(w_l)-i-1)) for i, x in enumerate(w_l))
         regs = [
             (
                 merge_u32s(vals[i:i + addr_cells]), # addr
