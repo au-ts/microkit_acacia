@@ -81,9 +81,6 @@ class SDFMemoryAllocator:
         self.arch = arch
         self.paddr_top = paddr_top
 
-    def paddr_top(self):
-        return self.paddr_top
-
     def update_paddr_top(self, new):
         if new > self.paddr_top:
             raise RuntimeError("Paddr top should only decrement!")

@@ -7,6 +7,8 @@ from collections import defaultdict, deque
 
 from .pd import ProtectionDomain
 from .configstruct import ConfigStruct
+from .memory import MemoryRegion
+from .channel import Channel
 
 
 class SubsystemBuildError(RuntimeError): ...
@@ -44,14 +46,6 @@ class Subsystem(ABC):
             raise RuntimeError(f"{self} does not allow clients!")
         if client not in self.clients:
             self.clients.append(client)
-
-    def add_pd(self, pd: ProtectionDomain):
-        """
-        Add a non-client PD, e.g. drivers, virtualisers, PDs as a part of an application.
-        This should be used on PDs which do not require any connection as clients.
-        """
-        if pd not in self.pds:
-            self.pds.append(pd)
 
     def add_pd(self, pd: ProtectionDomain):
         """
@@ -118,7 +112,7 @@ class Subsystem(ABC):
         """
         return []
 
-    def build(self) -> int:
+    def build(self):
         """
         Construct subsystem, initialising all PDs and connecting clients
         if possible.

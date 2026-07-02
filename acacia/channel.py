@@ -3,7 +3,7 @@
 
 from typing import Optional, Tuple
 from dataclasses import dataclass
-import xml.etree.ElementTree as et
+import xml.etree.ElementTree as et  # type: ignore
 from abc import ABC, abstractproperty
 from .pd import ProtectionDomain
 
@@ -53,7 +53,7 @@ class Channel:
 
         return channel
 
-    def id_for_pd(self, end_pd) -> int:
+    def id_for_pd(self, end_pd) -> Optional[int]:
         """
         Return the channel ID for this channel for the given PD.
         This is a convenience function to make config serialisation less ambiguous.

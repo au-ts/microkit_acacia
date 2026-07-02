@@ -1,6 +1,8 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+import pathlib
+import os, sys, subprocess
 from dataclasses import dataclass
 from collections import defaultdict, deque
 from ctypes import (
@@ -15,8 +17,7 @@ from ctypes import (
     sizeof,
 )
 from ctypes import c_int64, c_int32, c_int16, c_int8
-from typing import List, Dict, Optional, Tuple
-import os, sys, subprocess
+from typing import List, Dict, Optional, Tuple, Any
 from .memory import Map
 
 # approximately fine..?
@@ -53,7 +54,7 @@ class ConfigStruct:
     section_name: Optional[str]
     target_file: Optional[str]
     # Dict of field names -> int values, other ConfigStruct ojects, or lists of either (arrays)
-    fields: Dict[str, any]
+    fields: Dict[str, Any]
 
     def __init__(self, typedef_name, target_file=None, section_name=None, fields={}):
         """
@@ -123,7 +124,7 @@ class DwarfStruct:
 # BUG: we currently have a hard time resolving some types from the C library
 # I have added uintptr_t, size_t and void * here as a hack to get around
 # this for now.
-BaseTypesMap = {
+BaseTypesMap: Dict[str, Any] = {
     "char": c_char,
     "uint64_t": c_uint64,
     "uint32_t": c_uint32,
@@ -145,7 +146,7 @@ class ConfigStructDwarfDumper:
     Class encapsulating operating using llvm-dwarfdump as a subprocess call.
     """
 
-    def __init__(self, build_dir: str, dwarfdump_name: str = "llvm-dwarfdump"):
+    def __init__(self, build_dir: pathlib.Path, dwarfdump_name: str = "llvm-dwarfdump"):
         self.bin = dwarfdump_name
         self.build_dir = build_dir
         # Check that llvm-dwarfdump is available
@@ -157,13 +158,13 @@ class ConfigStructDwarfDumper:
             )
             raise RuntimeError(f"No LLVM DwarfDump! {e}")
 
-        self.files = (
+        self.files: Dict[str, List[List[str]]] = (
             {}
-        )  # file_name -> List[List[str]]   each entry is a DW_Tag, grouped with child elements.
-        self.file_structs = defaultdict(
+        )  #  each entry is a DW_Tag, grouped with child elements.
+        self.file_structs: Dict[str, Dict[str, DwarfStruct]] = defaultdict(
             dict
         )  # file_name -> dict(struct_name -> index in `files`
-        self.file_typedef_to_type = {}
+        self.file_typedef_to_type: Dict[str, Dict[str, str]] = {}
 
     def _eat_dwarf(self, target_file):
         # Goblin delicacy
@@ -195,7 +196,7 @@ class ConfigStructDwarfDumper:
 
         # Create a list of lists, where each element is a single DW_TAG block broken up into lines.
         out = []
-        curr = []
+        curr: List[str] = []
         for l in raw.stdout.splitlines():
             if len(l) <= 1:
                 # New element
@@ -215,8 +216,7 @@ class ConfigStructDwarfDumper:
                 raise RuntimeError(f"Failed to find {term} in {lines}")
 
         # Now, scrape typedefs and associated struct types
-        typedefs = {}  # type_name -> typedef_name
-        struct_types = []
+        typedefs: Dict[str, str] = {}  # type_name -> typedef_name
         for i, tag in enumerate(self.files[target_file]):
             if "DW_TAG_typedef" in tag[0]:
                 # Bingo!
@@ -314,8 +314,9 @@ class ConfigStructDwarfDumper:
         self.file_typedef_to_type[target_file] = {
             typedefs[k]: k for k in typedefs.keys()
         }
+        return
 
-    def discover_config_var(self, target_var, target_file) -> DwarfStruct:
+    def discover_config_var(self, target_var, target_file):
         if target_file not in self.files:
             self._parse_file(target_file)
 
@@ -335,6 +336,7 @@ class ConfigStructDwarfDumper:
                         # Found!
                         # TODO: do something with this
                         ...
+        return
 
     def find_struct_and_children(
         self, target_file, typedef_name
@@ -397,7 +399,10 @@ class ConfigStructResolver:
     """
 
     def __init__(
-        self, build_dir: str, endian="little", dwarfdump_name: str = "llvm-dwarfdump"
+        self,
+        build_dir: pathlib.Path,
+        endian="little",
+        dwarfdump_name: str = "llvm-dwarfdump",
     ):
         """
         Args:
@@ -409,7 +414,7 @@ class ConfigStructResolver:
                       b. instances of child structs (identically formatted dicts).
         """
 
-        self.files = defaultdict(list)
+        self.files: Dict[str, List[ConfigStruct]] = defaultdict(list)
         self.dwarfdump = ConfigStructDwarfDumper(
             build_dir, dwarfdump_name=dwarfdump_name
         )
@@ -435,7 +440,7 @@ class ConfigStructResolver:
         return self.files[target_file]
 
     @staticmethod
-    def _check_int_fits(value: int, ctype_cls, field_name: str):
+    def _check_int_fits(value: int, ctype_cls: Any, field_name: str):
         size_bits = sizeof(ctype_cls) * 8
         if issubclass(ctype_cls, (c_int8, c_int16, c_int32, c_int64)):
             lo = -(1 << (size_bits - 1))
@@ -453,7 +458,7 @@ class ConfigStructResolver:
                     f"{ctype_cls.__name__} (0..{hi})"
                 )
 
-    def _serialize_ctype(self, value, ctype_cls) -> bytes:
+    def _serialize_ctype(self, value: Any, ctype_cls) -> bytes:
         """
         Serialize a single Python value into explicit little-endian raw bytes.
         Width is taken from ctypes via sizeof(), and signedness is derived from
@@ -486,7 +491,7 @@ class ConfigStructResolver:
         blob: bytearray,
         dwarf_struct: DwarfStruct,
         base_offset: int,
-        py_fields: Dict[str, any],
+        py_fields: Dict[str, Any],
         target_file: str,
     ):
         """
@@ -661,6 +666,8 @@ class ConfigStructResolver:
             blob = bytearray(struct.size)
             self._flatten_and_write(blob, struct, 0, pystruct.fields, target_file)
 
+            if pystruct.target_file is None or pystruct.section_name is None:
+                raise ValueError("ConfigStruct has missing target_file or section_name")
             blob_name = (
                 f"{pystruct.target_file.split('.elf')[0]}_{pystruct.section_name}.data"
             )
@@ -700,9 +707,13 @@ def DeviceResourcesFactory(
     target_file: str,
     section_name="device_resources",
 ):
-    region_structs = [
-        DeviceRegionResourceFactory(RegionResourceFactory(m), m.mr.paddr) for m in maps
-    ]
+    region_structs = []
+    for m in maps:
+        if m.mr.paddr is None:
+            raise ValueError("Device region map has no physical address")
+        region_structs.append(
+            DeviceRegionResourceFactory(RegionResourceFactory(m), m.mr.paddr)
+        )
     irq_structs = [DeviceIRQResourceFactory(i) for i in irq_ids]
     fields = {
         "magic": magic_str,

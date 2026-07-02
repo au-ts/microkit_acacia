@@ -1,1 +1,4 @@
+# Copyright 2026, UNSW
+# SPDX-License-Identifier: BSD-2-Clause
+
 pylibfdt==1.7.2.post1

@@ -1,7 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Set, Union, List
+from typing import Optional, Set, Union, List, Sequence
 from dataclasses import dataclass
 from abc import ABC
 import xml.etree.ElementTree as et
@@ -57,7 +57,7 @@ class Entity:
         b. can be targeted by maps
     """
 
-    def __init__(self, name: str, scheduling: SchedulingProperties):
+    def __init__(self, name: str, scheduling: Optional[SchedulingProperties]):
         self.name = name.strip()
         self.scheduling = scheduling
         self.maps: List[Map] = []
@@ -119,14 +119,13 @@ class Entity:
         self.add_map(m)
         return m
 
-    def name(self):
-        return self.name
-
     def render(self, parent: et.Element, elem_name: str):
         entity = et.SubElement(parent, elem_name)
         entity.set("name", str(self.name))
-        if self.priority is None:
-            raise RuntimeError("Cannot render an entity without a priority!")
+        if self.scheduling is None:
+            raise RuntimeError(
+                "Cannot render an entity without a SchedulingProperties!"
+            )
 
         entity.set("priority", str(self.priority))
         # Only add passive bool if true
@@ -169,24 +168,25 @@ class VirtualMachine(Entity):
         self,
         name: str,
         scheduling: SchedulingProperties,
-        vcpus: [Union[List[VCPU], VCPU]],
+        vcpus: Sequence[VCPU],
     ):
         super().__init__(name, scheduling)
-        if type(vcpus) is not list:
-            self.vcpus = [vcpus]
-        else:
-            # Check all IDs are unique
-            ids = [x.id for x in vcpus]
-            if len(ids) != len(set(ids)):
-                raise RuntimeError("All VCPU IDs must be unique per VM!")
-            if len(ids) > MAX_IDS:
-                raise RuntimeError(f"{MAX_IDS} VCPUs are supported at max!")
-            self.vcpus = vcpus
+        # Check all IDs are unique
+        ids = [x.id for x in vcpus]
+        if len(ids) != len(set(ids)):
+            raise RuntimeError("All VCPU IDs must be unique per VM!")
+        if len(ids) > MAX_IDS:
+            raise RuntimeError(f"{MAX_IDS} VCPUs are supported at max!")
+        # This is a pointless line to get around mypy checks
+        self.vcpus = vcpus
 
-    def render(self, parent: et.Element):
-        vm = super().render(parent, "virtual_machine")
+    def render(
+        self, parent: et.Element, elem_name: str = "virtual_machine"
+    ) -> et.Element:
+        vm = super().render(parent, elem_name)
         for vcpu in self.vcpus:
             vcpu.render(vm)
+        return vm
 
 
 class ProtectionDomain(Entity):
@@ -201,18 +201,21 @@ class ProtectionDomain(Entity):
         stack_size: Optional[int] = None,
         cpu: Optional[int] = None,
         smc: Optional[bool] = None,
-        scheduling: SchedulingProperties = None,
+        scheduling: Optional[SchedulingProperties] = None,
         priority: Optional[int] = None,
     ):
-
+        # This is here to prevent mypy from freaking out over optionals
+        actual_scheduling = None
         # We offer `priority=x` as a legacy feature
         if priority is not None:
             if scheduling is not None:
                 raise RuntimeError(
                     "Cannot define a SchedulingCharacteristics and priority separately!"
                 )
-            scheduling = SchedulingProperties(priority)
-        super().__init__(name, scheduling)
+            actual_scheduling = SchedulingProperties(priority)
+        else:
+            actual_scheduling = scheduling
+        super().__init__(name, actual_scheduling)
         if not prog_image.endswith(".elf"):
             raise ValueError("Non-elf program image!")
         self.prog_image = prog_image
@@ -220,18 +223,18 @@ class ProtectionDomain(Entity):
         self.cpu = cpu
         self.irqs: Set[IRQ] = set()
         self.ioports: List[IOPort] = []
-        self.assigned_ids = []
+        self.assigned_ids: List[int] = []
 
         # Parental responsibilities
-        self.assigned_child_ids = []
+        self.assigned_child_ids: List[int] = []
         self.children: List[ProtectionDomain] = []
         self.child_id = None  # Assigned if this PD is made a child.
 
         # VM
         self.vm: Optional[VirtualMachine] = None
 
-    def render(self, parent: et.Element):
-        pd = super().render(parent, "protection_domain")
+    def render(self, parent: et.Element, elem_name: str = "protection_domain"):
+        pd = super().render(parent, elem_name)
         prog_image = et.SubElement(pd, "program_image")
         prog_image.set("path", self.prog_image)
 
@@ -245,7 +248,7 @@ class ProtectionDomain(Entity):
             pd.set("stack_size", str(self.stack_size))
         if self.cpu is not None:
             pd.set("cpu", str(self.cpu))
-        for i in sorted(self.irqs, key=lambda ir: ir.id):
+        for i in sorted(self.irqs, key=lambda ir: ir.id or 0):
             i.render(pd)
         for iop in sorted(self.ioports, key=lambda i: i.addr):
             iop.render(pd)

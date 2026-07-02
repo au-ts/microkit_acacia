@@ -1,0 +1,15 @@
+version = 1
+SPDX-PackageName = "Microkit Acacia"
+SPDX-PackageDownloadLocation = "https://github.com/au-ts/microkit_acacia"
+
+[[annotations]]
+path = ["examples/dummy_configstruct_build/client1.elf", "examples/dummy_configstruct_build/client2.elf", "examples/dummy_configstruct_build/client3.elf", "examples/dummy_configstruct_build/i2c_driver.elf", "pyproject.toml", "VERSION"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "UNSW"
+SPDX-License-Identifier = "BSD-2-Clause"
+
+[[annotations]]
+path = "acacia.png"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "UNSW"
+SPDX-License-Identifier = "CC-BY-SA-4.0"

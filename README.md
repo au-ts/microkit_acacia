@@ -1,3 +1,9 @@
+<!--
+    Copyright 2026, UNSW
+
+    SPDX-License-Identifier: BSD-2-Clause
+-->
+
 # Microkit Acacia
 
 Acacia is a framework for easily generating seL4 Microkit system description files (SDFs) driven by a simple Python interface. This project succeeds [sdf_gen](https://github.com/au-ts/microkit_sdf_gen/). Acacia is implemented entirely in Python3.

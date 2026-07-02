@@ -2,17 +2,17 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import struct
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractstaticmethod
 from dataclasses import dataclass
-import libfdt
-from typing import List, Tuple, Dict, Optional
+import libfdt  # type: ignore
+from typing import List, Tuple, Dict, Optional, Sequence
 from .arch import Arch
 from .irq import IRQ, ConventionalIRQ
 from .util import ctz
 
 
 class DTB_IRQ_Controller(ABC):
-    @abstractmethod
+    @abstractstaticmethod
     def create(arch: Arch, dtb: "DeviceTreeBlob"): ...
 
 
@@ -166,7 +166,7 @@ class DeviceTreeBlob:
             self.fdt = libfdt.Fdt(f.read())
 
         # libfdt makes nothing easy for us. enumerate!
-        self.nodes: Dict[DTBNode] = {}  # offset -> DTBNode
+        self.nodes: Dict[Tuple[int], DTBNode] = {}  # offset -> DTBNode
         self.__enumerate_nodes()
 
     def __enumerate_nodes(self):
@@ -224,7 +224,7 @@ class DeviceTreeBlob:
     def get_node_parent(self, node: DTBNode) -> DTBNode:
         return self.nodes[self.fdt.parent_offset(node.offset)]
 
-    def get_size_and_addr_cells(self, node: DTBNode) -> Tuple[int]:
+    def get_size_and_addr_cells(self, node: DTBNode) -> Tuple[int, int]:
         """
         Get the size and addr cells values of a node (node its parent).
         Returns:
@@ -280,7 +280,7 @@ class DeviceTreeBlob:
         ]
         return regs
 
-    def get_node_irqs(self, node: DTBNode) -> Tuple[int]:
+    def get_node_irqs(self, node: DTBNode) -> Tuple[int, int]:
         """
         Return the list of words from the IRQ field on a node. We don't
         attempt to concetenate the u32s or anything here, since the meaning
@@ -291,13 +291,13 @@ class DeviceTreeBlob:
         # Old sdfgen didn't do this either.
         irqs_raw = self.get_node_prop(node, "interrupts")
         if irqs_raw is None:
-            return []
+            raise RuntimeError(f"{node} has no IRQs!")
         num_u32s = len(irqs_raw) // 4
 
         # just a bunch of u32s ... unpack using struct and return
         return struct.unpack(f">{num_u32s}I", irqs_raw)
 
-    def get_parsed_irqs(self, node: DTBNode, arch: Arch) -> List[IRQ]:
+    def get_parsed_irqs(self, node: DTBNode, arch: Arch) -> Sequence[IRQ]:
         """
         Parses the 'interrupts' property of a node into a list of IRQ objects.
         """

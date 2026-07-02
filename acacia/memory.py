@@ -34,7 +34,7 @@ class MemoryRegion:
         self.physical = physical
         self.cached = cached
 
-    def allocate_paddr(self, allocator: SDFMemoryAllocator) -> int:
+    def allocate_paddr(self, allocator: SDFMemoryAllocator) -> Optional[int]:
         """
         Allocate a new paddr given the current top pointer.
 
@@ -42,17 +42,17 @@ class MemoryRegion:
             int: new paddr_top
         """
         if self.paddr is not None or not self.physical:
-            return  # nothing to do if already assigned or virtual
+            return None  # nothing to do if already assigned or virtual
 
         paddr_top = allocator.paddr_top
         self.paddr = paddr_top - self.size
         allocator.update_paddr_top(self.paddr)
+        return self.paddr
 
-    def render(self, system_root: et.Element) -> et.Element:
+    def render(self, system_root: et.Element):
         mr = et.SubElement(system_root, "memory_region")
         mr.set("name", self.name)
         mr.set("size", hex(self.size))
-        # TODO: add unit test for paddr
         if self.paddr is not None:
             mr.set("phys_addr", hex(self.paddr))
 

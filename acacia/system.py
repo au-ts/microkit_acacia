@@ -20,7 +20,9 @@ class System:
     A Microkit system.
     """
 
-    def __init__(self, sys_arch: Arch, paddr_top: int, dtb: DeviceTreeBlob = None):
+    def __init__(
+        self, sys_arch: Arch, paddr_top: int, dtb: Optional[DeviceTreeBlob] = None
+    ):
         self.arch = sys_arch
         self.allocator = SDFMemoryAllocator(sys_arch, paddr_top)
 

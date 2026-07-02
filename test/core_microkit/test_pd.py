@@ -355,7 +355,7 @@ class TestVCPU:
 class TestVirtualMachine:
     def test_init_with_single_vcpu(self):
         v = VirtualMachine.VCPU(id=0)
-        vm = VirtualMachine("vm1", SchedulingProperties(priority=100), vcpus=v)
+        vm = VirtualMachine("vm1", SchedulingProperties(priority=100), vcpus=[v])
         assert isinstance(vm.vcpus, list)
         assert len(vm.vcpus) == 1
 
@@ -376,7 +376,7 @@ class TestVirtualMachine:
 
     def test_vm_inherits_entity_maps(self):
         vm = VirtualMachine(
-            "vm5", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+            "vm5", SchedulingProperties(priority=100), vcpus=[VirtualMachine.VCPU(id=0)]
         )
         mr = MemoryRegion("test_mr", 0x1000)
         m = Map(mr, 0x40000000, "rw")
@@ -406,7 +406,9 @@ class TestProtectionDomainVM:
     def test_set_vm_success(self):
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
         vm = VirtualMachine(
-            "guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+            "guest",
+            SchedulingProperties(priority=100),
+            vcpus=[VirtualMachine.VCPU(id=0)],
         )
         pd.set_vm(vm)
         assert pd.vm is vm
@@ -416,12 +418,12 @@ class TestProtectionDomainVM:
         vm1 = VirtualMachine(
             "guest1",
             SchedulingProperties(priority=100),
-            vcpus=VirtualMachine.VCPU(id=0),
+            vcpus=[VirtualMachine.VCPU(id=0)],
         )
         vm2 = VirtualMachine(
             "guest2",
             SchedulingProperties(priority=100),
-            vcpus=VirtualMachine.VCPU(id=1),
+            vcpus=[VirtualMachine.VCPU(id=1)],
         )
         pd.set_vm(vm1)
         with pytest.raises(RuntimeError, match="Can only have one VM per PD!"):
@@ -430,7 +432,9 @@ class TestProtectionDomainVM:
     def test_vm_rendered_inside_pd(self):
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
         vm = VirtualMachine(
-            "guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+            "guest",
+            SchedulingProperties(priority=100),
+            vcpus=[VirtualMachine.VCPU(id=0)],
         )
         pd.set_vm(vm)
         root = et.Element("system")
@@ -444,7 +448,9 @@ class TestProtectionDomainVM:
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
         mr = MemoryRegion("ram", 0x1000)
         vm = VirtualMachine(
-            "guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+            "guest",
+            SchedulingProperties(priority=100),
+            vcpus=[VirtualMachine.VCPU(id=0)],
         )
         vm.add_map(Map(mr, 0x40000000, "rw"))
         pd.set_vm(vm)

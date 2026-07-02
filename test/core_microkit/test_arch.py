@@ -4,7 +4,7 @@
 import pytest
 from typing import Optional
 from acacia.arch import Arch, ArchID, PageSizeID, SDFMemoryAllocator
-from acacia import aarch64, x86_64, riscv32
+from acacia import aarch64, x86_64, riscv32, MemoryRegion, VirtualMachine
 from enum import Enum
 
 

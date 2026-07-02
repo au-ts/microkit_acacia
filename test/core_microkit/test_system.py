@@ -8,6 +8,7 @@ import pytest
 
 import acacia.system as system_module
 from acacia.system import System
+from acacia.memory import MemoryRegion
 
 
 @pytest.fixture

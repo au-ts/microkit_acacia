@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from acacia.subsystem import Subsystem
 from acacia.configstruct import ConfigStruct
 from acacia.pd import ProtectionDomain
+from acacia.memory import MemoryRegion
 
 
 def create_concrete_subsystem(name="Concrete", **kwargs):
