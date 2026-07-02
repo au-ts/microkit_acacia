@@ -17,11 +17,15 @@ class TestSchedulingProperties:
             SchedulingProperties(priority=-1)
 
     def test_negative_budget_rejected(self):
-        with pytest.raises(ValueError, match="SchedulingProperties cannot be negative!"):
+        with pytest.raises(
+            ValueError, match="SchedulingProperties cannot be negative!"
+        ):
             SchedulingProperties(priority=100, budget=-10, period=100)
 
     def test_budget_exceeds_period_rejected(self):
-        with pytest.raises(ValueError, match="Budget must be defined and cannot be greater than period"):
+        with pytest.raises(
+            ValueError, match="Budget must be defined and cannot be greater than period"
+        ):
             SchedulingProperties(priority=100, budget=200, period=100)
 
     def test_valid_scheduling(self):
@@ -53,7 +57,9 @@ class TestProtectionDomain:
 
     def test_priority_and_scheduling_conflict(self):
         sp = SchedulingProperties(priority=100)
-        with pytest.raises(RuntimeError, match="Cannot define.*SchedulingCharacteristics"):
+        with pytest.raises(
+            RuntimeError, match="Cannot define.*SchedulingCharacteristics"
+        ):
             ProtectionDomain("test", "test.elf", priority=50, scheduling=sp)
 
     def test_stack_size_cpu_optional(self):
@@ -125,6 +131,7 @@ class TestProtectionDomainIdAllocation:
 class TestProtectionDomainIrq:
     def test_add_irq_allocates_id(self):
         from acacia.irq import ConventionalIRQ
+
         pd = ProtectionDomain("test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
         pd.add_irq(irq)
@@ -133,6 +140,7 @@ class TestProtectionDomainIrq:
 
     def test_add_irq_specific_id(self):
         from acacia.irq import ConventionalIRQ
+
         pd = ProtectionDomain("test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=7)
         pd.add_irq(irq)
@@ -140,11 +148,13 @@ class TestProtectionDomainIrq:
 
     def test_add_same_irq_twice_rejected(self):
         from acacia.irq import ConventionalIRQ
+
         pd = ProtectionDomain("test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
         pd.add_irq(irq)
         with pytest.raises(RuntimeError, match="same IRQ"):
             pd.add_irq(irq)
+
 
 class TestChildPdAllocation:
     def test_allocate_child_id_auto(self):
@@ -263,7 +273,9 @@ class TestChildPdRendering:
         child = ProtectionDomain("child", "child.elf", priority=50)
 
         grandparent.add_child_pd(parent, child_id=1)
-        parent.add_child_pd(child, child_id=1)  # Different namespace, same number allowed
+        parent.add_child_pd(
+            child, child_id=1
+        )  # Different namespace, same number allowed
 
         root = et.Element("system")
         grandparent.render(root)
@@ -363,14 +375,20 @@ class TestVirtualMachine:
             VirtualMachine("vm4", SchedulingProperties(priority=100), vcpus=vcpus)
 
     def test_vm_inherits_entity_maps(self):
-        vm = VirtualMachine("vm5", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        vm = VirtualMachine(
+            "vm5", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+        )
         mr = MemoryRegion("test_mr", 0x1000)
         m = Map(mr, 0x40000000, "rw")
         vm.add_map(m)
         assert len(vm.maps) == 1
 
     def test_vm_render_structure(self):
-        vm = VirtualMachine("guest", SchedulingProperties(priority=50, budget=1000, period=2000), vcpus=[VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)])
+        vm = VirtualMachine(
+            "guest",
+            SchedulingProperties(priority=50, budget=1000, period=2000),
+            vcpus=[VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)],
+        )
         parent = et.Element("parent")
         vm.render(parent)
         vm_elem = parent.find("virtual_machine")
@@ -387,21 +405,33 @@ class TestVirtualMachine:
 class TestProtectionDomainVM:
     def test_set_vm_success(self):
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
-        vm = VirtualMachine("guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        vm = VirtualMachine(
+            "guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+        )
         pd.set_vm(vm)
         assert pd.vm is vm
 
     def test_set_vm_twice_rejected(self):
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
-        vm1 = VirtualMachine("guest1", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
-        vm2 = VirtualMachine("guest2", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=1))
+        vm1 = VirtualMachine(
+            "guest1",
+            SchedulingProperties(priority=100),
+            vcpus=VirtualMachine.VCPU(id=0),
+        )
+        vm2 = VirtualMachine(
+            "guest2",
+            SchedulingProperties(priority=100),
+            vcpus=VirtualMachine.VCPU(id=1),
+        )
         pd.set_vm(vm1)
         with pytest.raises(RuntimeError, match="Can only have one VM per PD!"):
             pd.set_vm(vm2)
 
     def test_vm_rendered_inside_pd(self):
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
-        vm = VirtualMachine("guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        vm = VirtualMachine(
+            "guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+        )
         pd.set_vm(vm)
         root = et.Element("system")
         pd.render(root)
@@ -413,7 +443,9 @@ class TestProtectionDomainVM:
     def test_vm_with_maps_rendered(self):
         pd = ProtectionDomain("vmm", "vmm.elf", priority=254)
         mr = MemoryRegion("ram", 0x1000)
-        vm = VirtualMachine("guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0))
+        vm = VirtualMachine(
+            "guest", SchedulingProperties(priority=100), vcpus=VirtualMachine.VCPU(id=0)
+        )
         vm.add_map(Map(mr, 0x40000000, "rw"))
         pd.set_vm(vm)
         root = et.Element("system")

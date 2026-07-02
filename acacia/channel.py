@@ -7,6 +7,7 @@ import xml.etree.ElementTree as et
 from abc import ABC, abstractproperty
 from .pd import ProtectionDomain
 
+
 class Channel:
     @dataclass
     class End:
@@ -14,15 +15,12 @@ class Channel:
         can_notify: bool
         can_pp: bool
         ch_id: Optional[int] = None
+
         def __post_init__(self):
             if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
                 raise ValueError(f"Invalid channel id {self.ch_id}!")
 
-    def __init__(
-                 self,
-                 end_a: End,
-                 end_b: End
-                 ):
+    def __init__(self, end_a: End, end_b: End):
         self.end_a = end_a
         self.end_b = end_b
 
@@ -31,8 +29,10 @@ class Channel:
             if not pp_caller.can_pp:
                 continue
             if pp_caller.pd.priority >= pp_receiver.pd.priority:
-                raise RuntimeError(f"PPC from {pp_caller} to {pp_receiver} cannot have "\
-                                   f"descending priorities!")
+                raise RuntimeError(
+                    f"PPC from {pp_caller} to {pp_receiver} cannot have "
+                    f"descending priorities!"
+                )
 
         # Allocate channel IDs
         for end in [end_a, end_b]:

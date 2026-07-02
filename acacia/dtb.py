@@ -10,23 +10,28 @@ from .arch import Arch
 from .irq import IRQ, ConventionalIRQ
 from .util import ctz
 
+
 class DTB_IRQ_Controller(ABC):
     @abstractmethod
-    def create(arch: Arch, dtb: 'DeviceTreeBlob'):
-        ...
+    def create(arch: Arch, dtb: "DeviceTreeBlob"): ...
+
 
 class Arm_GIC(DTB_IRQ_Controller):
     """
     Representation of the ARM Generic Interrupt Controller.
     """
+
     class Version:
         V2 = 2
         V3 = 3
 
-    def __init__(self, version: int,
-                 cpu_paddr: Optional[int]=None,
-                 vcpu_paddr: Optional[int]=None,
-                 vcpu_size: Optional[int]=None):
+    def __init__(
+        self,
+        version: int,
+        cpu_paddr: Optional[int] = None,
+        vcpu_paddr: Optional[int] = None,
+        vcpu_size: Optional[int] = None,
+    ):
         self.version = version
         self.cpu_paddr = cpu_paddr
         self.vcpu_paddr = vcpu_paddr
@@ -39,7 +44,7 @@ class Arm_GIC(DTB_IRQ_Controller):
         return self.cpu_paddr is not None
 
     @staticmethod
-    def create(arch: Arch, dtb: 'DeviceTreeBlob') -> Optional['Arm_GIC']:
+    def create(arch: Arch, dtb: "DeviceTreeBlob") -> Optional["Arm_GIC"]:
         """
         Finds and parses the GIC node from the device tree.
         """
@@ -65,7 +70,9 @@ class Arm_GIC(DTB_IRQ_Controller):
         elif any(c in node_comp for c in compat_v3):
             version = Arm_GIC.Version.V3
         else:
-            raise RuntimeError("Unable to determine GIC version from compatible strings")
+            raise RuntimeError(
+                "Unable to determine GIC version from compatible strings"
+            )
 
         # Parse registers
         # GICv2: 0=Distributor, 1=CPU, 2=virtual CPU, 3=Hypervisor
@@ -88,6 +95,7 @@ class Arm_GIC(DTB_IRQ_Controller):
 
         return Arm_GIC(version, cpu_paddr, vcpu_paddr, vcpu_size)
 
+
 def _arm_gic_irq_type(irq_type_val: int) -> str:
     return {
         0x0: "spi",
@@ -96,12 +104,14 @@ def _arm_gic_irq_type(irq_type_val: int) -> str:
         0x3: "extended_ppi",
     }.get(irq_type_val, "unknown")
 
+
 def _arm_gic_irq_number(number: int, irq_type: str) -> int:
     if irq_type == "spi":
         return number + 32
     if irq_type == "ppi":
         return number + 16
     raise RuntimeError(f"Unsupported IRQ type for number offset: {irq_type}")
+
 
 def _arm_gic_trigger(trigger: int) -> IRQ.Trigger:
     # Only bits 0-3 are for the trigger
@@ -112,10 +122,12 @@ def _arm_gic_trigger(trigger: int) -> IRQ.Trigger:
         return IRQ.Trigger.LEVEL
     raise RuntimeError(f"Unexpected trigger value: {trigger}")
 
+
 @dataclass
 class DTBNode:
     offset: int
     path: str
+
 
 def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
     """
@@ -123,7 +135,9 @@ def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
     """
     if arch.is_arm():
         if len(irq_cells) < 3:
-            raise RuntimeError(f"Expected at least 3 interrupt cells for ARM, found {len(irq_cells)}")
+            raise RuntimeError(
+                f"Expected at least 3 interrupt cells for ARM, found {len(irq_cells)}"
+            )
 
         i_type = _arm_gic_irq_type(irq_cells[0])
         num = _arm_gic_irq_number(irq_cells[1], i_type)
@@ -132,7 +146,9 @@ def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
 
     if arch.is_riscv():
         if len(irq_cells) != 1:
-            raise RuntimeError(f"RISC-V expected 1 interrupt cell, found {len(irq_cells)}")
+            raise RuntimeError(
+                f"RISC-V expected 1 interrupt cell, found {len(irq_cells)}"
+            )
         # RISC-V usually implies level triggered, defaults in spec often not strict
         return ConventionalIRQ(irq_cells[0], IRQ.Trigger.LEVEL)
 
@@ -146,7 +162,7 @@ class DeviceTreeBlob:
 
     def __init__(self, dtb_file_path: str):
         self.file_path = dtb_file_path
-        with open(self.file_path, mode='rb') as f:
+        with open(self.file_path, mode="rb") as f:
             self.fdt = libfdt.Fdt(f.read())
 
         # libfdt makes nothing easy for us. enumerate!
@@ -155,7 +171,7 @@ class DeviceTreeBlob:
 
     def __enumerate_nodes(self):
         offset = -1
-        DEPTH = ((1 << 32)//2) - 1   # int32 sized ... underlying type is int
+        DEPTH = ((1 << 32) // 2) - 1  # int32 sized ... underlying type is int
         while True:
             # Enumerate until we get a bogus offset (out of bounds)
             # There is probably a better way to do this, but it's not
@@ -164,7 +180,7 @@ class DeviceTreeBlob:
             try:
                 path = self.fdt.get_path(offset)
             except libfdt.FdtException:
-                break   # No more to enumerate
+                break  # No more to enumerate
             self.nodes[offset] = DTBNode(offset, path)
 
     def get_compatible(self, node: DTBNode) -> List[str]:
@@ -174,8 +190,8 @@ class DeviceTreeBlob:
         """
         if self.fdt.hasprop(node.offset, "compatible"):
             return [
-                x.decode() for x
-                in self.get_node_prop(node, "compatible").split(b'\x00')
+                x.decode()
+                for x in self.get_node_prop(node, "compatible").split(b"\x00")
                 if len(x) != 0
             ]
         return []
@@ -184,12 +200,14 @@ class DeviceTreeBlob:
         """
         Try find a node with a matching compatible string.
         """
-        return [n for n in self.nodes.values() if compatible_str in self.get_compatible(n)]
+        return [
+            n for n in self.nodes.values() if compatible_str in self.get_compatible(n)
+        ]
 
     def get_node_by_path(self, path_str: str) -> DTBNode:
         # defensive: enforce that path starts with /
-        if path_str[0] != '/':
-            path_str = '/' + path_str
+        if path_str[0] != "/":
+            path_str = "/" + path_str
         return DTBNode(self.fdt.path_offset(path_str), path_str)
 
     def get_node_prop(self, node: DTBNode, prop_name: str):
@@ -251,16 +269,16 @@ class DeviceTreeBlob:
         # merge u32s in field to create appropriately sized words
         # note: assumes MSW in w_l[0]
         def merge_u32s(w_l):
-            return sum(x << (32 * (len(w_l)-i-1)) for i, x in enumerate(w_l))
+            return sum(x << (32 * (len(w_l) - i - 1)) for i, x in enumerate(w_l))
+
         regs = [
             (
-                merge_u32s(vals[i:i + addr_cells]), # addr
-                merge_u32s(vals[i+addr_cells:i + size_cells + addr_cells]) # size
+                merge_u32s(vals[i : i + addr_cells]),  # addr
+                merge_u32s(vals[i + addr_cells : i + size_cells + addr_cells]),  # size
             )
             for i in range(0, len(vals), size_cells + addr_cells)
         ]
         return regs
-
 
     def get_node_irqs(self, node: DTBNode) -> Tuple[int]:
         """
@@ -294,10 +312,12 @@ class DeviceTreeBlob:
             raise RuntimeError("Unsupported architecture for IRQ parsing")
 
         if len(raw_irqs) % cells_per_irq != 0:
-            raise RuntimeError(f"Raw IRQ data length {len(raw_irqs)} is not a multiple of expected cell count {cells_per_irq}")
+            raise RuntimeError(
+                f"Raw IRQ data length {len(raw_irqs)} is not a multiple of expected cell count {cells_per_irq}"
+            )
 
         for i in range(0, len(raw_irqs), cells_per_irq):
-            irq_cells = list(raw_irqs[i:i + cells_per_irq])
+            irq_cells = list(raw_irqs[i : i + cells_per_irq])
             parsed.append(_parse_irq(arch, irq_cells))
 
         return parsed
@@ -371,13 +391,15 @@ class DeviceTreeBlob:
                     # Extract kength
                     length = 0
                     for j in range(p_size_cells):
-                        length = (length << 32) | vals[idx + p_addr_cells + gp_addr_cells + j]
+                        length = (length << 32) | vals[
+                            idx + p_addr_cells + gp_addr_cells + j
+                        ]
 
                     # Check if paddr falls in this range
                     if child_addr <= device_paddr < child_addr + length:
                         offset = device_paddr - child_addr
                         device_paddr = parent_addr + offset
-                        break # tranlated for this level
+                        break  # tranlated for this level
 
             curr_node = parent
         # TODO: make sure this works...

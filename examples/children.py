@@ -23,7 +23,7 @@ client_b.add_map(Map(shm, 0x40000000, "rw"))
 # Channel between sibling PDs
 ch = Channel(
     Channel.End(pd=client_a, can_notify=True, can_pp=False),
-    Channel.End(pd=client_b, can_notify=True, can_pp=False)
+    Channel.End(pd=client_b, can_notify=True, can_pp=False),
 )
 sdf.add_channel(ch)
 

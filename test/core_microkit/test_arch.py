@@ -7,6 +7,7 @@ from acacia.arch import Arch, ArchID, PageSizeID, SDFMemoryAllocator
 from acacia import aarch64, x86_64, riscv32
 from enum import Enum
 
+
 class TestArch:
     def test_aarch64_properties(self):
         assert aarch64.is_64_bit()
@@ -37,7 +38,7 @@ class TestArch:
     def test_rounddown_to_page(self):
         assert aarch64.rounddown_to_page(0x500) == 0
         assert aarch64.rounddown_to_page(0x1000) == 0x1000
-        assert aarch64.rounddown_to_page(0x1fff) == 0x1000
+        assert aarch64.rounddown_to_page(0x1FFF) == 0x1000
 
     def test_get_page_size_small(self):
         assert aarch64.get_page_size(PageSizeID.small) == 0x1000
@@ -52,6 +53,7 @@ class TestArch:
         # Create a fake page size ID
         class FakePageSize(Enum):
             huge = 2
+
         with pytest.raises(RuntimeError, match="Invalid page size"):
             aarch64.get_page_size(FakePageSize.huge)
 

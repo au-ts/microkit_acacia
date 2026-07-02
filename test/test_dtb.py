@@ -55,14 +55,17 @@ def blob(fdt):
     return _construct_blob(fdt)
 
 
-@pytest.mark.parametrize("val,expected", [
-    (0x0, "spi"),
-    (0x1, "ppi"),
-    (0x2, "extended_spi"),
-    (0x3, "extended_ppi"),
-    (0x99, "unknown"),
-    (-1, "unknown"),
-])
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        (0x0, "spi"),
+        (0x1, "ppi"),
+        (0x2, "extended_spi"),
+        (0x3, "extended_ppi"),
+        (0x99, "unknown"),
+        (-1, "unknown"),
+    ],
+)
 def test_arm_gic_irq_type(val, expected):
     assert _arm_gic_irq_type(val) == expected
 
@@ -85,12 +88,15 @@ def test_arm_gic_irq_number_unsupported_type_raises(irq_type):
         _arm_gic_irq_number(5, irq_type)
 
 
-@pytest.mark.parametrize("val,expected", [
-    (0x1, IRQ.Trigger.EDGE),
-    (0x2, IRQ.Trigger.EDGE),
-    (0x4, IRQ.Trigger.LEVEL),
-    (0x8, IRQ.Trigger.LEVEL),
-])
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        (0x1, IRQ.Trigger.EDGE),
+        (0x2, IRQ.Trigger.EDGE),
+        (0x4, IRQ.Trigger.LEVEL),
+        (0x8, IRQ.Trigger.LEVEL),
+    ],
+)
 def test_arm_gic_trigger(val, expected):
     assert _arm_gic_trigger(val) == expected
 
@@ -362,7 +368,9 @@ def test_size_and_addr_cells_with_props(blob, fdt):
     size_prop.as_uint32.return_value = 4
     addr_prop = MagicMock()
     addr_prop.as_uint32.return_value = 3
-    fdt.getprop.side_effect = lambda off, name: size_prop if name == "#size-cells" else addr_prop
+    fdt.getprop.side_effect = lambda off, name: (
+        size_prop if name == "#size-cells" else addr_prop
+    )
     assert _RAW_CELLS(blob, DTBNode(0, "/")) == (4, 3)
 
 
@@ -409,7 +417,9 @@ def test_get_parsed_irqs_arm_groups_by_three(blob, fdt):
     arch.is_arm.return_value = True
     arch.is_riscv.return_value = False
     fdt.getprop.return_value = struct.pack(">6I", 0, 5, 1, 1, 7, 4)
-    with patch.object(dtb_module, "_parse_irq", side_effect=lambda a, c: ("irq", tuple(c))):
+    with patch.object(
+        dtb_module, "_parse_irq", side_effect=lambda a, c: ("irq", tuple(c))
+    ):
         result = blob.get_parsed_irqs(DTBNode(7, "/x"), arch)
     assert result == [("irq", (0, 5, 1)), ("irq", (1, 7, 4))]
 
@@ -419,7 +429,9 @@ def test_get_parsed_irqs_riscv_groups_by_one(blob, fdt):
     arch.is_arm.return_value = False
     arch.is_riscv.return_value = True
     fdt.getprop.return_value = struct.pack(">2I", 5, 7)
-    with patch.object(dtb_module, "_parse_irq", side_effect=lambda a, c: ("irq", tuple(c))):
+    with patch.object(
+        dtb_module, "_parse_irq", side_effect=lambda a, c: ("irq", tuple(c))
+    ):
         result = blob.get_parsed_irqs(DTBNode(7, "/x"), arch)
     assert result == [("irq", (5,)), ("irq", (7,))]
 
@@ -484,7 +496,7 @@ def test_get_reg_paddr_translates_through_ranges(blob, fdt):
     blob.get_size_and_addr_cells = MagicMock(return_value=(1, 1))
     fdt.hasprop.side_effect = lambda off, name: off == 5 and name == "ranges"
     ranges_raw = struct.pack(">3I", 0x1000, 0x80000000, 0x2000)
-    fdt.getprop.side_effect = (
-        lambda off, name: ranges_raw if (off == 5 and name == "ranges") else b""
+    fdt.getprop.side_effect = lambda off, name: (
+        ranges_raw if (off == 5 and name == "ranges") else b""
     )
     assert blob.get_reg_paddr(arch, node, 0x2000) == 0x80001000

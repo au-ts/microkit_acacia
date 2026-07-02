@@ -74,7 +74,9 @@ class TestAddPd:
     def test_add_duplicate_pd_raises(self, sys_):
         pd = MagicMock(name="pd")
         sys_.add_pd(pd)
-        with pytest.raises(RuntimeError, match="Cannot add one PD to the same system multiple times"):
+        with pytest.raises(
+            RuntimeError, match="Cannot add one PD to the same system multiple times"
+        ):
             sys_.add_pd(pd)
 
     def test_add_distinct_pds(self, sys_):
@@ -93,7 +95,10 @@ class TestAddChannel:
     def test_add_duplicate_channel_raises(self, sys_):
         ch = MagicMock(name="channel")
         sys_.add_channel(ch)
-        with pytest.raises(RuntimeError, match="Cannot add one channel to the same system multiple times"):
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot add one channel to the same system multiple times",
+        ):
             sys_.add_channel(ch)
 
 
@@ -106,7 +111,10 @@ class TestAddMemoryRegion:
     def test_add_duplicate_mr_raises(self, sys_):
         mr = MagicMock(name="mr")
         sys_.add_memory_region(mr)
-        with pytest.raises(RuntimeError, match="Cannot add one memory region to the same system multiple times"):
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot add one memory region to the same system multiple times",
+        ):
             sys_.add_memory_region(mr)
 
 
@@ -290,11 +298,12 @@ class TestRender:
         ch.render.assert_called_once_with(root)
 
 
-
 class TestWriteXmlFile:
     def test_write_xml_file_invokes_render(self, sys_, tmp_path):
         out = tmp_path / "sys.xml"
-        with patch.object(sys_, "render", return_value=et.Element("system")) as mock_render:
+        with patch.object(
+            sys_, "render", return_value=et.Element("system")
+        ) as mock_render:
             sys_.write_xml_file(str(out))
             mock_render.assert_called_once()
 

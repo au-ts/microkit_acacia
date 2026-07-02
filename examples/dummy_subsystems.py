@@ -1,32 +1,45 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from acacia import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
+from acacia import (
+    ProtectionDomain,
+    Subsystem,
+    Channel,
+    Map,
+    MemoryRegion,
+    System,
+    SchedulingProperties,
+)
 from acacia.arch import aarch64
+
 
 class DummyClock(Subsystem):
     def __init__(self, prio):
         super().__init__("clk")
         self.driver = None
         # Make driver
-        self.driver = ProtectionDomain("clk_driver", "clk_driver.elf", scheduling=SchedulingProperties(prio, passive=True))
+        self.driver = ProtectionDomain(
+            "clk_driver",
+            "clk_driver.elf",
+            scheduling=SchedulingProperties(prio, passive=True),
+        )
         self.pds.append(self.driver)
-
 
     def connect_clients(self):
         assert self.driver is not None
         # Clients are connected with a channel allowing PPs and nothing else
         for c in self.clients:
             if c.priority >= self.driver.priority:
-                raise SubsystemBuildError(f"Client {c} has a priority higher "
-                                          f"than driver's ({self.driver.priority})!")
+                raise SubsystemBuildError(
+                    f"Client {c} has a priority higher "
+                    f"than driver's ({self.driver.priority})!"
+                )
             # Make channel
             ch = Channel(
-                    Channel.End(c, can_notify=False, can_pp=True),
-                    Channel.End(self.driver, can_notify=False, can_pp=False)
+                Channel.End(c, can_notify=False, can_pp=True),
+                Channel.End(self.driver, can_notify=False, can_pp=False),
             )
             self.channels.append(ch)
-
 
 
 class DummyTimer(Subsystem):
@@ -40,18 +53,24 @@ class DummyTimer(Subsystem):
         # Clients are connected with a channel allowing PPs and nothing else
         for c in self.clients:
             if c.priority >= self.driver.priority:
-                raise RuntimeError(f"Client {c} has a priority higher "
-                                          f"than driver's ({self.driver.priority})!")
+                raise RuntimeError(
+                    f"Client {c} has a priority higher "
+                    f"than driver's ({self.driver.priority})!"
+                )
             # Make channel
             ch = Channel(
-                    Channel.End(c, can_notify=False, can_pp=True),
-                    Channel.End(self.driver, can_notify=True, can_pp=False)
+                Channel.End(c, can_notify=False, can_pp=True),
+                Channel.End(self.driver, can_notify=True, can_pp=False),
             )
             self.channels.append(ch)
 
     def construct_infrastructure(self, prio):
         # Make driver
-        self.driver = ProtectionDomain("timer_driver", "timer_driver.elf", scheduling=SchedulingProperties(prio, passive=True))
+        self.driver = ProtectionDomain(
+            "timer_driver",
+            "timer_driver.elf",
+            scheduling=SchedulingProperties(prio, passive=True),
+        )
         self.pds.append(self.driver)
 
 
@@ -67,22 +86,28 @@ class DummyI2C(Subsystem):
         # Clients are connected with a channel allowing PPs and nothing else
         for c in self.clients:
             if c.priority >= self.virt.priority:
-                raise SubsystemBuildError(f"Client {c} has a priority higher "
-                                          f"than virt's ({self.virt.priority})!")
+                raise SubsystemBuildError(
+                    f"Client {c} has a priority higher "
+                    f"than virt's ({self.virt.priority})!"
+                )
             # Make channel
             ch = Channel(
-                    Channel.End(c, can_notify=False, can_pp=True),
-                    Channel.End(self.virt, can_notify=True, can_pp=False)
+                Channel.End(c, can_notify=False, can_pp=True),
+                Channel.End(self.virt, can_notify=True, can_pp=False),
             )
             self.channels.append(ch)
 
     def construct_infrastructure(self, prio):
         # Make driver
-        self.driver = ProtectionDomain("i2c_driver", "i2c_driver.elf", scheduling=SchedulingProperties(prio))
-        self.virt = ProtectionDomain("i2c_virt", "i2c_virt.elf", scheduling=SchedulingProperties(prio-1))
+        self.driver = ProtectionDomain(
+            "i2c_driver", "i2c_driver.elf", scheduling=SchedulingProperties(prio)
+        )
+        self.virt = ProtectionDomain(
+            "i2c_virt", "i2c_virt.elf", scheduling=SchedulingProperties(prio - 1)
+        )
         d_v_ch = Channel(
-                    Channel.End(self.virt, can_notify=True, can_pp=False),
-                    Channel.End(self.driver, can_notify=True, can_pp=False)
+            Channel.End(self.virt, can_notify=True, can_pp=False),
+            Channel.End(self.driver, can_notify=True, can_pp=False),
         )
         self.channels.append(d_v_ch)
         self.pds.extend([self.driver, self.virt])

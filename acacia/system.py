@@ -19,7 +19,8 @@ class System:
     """
     A Microkit system.
     """
-    def __init__(self, sys_arch: Arch, paddr_top: int, dtb: DeviceTreeBlob=None):
+
+    def __init__(self, sys_arch: Arch, paddr_top: int, dtb: DeviceTreeBlob = None):
         self.arch = sys_arch
         self.allocator = SDFMemoryAllocator(sys_arch, paddr_top)
 
@@ -37,8 +38,10 @@ class System:
             return
 
         if not isinstance(to_check, expected_type):
-            raise RuntimeError(f"Tried to add {to_check} as a {expected_type}, "\
-                               f"but it is a {type(to_check)}!")
+            raise RuntimeError(
+                f"Tried to add {to_check} as a {expected_type}, "
+                f"but it is a {type(to_check)}!"
+            )
 
     def add_pd(self, pd: ProtectionDomain):
         self.__system_subclass_check(pd, ProtectionDomain)
@@ -51,13 +54,17 @@ class System:
     def add_channel(self, channel: Channel):
         self.__system_subclass_check(channel, Channel)
         if channel in self.channels:
-            raise RuntimeError("Cannot add one channel to the same system multiple times!")
+            raise RuntimeError(
+                "Cannot add one channel to the same system multiple times!"
+            )
         self.channels.add(channel)
 
     def add_memory_region(self, mr: MemoryRegion):
         self.__system_subclass_check(mr, MemoryRegion)
         if mr in self.mrs:
-            raise RuntimeError("Cannot add one memory region to the same system multiple times!")
+            raise RuntimeError(
+                "Cannot add one memory region to the same system multiple times!"
+            )
         self.mrs.add(mr)
 
     def add_subsystem(self, subsystem: Subsystem):
@@ -90,17 +97,16 @@ class System:
 
         self.subsystems_constructed = True
 
-    def make_config_structs(self, build_dir: pathlib.Path=pathlib.Path("./")):
+    def make_config_structs(self, build_dir: pathlib.Path = pathlib.Path("./")):
         # We can't get config structs without resolving subsystems first
         if not self.subsystems_constructed:
             print("System::make_config_structs - auto-resolving systems")
             self.resolve_subsystems()
         # TODO: support big endian?
-        resolver = ConfigStructResolver(build_dir, endian='little')
+        resolver = ConfigStructResolver(build_dir, endian="little")
         for s in self.subsystems:
             resolver.add_structs(s.generate_config_structs())
         resolver.resolve_and_create_all()
-
 
     def render(self) -> et.Element:
         if not self.subsystems_constructed:
@@ -123,10 +129,10 @@ class System:
 
         return system
 
-    def write_xml_file(self, path:pathlib.Path):
+    def write_xml_file(self, path: pathlib.Path):
         xml = self.render()
         et.indent(xml, level=0)
 
         tree = et.ElementTree(xml)
-        et.indent(tree, space='    ', level=0)
+        et.indent(tree, space="    ", level=0)
         tree.write(path, encoding="utf-8", xml_declaration=True)

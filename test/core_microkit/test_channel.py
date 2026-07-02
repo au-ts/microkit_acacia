@@ -43,7 +43,9 @@ class TestChannel:
         """PPC from high priority to low priority should fail"""
         high_pd = self.create_pd("high", 200)
         low_pd = self.create_pd("low", 100)
-        end_a = Channel.End(pd=high_pd, can_notify=True, can_pp=True)  # High calls low - invalid
+        end_a = Channel.End(
+            pd=high_pd, can_notify=True, can_pp=True
+        )  # High calls low - invalid
         end_b = Channel.End(pd=low_pd, can_notify=True, can_pp=False)
         with pytest.raises(RuntimeError):
             Channel(end_a, end_b)

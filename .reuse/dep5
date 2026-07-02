@@ -1,0 +1,22 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Microkit Acacia
+Source: https://github.com/au-ts/microkit_acacia
+
+Files:
+    examples/dummy_configstruct_build/client1.elf
+    examples/dummy_configstruct_build/client2.elf
+    examples/dummy_configstruct_build/client3.elf
+    examples/dummy_configstruct_build/i2c_driver.elf
+    pyproject.toml
+    requirements.txt
+    dev-requirements.txt
+    .gitignore
+    README.md
+    VERSION
+Copyright: UNSW
+License: BSD-2-Clause
+
+Files:
+    acacia.png
+Copyright: UNSW
+License: CC-BY-SA-4.0

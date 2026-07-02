@@ -14,7 +14,7 @@ class TestIrqIoapic:
             pin=4,
             vector=32,
             trigger=IrqIoapic.Trigger.EDGE,
-            polarity=IrqIoapic.Polarity.ACTIVEHIGH
+            polarity=IrqIoapic.Polarity.ACTIVEHIGH,
         )
         assert irq.pin == 4
         assert irq.vector == 32
@@ -57,13 +57,7 @@ class TestIrqIoapic:
 
 class TestIrqMsi:
     def test_initialization(self):
-        irq = IrqMsi(
-            pci_bus=0,
-            pci_device=3,
-            pci_func=0,
-            vector=64,
-            handle=0
-        )
+        irq = IrqMsi(pci_bus=0, pci_device=3, pci_func=0, vector=64, handle=0)
         assert irq.pci_bus == 0
         assert irq.pci_device == 3
         assert irq.vector == 64
@@ -98,17 +92,17 @@ class TestIrqMsi:
 
 class TestIOPort:
     def test_initialization(self):
-        ioport = IOPort(addr=0x3f8, size=0x8)
-        assert ioport.addr == 0x3f8
+        ioport = IOPort(addr=0x3F8, size=0x8)
+        assert ioport.addr == 0x3F8
         assert ioport.size == 0x8
 
     def test_render_without_id_raises(self):
-        ioport = IOPort(0x3f8, 0x8)
+        ioport = IOPort(0x3F8, 0x8)
         with pytest.raises(RuntimeError, match="ID must be set"):
             ioport.render(et.Element("parent"))
 
     def test_render(self):
-        ioport = IOPort(0x3f8, 0x8)
+        ioport = IOPort(0x3F8, 0x8)
         ioport.id = 3
         parent = et.Element("parent")
         ioport.render(parent)

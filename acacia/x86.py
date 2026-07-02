@@ -12,14 +12,11 @@ class IOPort:
     """
     A representation of an x86 IOPort.
     """
-    def __init__(self,
-                 addr: int,
-                 size: int,
-                 id: Optional[int] = None):
+
+    def __init__(self, addr: int, size: int, id: Optional[int] = None):
         self.addr = addr
         self.size = size
         self.id = id
-
 
     def render(self, parent: et.Element):
         # ID should be set by PD when calling pd.add_ioport()

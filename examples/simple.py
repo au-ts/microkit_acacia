@@ -2,15 +2,21 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from acacia.arch import aarch64
-from acacia import ProtectionDomain, MemoryRegion, Map, ConventionalIRQ, IRQ, System, Channel
+from acacia import (
+    ProtectionDomain,
+    MemoryRegion,
+    Map,
+    ConventionalIRQ,
+    IRQ,
+    System,
+    Channel,
+)
 import xml.etree.ElementTree as et
 
 sdf = System(aarch64, paddr_top=0x10000)
 
 serial_driver = ProtectionDomain("serial_driver", "serial_driver.elf", priority=200)
-serial_virt_tx = ProtectionDomain(
-    "serial_virt_tx", "serial_virt_tx.elf", priority=199
-)
+serial_virt_tx = ProtectionDomain("serial_virt_tx", "serial_virt_tx.elf", priority=199)
 
 clk_driver = ProtectionDomain("clk_driver", "clk_driver.elf", priority=240)
 timer_driver = ProtectionDomain("timer_driver", "timer_driver.elf", priority=254)
@@ -23,29 +29,29 @@ client_ds3231 = ProtectionDomain("client_ds3231", "client_ds3231.elf", priority=
 
 ch_pn532 = Channel(
     Channel.End(pd=client_pn532, can_notify=True, can_pp=True),
-    Channel.End(pd=i2c_virt, can_notify=True, can_pp=False)
+    Channel.End(pd=i2c_virt, can_notify=True, can_pp=False),
 )
 
 ch_ds3231 = Channel(
     Channel.End(pd=client_ds3231, can_notify=True, can_pp=True),
-    Channel.End(pd=i2c_virt, can_notify=True, can_pp=False)
+    Channel.End(pd=i2c_virt, can_notify=True, can_pp=False),
 )
 
 ch_timer_ds3231 = Channel(
     Channel.End(pd=client_ds3231, can_notify=False, can_pp=True),
-    Channel.End(pd=timer_driver, can_notify=True, can_pp=False)
+    Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
 )
 
 ch_timer_pn532 = Channel(
     Channel.End(pd=client_pn532, can_notify=False, can_pp=True),
-    Channel.End(pd=timer_driver, can_notify=True, can_pp=False)
+    Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
 )
 sdf.add_channel(ch_ds3231)
 sdf.add_channel(ch_pn532)
 sdf.add_channel(ch_timer_ds3231)
 sdf.add_channel(ch_timer_pn532)
 
-clk_ccm_mr = MemoryRegion("clk_ccm", 0xd000, paddr=0x30380000)
+clk_ccm_mr = MemoryRegion("clk_ccm", 0xD000, paddr=0x30380000)
 clk_ccm_analog_mr = MemoryRegion("clk_ccm_analog", 0x1000, paddr=0x30360000)
 sdf.add_memory_region(clk_ccm_mr)
 sdf.add_memory_region(clk_ccm_analog_mr)

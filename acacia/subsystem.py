@@ -8,8 +8,9 @@ from collections import defaultdict, deque
 from .pd import ProtectionDomain
 from .configstruct import ConfigStruct
 
-class SubsystemBuildError(RuntimeError):
-    ...
+
+class SubsystemBuildError(RuntimeError): ...
+
 
 class Subsystem(ABC):
     """
@@ -20,6 +21,7 @@ class Subsystem(ABC):
 
     At init, the subsystem is just a container to add clients to.
     """
+
     def __init__(self, name: str, clients_allowed: bool = True):
         if type(self) == Subsystem:
             raise TypeError("Cannot instantiate abstract base class!")

@@ -2,7 +2,14 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from acacia.arch import aarch64
-from acacia import System, ProtectionDomain, MemoryRegion, Map, VirtualMachine, SchedulingProperties
+from acacia import (
+    System,
+    ProtectionDomain,
+    MemoryRegion,
+    Map,
+    VirtualMachine,
+    SchedulingProperties,
+)
 
 sdf = System(aarch64, paddr_top=0x10000)
 
@@ -16,7 +23,7 @@ vcpu1 = VirtualMachine.VCPU(id=1)
 guest = VirtualMachine(
     name="linux_guest",
     scheduling=SchedulingProperties(priority=100),
-    vcpus=[vcpu0, vcpu1]
+    vcpus=[vcpu0, vcpu1],
 )
 
 # Map RAM into guest's address space

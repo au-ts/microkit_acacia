@@ -24,22 +24,22 @@ client_dns = ProtectionDomain("client_dns", "client_dns.elf", priority=1)
 # Channels
 ch_http = Channel(
     Channel.End(pd=client_http, can_notify=True, can_pp=True),
-    Channel.End(pd=net_virt, can_notify=True, can_pp=False)
+    Channel.End(pd=net_virt, can_notify=True, can_pp=False),
 )
 
 ch_dns = Channel(
     Channel.End(pd=client_dns, can_notify=True, can_pp=True),
-    Channel.End(pd=net_virt, can_notify=True, can_pp=False)
+    Channel.End(pd=net_virt, can_notify=True, can_pp=False),
 )
 
 ch_timer_http = Channel(
     Channel.End(pd=client_http, can_notify=False, can_pp=True),
-    Channel.End(pd=timer_driver, can_notify=True, can_pp=False)
+    Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
 )
 
 ch_timer_dns = Channel(
     Channel.End(pd=client_dns, can_notify=False, can_pp=True),
-    Channel.End(pd=timer_driver, can_notify=True, can_pp=False)
+    Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
 )
 
 sdf.add_channel(ch_http)
@@ -48,8 +48,8 @@ sdf.add_channel(ch_timer_http)
 sdf.add_channel(ch_timer_dns)
 
 # MRs
-net_mmio = MemoryRegion("net_mmio", 0x4000, paddr=0xfeb00000)
-serial_mmio = MemoryRegion("serial_mmio", 0x1000, paddr=0xfeb40000)
+net_mmio = MemoryRegion("net_mmio", 0x4000, paddr=0xFEB00000)
+serial_mmio = MemoryRegion("serial_mmio", 0x1000, paddr=0xFEB40000)
 sdf.add_memory_region(net_mmio)
 sdf.add_memory_region(serial_mmio)
 
@@ -67,7 +67,7 @@ serial_irq = IrqIoapic(
     pin=4,
     vector=32,
     trigger=IrqIoapic.Trigger.EDGE,
-    polarity=IrqIoapic.Polarity.ACTIVEHIGH
+    polarity=IrqIoapic.Polarity.ACTIVEHIGH,
 )
 
 # try level triggered
@@ -76,24 +76,18 @@ timer_irq = IrqIoapic(
     pin=2,
     vector=48,
     trigger=IrqIoapic.Trigger.LEVEL,
-    polarity=IrqIoapic.Polarity.ACTIVEHIGH
+    polarity=IrqIoapic.Polarity.ACTIVEHIGH,
 )
 
 # MSI interrupts
-net_msi_irq = IrqMsi(
-    pci_bus=0,
-    pci_device=3,
-    pci_func=0,
-    vector=64,
-    handle=0
-)
+net_msi_irq = IrqMsi(pci_bus=0, pci_device=3, pci_func=0, vector=64, handle=0)
 
 serial_driver.add_irq(serial_irq)
 timer_driver.add_irq(timer_irq)
 net_driver.add_irq(net_msi_irq)
 
 # add IOport for testing
-serial_ioport = IOPort(addr=0x3f8, size=0x8)  # COM1: 0x3F8-0x3FF
+serial_ioport = IOPort(addr=0x3F8, size=0x8)  # COM1: 0x3F8-0x3FF
 serial_driver.add_ioport(serial_ioport)
 
 pds = [

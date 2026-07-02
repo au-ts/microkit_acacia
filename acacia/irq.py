@@ -9,6 +9,7 @@ from typing import Optional
 
 # Note: x86 IRQ types are in x86.py
 
+
 class IRQ:
     class Trigger(Enum):
         EDGE = 0
@@ -38,7 +39,8 @@ class ConventionalIRQ(IRQ):
     """
     IRQs on ARM and RISC-V machines.
     """
-    def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int]=None):
+
+    def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int] = None):
         super().__init__(irq_num, id=id)
         self.irq_num = irq_num
         self._trigger = trigger
@@ -64,16 +66,19 @@ class IrqIoapic(IRQ):
     class Polarity(Enum):
         ACTIVEHIGH = 0
         ACTIVELOW = 1
+
         def __str__(self):
             return str(self.value)
 
-    def __init__(self,
-                 ioapic_id: int,
-                 pin: int,
-                 vector: int,
-                 trigger: Optional[IRQ.Trigger] = None,
-                 polarity: Optional[Polarity] = None,
-                 id: Optional[int] = None):
+    def __init__(
+        self,
+        ioapic_id: int,
+        pin: int,
+        vector: int,
+        trigger: Optional[IRQ.Trigger] = None,
+        polarity: Optional[Polarity] = None,
+        id: Optional[int] = None,
+    ):
 
         super().__init__(ioapic_id, id=id)
         self.pin = pin
@@ -106,13 +111,15 @@ class IrqIoapic(IRQ):
 
 
 class IrqMsi(IRQ):
-    def __init__(self,
-                 pci_bus: int,
-                 pci_device: int,
-                 pci_func: int,
-                 vector: int,
-                 handle: int,
-                 id: Optional[int] = None):
+    def __init__(
+        self,
+        pci_bus: int,
+        pci_device: int,
+        pci_func: int,
+        vector: int,
+        handle: int,
+        id: Optional[int] = None,
+    ):
 
         super().__init__(handle, id=id)
         self.pci_bus = pci_bus
@@ -137,5 +144,3 @@ class IrqMsi(IRQ):
     @property
     def trigger(self):
         raise RuntimeError("Trigger called on MSI IRQ - invalid!")
-
-

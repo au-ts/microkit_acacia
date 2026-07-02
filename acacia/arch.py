@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 import xml.etree.ElementTree as et
 
+
 class ArchID(Enum):
     aarch32 = 1
     aarch64 = 2
@@ -13,15 +14,18 @@ class ArchID(Enum):
     x86 = 5
     x86_64 = 6
 
+
 class PageSizeID(Enum):
     small = 1
     large = 2
+
 
 @dataclass
 class Arch:
     """
     Representation of a system architecture.
     """
+
     arch: ArchID
 
     def is_arm(self) -> bool:
@@ -58,6 +62,7 @@ class Arch:
             return 0x200000 if self.is_64_bit() else 0x400000
         raise RuntimeError("Invalid page size ID!")
 
+
 aarch64 = Arch(ArchID.aarch64)
 aarch32 = Arch(ArchID.aarch32)
 riscv64 = Arch(ArchID.riscv64)
@@ -65,11 +70,13 @@ riscv32 = Arch(ArchID.riscv32)
 x86 = Arch(ArchID.x86)
 x86_64 = Arch(ArchID.x86_64)
 
+
 class SDFMemoryAllocator:
     """
     Class encapsulating the physical memory map of the system.
     Used for assigning physical addresses to physical MRs
     """
+
     def __init__(self, arch: Arch, paddr_top: int):
         self.arch = arch
         self.paddr_top = paddr_top

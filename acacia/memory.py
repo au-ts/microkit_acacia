@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import xml.etree.ElementTree as et
 from .arch import SDFMemoryAllocator
 
+
 class MemoryRegion:
     """
     A concrete instance of a memory region. Given that these
@@ -14,12 +15,15 @@ class MemoryRegion:
 
     Microkit will assign paddrs etc. itself, so we don't need to worry about this too much.
     """
-    def __init__(self,
-                 name: str,
-                 size: int,
-                 paddr: Optional[int] = None,
-                 cached: bool = True,
-                 physical: bool = False):
+
+    def __init__(
+        self,
+        name: str,
+        size: int,
+        paddr: Optional[int] = None,
+        cached: bool = True,
+        physical: bool = False,
+    ):
         self.name = name
         if size <= 0:
             raise ValueError("Size must be positive and non-zero!")
@@ -38,7 +42,7 @@ class MemoryRegion:
             int: new paddr_top
         """
         if self.paddr is not None or not self.physical:
-            return # nothing to do if already assigned or virtual
+            return  # nothing to do if already assigned or virtual
 
         paddr_top = allocator.paddr_top
         self.paddr = paddr_top - self.size
@@ -57,26 +61,31 @@ class Map:
     """
     A mapping of a MemoryRegion into a PD or VM.
     """
+
     @dataclass(frozen=True)
     class Permissions:
         r: bool = False
         w: bool = False
         x: bool = False
+
         def __str__(self):
             # "if [r,w,x] in thing, include corresponding char"
-            return "".join([e[1] for e in
-                zip([self.r, self.w, self.x], ['r', 'w', 'x']) if e[0]])
+            return "".join(
+                [e[1] for e in zip([self.r, self.w, self.x], ["r", "w", "x"]) if e[0]]
+            )
 
         def __post_init__(self):
             # Don't let users define write-only pages.
             if not self.r and not self.x and self.w:
                 raise ValueError("Cannot define write-only pages!")
 
-    def __init__(self,
-                 mr: MemoryRegion,
-                 vaddr: int,
-                 permissions: Union[Permissions, str],
-                 setvar_vaddr: Optional[str] = None):
+    def __init__(
+        self,
+        mr: MemoryRegion,
+        vaddr: int,
+        permissions: Union[Permissions, str],
+        setvar_vaddr: Optional[str] = None,
+    ):
         if vaddr <= 0:
             raise ValueError(f"Invalid virtual address {vaddr}!")
         self.mr = mr
@@ -86,7 +95,7 @@ class Map:
             if len(permissions) > 3:
                 raise RuntimeError("Permissions string must be <= 3 chars long.")
             _p = permissions
-            permissions = Map.Permissions(r='r' in _p, w='w' in _p, x='x' in _p)
+            permissions = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.perms = permissions
         self.setvar_vaddr = setvar_vaddr
         self.vaddr = vaddr
@@ -103,5 +112,5 @@ class Map:
         if not self.mr.cached:
             map.set("cached", "false")
         if self.setvar_vaddr is not None:
-            map.set("setvar_vaddr",  str(self.setvar_vaddr))
+            map.set("setvar_vaddr", str(self.setvar_vaddr))
         return map

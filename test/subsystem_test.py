@@ -10,6 +10,7 @@ from acacia.pd import ProtectionDomain
 
 def create_concrete_subsystem(name="Concrete", **kwargs):
     """Factory producing a minimal concrete Subsystem instance."""
+
     class ConcreteSubsystem(Subsystem):
         def connect_clients(self):
             pass
@@ -66,7 +67,6 @@ class TestSubsystemClientManagement:
         assert ss.clients == [pd1, pd2]
 
 
-
 class TestSubsystemGetMethods:
     def test_get_pds_unbuilt_raises(self):
         ss = create_concrete_subsystem("test")
@@ -110,7 +110,6 @@ class TestSubsystemGetMethods:
         assert ss.get_clients() == []
 
 
-
 class TestGenerateConfigStructs:
     def test_default_returns_empty_list(self):
         ss = create_concrete_subsystem("test")
@@ -128,7 +127,6 @@ class TestGenerateConfigStructs:
 
         ss = WithConfig("cfg")
         assert ss.generate_config_structs() == [sentinel]
-
 
 
 class TestSubsystemBuild:
@@ -165,7 +163,9 @@ class TestSubsystemBuild:
     def test_build_rebuild_raises(self):
         ss = create_concrete_subsystem("test", clients_allowed=False)
         ss.build()
-        with pytest.raises(RuntimeError, match="Cannot build a subsystem more than once"):
+        with pytest.raises(
+            RuntimeError, match="Cannot build a subsystem more than once"
+        ):
             ss.build()
 
     def test_rebuild_does_not_reconnect(self):

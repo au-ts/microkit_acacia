@@ -9,15 +9,18 @@ from .memory import MemoryRegion, Map
 from .arch import SDFMemoryAllocator
 from .irq import IRQ
 from .x86 import IOPort
+
 # from .constraint import DependentField, FieldSpec, UINT64_MAX
 
-MAX_IDS = 62 # matches microkit. limit for child pds, ioports, irqs and channel IDs
+MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel IDs
+
 
 @dataclass
 class SchedulingProperties:
     """
     Properties of an entity for the seL4 scheduler
     """
+
     # priority: Union[int, FieldSpec[int]]
     priority: int
     period: Optional[int] = None
@@ -32,14 +35,18 @@ class SchedulingProperties:
             if field is None:
                 continue
             if not isinstance(field, int):
-                raise ValueError(f"SchedulingProperties int field given {type(field)} instead!")
+                raise ValueError(
+                    f"SchedulingProperties int field given {type(field)} instead!"
+                )
             if field < 0:
                 raise ValueError("SchedulingProperties cannot be negative!")
 
         # If we have a period, we must also have a budget, and the b
         if self.period is not None:
             if self.budget is None or self.budget > self.period:
-                raise ValueError("Budget must be defined and cannot be greater than period!")
+                raise ValueError(
+                    "Budget must be defined and cannot be greater than period!"
+                )
 
 
 class Entity:
@@ -49,11 +56,8 @@ class Entity:
         a. has scheduling paramters
         b. can be targeted by maps
     """
-    def __init__(
-            self,
-            name: str,
-            scheduling: SchedulingProperties
-    ):
+
+    def __init__(self, name: str, scheduling: SchedulingProperties):
         self.name = name.strip()
         self.scheduling = scheduling
         self.maps: List[Map] = []
@@ -73,8 +77,13 @@ class Entity:
     def add_map(self, map: Map):
         self.maps.append(map)
 
-    def create_automap(self, mr: MemoryRegion, perms: Union[Map.Permissions, str],
-                       start_vaddr=0x20_000_000, page_size=0x1000) -> Map:
+    def create_automap(
+        self,
+        mr: MemoryRegion,
+        perms: Union[Map.Permissions, str],
+        start_vaddr=0x20_000_000,
+        page_size=0x1000,
+    ) -> Map:
         """
         Given a memory region, automatically create a map and assign it a vaddr
         that doesn't overlap with any existing maps.
@@ -97,7 +106,7 @@ class Entity:
 
             # pad by one page
             if last_vaddr_end % page_size:
-                next_vaddr = (last_vaddr_end - (last_vaddr_end % page_size)) + page_size 
+                next_vaddr = (last_vaddr_end - (last_vaddr_end % page_size)) + page_size
             else:
                 next_vaddr = last_vaddr_end
 
@@ -140,6 +149,7 @@ class VirtualMachine(Entity):
     An instance of a VM belonging to a PD. This inherits from entity as
     VMs can be targeted with maps and has scheduling parameters.
     """
+
     @dataclass
     class VCPU:
         id: int
@@ -155,10 +165,12 @@ class VirtualMachine(Entity):
             if self.cpu is not None:
                 entity.set("cpu", str(self.cpu))
 
-    def __init__(self,
-                 name: str,
-                 scheduling: SchedulingProperties,
-                 vcpus: [Union[List[VCPU], VCPU]]):
+    def __init__(
+        self,
+        name: str,
+        scheduling: SchedulingProperties,
+        vcpus: [Union[List[VCPU], VCPU]],
+    ):
         super().__init__(name, scheduling)
         if type(vcpus) is not list:
             self.vcpus = [vcpus]
@@ -181,20 +193,24 @@ class ProtectionDomain(Entity):
     """
     A PD running native code
     """
+
     def __init__(
-            self,
-            name: str,
-            prog_image: str,
-            stack_size: Optional[int] = None,
-            cpu: Optional[int] = None,
-            smc: Optional[bool] = None,
-            scheduling: SchedulingProperties = None,
-            priority: Optional[int] = None):
+        self,
+        name: str,
+        prog_image: str,
+        stack_size: Optional[int] = None,
+        cpu: Optional[int] = None,
+        smc: Optional[bool] = None,
+        scheduling: SchedulingProperties = None,
+        priority: Optional[int] = None,
+    ):
 
         # We offer `priority=x` as a legacy feature
         if priority is not None:
             if scheduling is not None:
-                raise RuntimeError("Cannot define a SchedulingCharacteristics and priority separately!")
+                raise RuntimeError(
+                    "Cannot define a SchedulingCharacteristics and priority separately!"
+                )
             scheduling = SchedulingProperties(priority)
         super().__init__(name, scheduling)
         if not prog_image.endswith(".elf"):
@@ -209,7 +225,7 @@ class ProtectionDomain(Entity):
         # Parental responsibilities
         self.assigned_child_ids = []
         self.children: List[ProtectionDomain] = []
-        self.child_id = None    # Assigned if this PD is made a child.
+        self.child_id = None  # Assigned if this PD is made a child.
 
         # VM
         self.vm: Optional[VirtualMachine] = None
@@ -276,12 +292,12 @@ class ProtectionDomain(Entity):
         if irq in self.irqs:
             raise RuntimeError("Cannot add the same IRQ to a PD twice!")
 
-        irq.id = self.allocate_id(irq.id)   # Allocate and reserve ID
+        irq.id = self.allocate_id(irq.id)  # Allocate and reserve ID
         self.irqs.add(irq)
         return irq.id
 
     def add_ioport(self, ioport: IOPort):
-        ioport.id = self.allocate_id(ioport.id)   # Allocate and reserve ID
+        ioport.id = self.allocate_id(ioport.id)  # Allocate and reserve ID
         self.ioports.append(ioport)
 
     def add_child_pd(self, child, child_id: Optional[int] = None):

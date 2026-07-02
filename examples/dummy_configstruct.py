@@ -1,9 +1,21 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from acacia import ProtectionDomain, Subsystem, Channel, Map, MemoryRegion, System, SchedulingProperties
+from acacia import (
+    ProtectionDomain,
+    Subsystem,
+    Channel,
+    Map,
+    MemoryRegion,
+    System,
+    SchedulingProperties,
+)
 from acacia.arch import aarch64
-from acacia.configstruct import ConfigStruct, DeviceResourcesFactory, ConfigStructResolver
+from acacia.configstruct import (
+    ConfigStruct,
+    DeviceResourcesFactory,
+    ConfigStructResolver,
+)
 from acacia.irq import IRQ, ConventionalIRQ
 
 
@@ -20,18 +32,24 @@ class DummyI2C(Subsystem):
         # Clients are connected with a channel allowing PPs and nothing else
         for c in self.clients:
             if c.priority >= self.driver.priority:
-                raise SubsystemBuildError(f"Client {c} has a priority higher "
-                                          f"than driver's ({self.driver.priority})!")
+                raise SubsystemBuildError(
+                    f"Client {c} has a priority higher "
+                    f"than driver's ({self.driver.priority})!"
+                )
             # Make channel
             ch = Channel(
-                    Channel.End(c, can_notify=False, can_pp=True),
-                    Channel.End(self.driver, can_notify=False, can_pp=False)
+                Channel.End(c, can_notify=False, can_pp=True),
+                Channel.End(self.driver, can_notify=False, can_pp=False),
             )
             self.channels.append(ch)
 
     def construct_infrastructure(self, driver_prio: int):
         # Make driver
-        self.driver = ProtectionDomain("i2c_driver", "i2c_driver.elf", scheduling=SchedulingProperties(driver_prio, passive=True))
+        self.driver = ProtectionDomain(
+            "i2c_driver",
+            "i2c_driver.elf",
+            scheduling=SchedulingProperties(driver_prio, passive=True),
+        )
         self.pds.append(self.driver)
 
         dev_mem = MemoryRegion("i2c_ctrl", 0x1000, paddr=0x37370000)
@@ -47,21 +65,27 @@ class DummyI2C(Subsystem):
         # This is just for testing, so we take the laziest option.
         # 1. driver just needs resources, ignore real config structs
         # 2. clients just get their config struct
-        devresource = DeviceResourcesFactory(self.magic, [self.dev_mem], [self.irq_id], self.driver.prog_image)
+        devresource = DeviceResourcesFactory(
+            self.magic, [self.dev_mem], [self.irq_id], self.driver.prog_image
+        )
         print(f"dev = {devresource}")
 
         # clients just need a trivial config struct with channel
         def client_struct_factory(client_pd, n):
             end = next(x.end_a for x in self.channels if x.end_a.pd is client_pd)
             ch_id = end.ch_id
-            fields = {
-                    "driver_id": ch_id
-            }
-            return ConfigStruct("i2c_client_config_t", client_pd.prog_image, "i2c_client_config", fields=fields)
+            fields = {"driver_id": ch_id}
+            return ConfigStruct(
+                "i2c_client_config_t",
+                client_pd.prog_image,
+                "i2c_client_config",
+                fields=fields,
+            )
 
         # client_structs = [client_struct_factory(c,n) for n,c in enumerate(self.clients)]
         client_structs = []
         return [devresource] + client_structs
+
 
 sdf = System(aarch64, paddr_top=0x100000000)
 
@@ -73,8 +97,8 @@ client3 = ProtectionDomain("client3", "client3.elf", priority=1)
 # Add a channel between two of the clients to check that channel mapping is correct.
 # Clients 1 and 2 should have a configstruct with driver_id = 1
 ch12 = Channel(
-        Channel.End(client1, can_notify=True, can_pp=False),
-        Channel.End(client2, can_notify=True, can_pp=False)
+    Channel.End(client1, can_notify=True, can_pp=False),
+    Channel.End(client2, can_notify=True, can_pp=False),
 )
 sdf.add_channel(ch12)
 
@@ -95,7 +119,9 @@ dumper = r.dwarfdump
 
 # Try resolve our config structs
 print("Dwarf structs matching config of dummy i2c driver:")
-driver_dwarf_structs = dumper.find_struct_and_children(i2c.driver.prog_image, structs[0].typedef_name)
+driver_dwarf_structs = dumper.find_struct_and_children(
+    i2c.driver.prog_image, structs[0].typedef_name
+)
 print(driver_dwarf_structs)
 
 # try find i2c configs structs
