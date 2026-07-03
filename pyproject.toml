@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 version = {file = ["VERSION"]}
 
 [tool.setuptools.package-dir]
-acacia = "."
+acacia = "acacia"
 
 [tool.setuptools.package-data]
 acacia = ["py.typed"]
