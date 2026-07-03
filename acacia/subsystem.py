@@ -8,7 +8,6 @@ from collections import defaultdict, deque
 from .pd import ProtectionDomain
 from .configstruct import ConfigStruct
 from .memory import MemoryRegion
-from .channel import Channel
 
 
 class SubsystemBuildError(RuntimeError): ...
@@ -31,7 +30,7 @@ class Subsystem(ABC):
         self.built = False  # "have we added all clients and connected them?"
         self.clients: List[ProtectionDomain] = []
         self.pds: List[ProtectionDomain] = []
-        self.channels: List[Channel] = []
+        self.channels: List["Channel"] = []
         self.mrs: List[MemoryRegion] = []
         self.clients_allowed = clients_allowed
 
@@ -47,7 +46,7 @@ class Subsystem(ABC):
         if client not in self.clients:
             self.clients.append(client)
 
-    def add_pd(self, pd: ProtectionDomain):
+    def add_internal_pd(self, pd: ProtectionDomain):
         """
         Add a non-client PD, e.g. drivers, virtualisers, PDs as a part of an application.
         This should be used on PDs which do not require any connection as clients.
@@ -63,7 +62,7 @@ class Subsystem(ABC):
         if mr not in self.mrs:
             self.mrs.append(mr)
 
-    def add_channel(self, channel: Channel):
+    def add_channel(self, channel: "Channel"):
         """
         Add a channel used by this subsystem to the list of channels to hand off
         to render in System.

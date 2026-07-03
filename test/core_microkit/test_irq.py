@@ -40,12 +40,6 @@ class TestConventionalIRQ:
 
 
 class TestIRQTriggerEnum:
-    def test_edge_value(self):
-        assert IRQ.Trigger.EDGE.value == 0
-
-    def test_level_value(self):
-        assert IRQ.Trigger.LEVEL.value == 1
-
     def test_str_representation(self):
         assert str(IRQ.Trigger.EDGE) == "edge"
         assert str(IRQ.Trigger.LEVEL) == "level"

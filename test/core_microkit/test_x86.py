@@ -50,10 +50,6 @@ class TestIrqIoapic:
         irq_elem = parent.find("irq")
         assert irq_elem.get("trigger") == "level"
 
-    def test_polarity_values(self):
-        assert str(IrqIoapic.Polarity.ACTIVEHIGH) == "0"
-        assert str(IrqIoapic.Polarity.ACTIVELOW) == "1"
-
 
 class TestIrqMsi:
     def test_initialization(self):

@@ -44,9 +44,7 @@ class MemoryRegion:
         if self.paddr is not None or not self.physical:
             return None  # nothing to do if already assigned or virtual
 
-        paddr_top = allocator.paddr_top
-        self.paddr = paddr_top - self.size
-        allocator.update_paddr_top(self.paddr)
+        self.paddr = allocator.allocate(self.size)
         return self.paddr
 
     def render(self, system_root: et.Element):
@@ -86,14 +84,16 @@ class Map:
         permissions: Union[Permissions, str],
         setvar_vaddr: Optional[str] = None,
     ):
-        if vaddr <= 0:
-            raise ValueError(f"Invalid virtual address {vaddr}!")
         self.mr = mr
 
         # Handle instantiating permissions from string
         if type(permissions) is str:
-            if len(permissions) > 3:
-                raise RuntimeError("Permissions string must be <= 3 chars long.")
+            permissions = permissions.lower()
+            # "nothing but r, w, and x please"
+            if len(set(permissions).difference((set("rwx")))) != 0:
+                raise ValueError(
+                    "Only r, w, and x are valid permissions string members!"
+                )
             _p = permissions
             permissions = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.perms = permissions

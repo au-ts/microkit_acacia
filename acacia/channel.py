@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import xml.etree.ElementTree as et  # type: ignore
 from abc import ABC, abstractproperty
 from .pd import ProtectionDomain
+from .system import System
 
 
 class Channel:

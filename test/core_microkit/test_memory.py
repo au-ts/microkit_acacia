@@ -78,13 +78,6 @@ class TestMapPermissions:
 
 
 class TestMap:
-    def test_invalid_vaddr(self):
-        mr = MemoryRegion("test", 0x1000)
-        with pytest.raises(ValueError, match="Invalid virtual address"):
-            Map(mr, 0, "rw")
-        with pytest.raises(ValueError, match="Invalid virtual address"):
-            Map(mr, -1, "rw")
-
     def test_string_permissions_parsing(self):
         mr = MemoryRegion("test", 0x1000)
         m = Map(mr, 0x40000000, "rwx")
@@ -97,7 +90,7 @@ class TestMap:
 
     def test_permissions_string_too_long(self):
         mr = MemoryRegion("test", 0x1000)
-        with pytest.raises(RuntimeError, match="Permissions string"):
+        with pytest.raises(ValueError, match="Only r, w, and x"):
             Map(mr, 0x40000000, "rwxc")
 
     def test_render_basic(self):

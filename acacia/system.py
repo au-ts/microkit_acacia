@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 from .arch import Arch, ArchID, SDFMemoryAllocator
 from .pd import ProtectionDomain
-from .channel import Channel
 from .memory import MemoryRegion, Map
 from .subsystem import Subsystem
 from .dtb import DeviceTreeBlob
@@ -29,7 +28,7 @@ class System:
         # We store sets, not lists. No duplicates allowed!
         self.pds: Set[ProtectionDomain] = set()
         self.mrs: Set[MemoryRegion] = set()
-        self.channels: Set[Channel] = set()
+        self.channels: Set["Channel"] = set()
         self.subsystems: List[Subsystem] = []
         self.subsystems_constructed = False
         self.dtb = dtb
@@ -47,26 +46,14 @@ class System:
 
     def add_pd(self, pd: ProtectionDomain):
         self.__system_subclass_check(pd, ProtectionDomain)
-        # We technically don't need to raise this error, but it's better to
-        # alert the user. Sets silently drop duplicates by default.
-        if pd in self.pds:
-            raise RuntimeError("Cannot add one PD to the same system multiple times!")
         self.pds.add(pd)
 
-    def add_channel(self, channel: Channel):
-        self.__system_subclass_check(channel, Channel)
-        if channel in self.channels:
-            raise RuntimeError(
-                "Cannot add one channel to the same system multiple times!"
-            )
+    def add_channel(self, channel: "Channel"):
+        self.__system_subclass_check(channel, "Channel")
         self.channels.add(channel)
 
     def add_memory_region(self, mr: MemoryRegion):
         self.__system_subclass_check(mr, MemoryRegion)
-        if mr in self.mrs:
-            raise RuntimeError(
-                "Cannot add one memory region to the same system multiple times!"
-            )
         self.mrs.add(mr)
 
     def add_subsystem(self, subsystem: Subsystem):

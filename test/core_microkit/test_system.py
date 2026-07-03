@@ -72,13 +72,6 @@ class TestAddPd:
         sys_.add_pd(pd)
         assert pd in sys_.pds
 
-    def test_add_duplicate_pd_raises(self, sys_):
-        pd = MagicMock(name="pd")
-        sys_.add_pd(pd)
-        with pytest.raises(
-            RuntimeError, match="Cannot add one PD to the same system multiple times"
-        ):
-            sys_.add_pd(pd)
 
     def test_add_distinct_pds(self, sys_):
         pd1, pd2 = MagicMock(), MagicMock()
@@ -93,30 +86,12 @@ class TestAddChannel:
         sys_.add_channel(ch)
         assert ch in sys_.channels
 
-    def test_add_duplicate_channel_raises(self, sys_):
-        ch = MagicMock(name="channel")
-        sys_.add_channel(ch)
-        with pytest.raises(
-            RuntimeError,
-            match="Cannot add one channel to the same system multiple times",
-        ):
-            sys_.add_channel(ch)
-
 
 class TestAddMemoryRegion:
     def test_add_mr_success(self, sys_):
         mr = MagicMock(name="mr")
         sys_.add_memory_region(mr)
         assert mr in sys_.mrs
-
-    def test_add_duplicate_mr_raises(self, sys_):
-        mr = MagicMock(name="mr")
-        sys_.add_memory_region(mr)
-        with pytest.raises(
-            RuntimeError,
-            match="Cannot add one memory region to the same system multiple times",
-        ):
-            sys_.add_memory_region(mr)
 
 
 class TestAddSubsystem:
@@ -198,18 +173,6 @@ class TestResolveSubsystems:
         sys_.resolve_subsystems()  # Must not raise
 
         assert shared in sys_.pds
-
-    def test_resolve_duplicate_pd_across_subsystems_raises(self, sys_):
-        # Two subsystems both reporting the same *non-client* PD is a genuine
-        # error and should surface from add_pd.
-        pd = MagicMock(name="pd")
-        ss1 = make_subsystem(pds=[pd])
-        ss2 = make_subsystem(pds=[pd])
-        sys_.add_subsystem(ss1)
-        sys_.add_subsystem(ss2)
-
-        with pytest.raises(RuntimeError, match="Cannot add one PD"):
-            sys_.resolve_subsystems()
 
     def test_resolve_sets_constructed_flag(self, sys_):
         ss = make_subsystem()

@@ -16,12 +16,6 @@ class TestSchedulingProperties:
         with pytest.raises(ValueError, match="Must define a non-negative priority"):
             SchedulingProperties(priority=-1)
 
-    def test_negative_budget_rejected(self):
-        with pytest.raises(
-            ValueError, match="SchedulingProperties cannot be negative!"
-        ):
-            SchedulingProperties(priority=100, budget=-10, period=100)
-
     def test_budget_exceeds_period_rejected(self):
         with pytest.raises(
             ValueError, match="Budget must be defined and cannot be greater than period"

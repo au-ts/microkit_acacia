@@ -10,8 +10,6 @@ from .arch import SDFMemoryAllocator
 from .irq import IRQ
 from .x86 import IOPort
 
-# from .constraint import DependentField, FieldSpec, UINT64_MAX
-
 MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel IDs
 
 
@@ -31,17 +29,9 @@ class SchedulingProperties:
         # Enforce sane values
         if self.priority is None or self.priority < 0:
             raise ValueError("Must define a non-negative priority!")
-        for field in [self.period, self.budget]:
-            if field is None:
-                continue
-            if not isinstance(field, int):
-                raise ValueError(
-                    f"SchedulingProperties int field given {type(field)} instead!"
-                )
-            if field < 0:
-                raise ValueError("SchedulingProperties cannot be negative!")
 
-        # If we have a period, we must also have a budget, and the b
+        # If we have a period, we must also have a budget, and the budget must be
+        # larger than (or equal to) the period
         if self.period is not None:
             if self.budget is None or self.budget > self.period:
                 raise ValueError(
@@ -57,10 +47,16 @@ class Entity:
         b. can be targeted by maps
     """
 
-    def __init__(self, name: str, scheduling: Optional[SchedulingProperties]):
+    def __init__(
+        self,
+        name: str,
+        scheduling: Optional[SchedulingProperties],
+        map_start_vaddr: int = 0x20_000_000,
+    ):
         self.name = name.strip()
         self.scheduling = scheduling
         self.maps: List[Map] = []
+        self.map_start_vaddr = map_start_vaddr
 
     @property
     def priority(self):
@@ -81,7 +77,6 @@ class Entity:
         self,
         mr: MemoryRegion,
         perms: Union[Map.Permissions, str],
-        start_vaddr=0x20_000_000,
         page_size=0x1000,
     ) -> Map:
         """
@@ -113,7 +108,7 @@ class Entity:
             # Add space for a guard page
             next_vaddr += page_size
         else:
-            next_vaddr = start_vaddr
+            next_vaddr = self.map_start_vaddr
 
         m = Map(mr, next_vaddr, perms)
         self.add_map(m)
@@ -200,7 +195,7 @@ class ProtectionDomain(Entity):
         prog_image: str,
         stack_size: Optional[int] = None,
         cpu: Optional[int] = None,
-        smc: Optional[bool] = None,
+        smc: bool = False,
         scheduling: Optional[SchedulingProperties] = None,
         priority: Optional[int] = None,
     ):
@@ -221,6 +216,7 @@ class ProtectionDomain(Entity):
         self.prog_image = prog_image
         self.stack_size = stack_size
         self.cpu = cpu
+        self.smc = smc
         self.irqs: Set[IRQ] = set()
         self.ioports: List[IOPort] = []
         self.assigned_ids: List[int] = []
@@ -248,6 +244,8 @@ class ProtectionDomain(Entity):
             pd.set("stack_size", str(self.stack_size))
         if self.cpu is not None:
             pd.set("cpu", str(self.cpu))
+        if self.smc:
+            pd.set("smc", "true")
         for i in sorted(self.irqs, key=lambda ir: ir.id or 0):
             i.render(pd)
         for iop in sorted(self.ioports, key=lambda i: i.addr):

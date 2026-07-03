@@ -12,8 +12,8 @@ from typing import Optional
 
 class IRQ:
     class Trigger(Enum):
-        EDGE = 0
-        LEVEL = 1
+        EDGE = 1
+        LEVEL = 2
 
         def __str__(self):
             return "edge" if self.value == self.EDGE.value else "level"
@@ -64,8 +64,8 @@ class ConventionalIRQ(IRQ):
 
 class IrqIoapic(IRQ):
     class Polarity(Enum):
-        ACTIVEHIGH = 0
-        ACTIVELOW = 1
+        ACTIVEHIGH = 1
+        ACTIVELOW = 2
 
         def __str__(self):
             return str(self.value)
