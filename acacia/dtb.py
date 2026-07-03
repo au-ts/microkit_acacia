@@ -290,9 +290,15 @@ class DeviceTreeBlob:
         # we should use extended instead of interrupts if it exists.
         # Old sdfgen didn't do this either.
         irqs_raw = self.get_node_prop(node, "interrupts")
+
+        # If no interrupts, try get `interrupt` instead.
+        if irqs_raw is None:
+            irqs_raw = self.get_node_prop(node, "interrupt")
+
+        num_u32s = len(irqs_raw) // 4
+        # otherwise: doomed
         if irqs_raw is None:
             raise RuntimeError(f"{node} has no IRQs!")
-        num_u32s = len(irqs_raw) // 4
 
         # just a bunch of u32s ... unpack using struct and return
         return struct.unpack(f">{num_u32s}I", irqs_raw)
