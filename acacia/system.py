@@ -1,17 +1,24 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+from __future__ import annotations
 import pathlib
 import xml.etree.ElementTree as et
 from typing import List, Set, Optional
 from unittest.mock import MagicMock
+from typing import TYPE_CHECKING
 
 from .arch import Arch, ArchID, SDFMemoryAllocator
-from .pd import ProtectionDomain
-from .memory import MemoryRegion, Map
 from .subsystem import Subsystem
 from .dtb import DeviceTreeBlob
 from .configstruct import ConfigStruct, ConfigStructResolver
+
+# To avoid circular imports, we only do a "real" import when type checking.
+if TYPE_CHECKING:
+    from acacia.pd import ProtectionDomain
+    from acacia.memory import MemoryRegion, Map
+    from acacia.channel import Channel
+    from acacia.configstruct import ConfigStruct
 
 
 class System:
@@ -26,38 +33,23 @@ class System:
         self.allocator = SDFMemoryAllocator(sys_arch, paddr_top)
 
         # We store sets, not lists. No duplicates allowed!
-        self.pds: Set[ProtectionDomain] = set()
-        self.mrs: Set[MemoryRegion] = set()
+        self.pds: Set["ProtectionDomain"] = set()
+        self.mrs: Set["MemoryRegion"] = set()
         self.channels: Set["Channel"] = set()
         self.subsystems: List[Subsystem] = []
         self.subsystems_constructed = False
         self.dtb = dtb
 
-    def __system_subclass_check(self, to_check, expected_type):
-        if isinstance(to_check, MagicMock):
-            # sort of a hack ... ignore mocks used by unit tests.
-            return
-
-        if not isinstance(to_check, expected_type):
-            raise RuntimeError(
-                f"Tried to add {to_check} as a {expected_type}, "
-                f"but it is a {type(to_check)}!"
-            )
-
-    def add_pd(self, pd: ProtectionDomain):
-        self.__system_subclass_check(pd, ProtectionDomain)
+    def _add_pd(self, pd: "ProtectionDomain"):
         self.pds.add(pd)
 
-    def add_channel(self, channel: "Channel"):
-        self.__system_subclass_check(channel, "Channel")
+    def _add_channel(self, channel: "Channel"):
         self.channels.add(channel)
 
-    def add_memory_region(self, mr: MemoryRegion):
-        self.__system_subclass_check(mr, MemoryRegion)
+    def _add_memory_region(self, mr: "MemoryRegion"):
         self.mrs.add(mr)
 
-    def add_subsystem(self, subsystem: Subsystem):
-        self.__system_subclass_check(subsystem, Subsystem)
+    def _add_subsystem(self, subsystem: Subsystem):
         self.subsystems.append(subsystem)
 
     def resolve_subsystems(self):
@@ -68,21 +60,12 @@ class System:
             print(f"Installing {s}...")
             # Build subsystem and record entities
             s.build()
-            for pd in s.get_pds():
-                print(f"\tadding pd {pd}...")
-                self.add_pd(pd)
-            for mr in s.get_mrs():
-                print(f"\tadding mr {mr}...")
-                self.add_memory_region(mr)
-            for channel in s.get_channels():
-                print(f"\tadding ch {channel}...")
-                self.add_channel(channel)
             for client in s.get_clients():
                 if client in self.pds:
                     print(f"\tSkipping client {client} which is already installed.")
                 else:
                     print(f"\tadding client {client}...")
-                    self.add_pd(client)
+                    self._add_pd(client)
 
         self.subsystems_constructed = True
 

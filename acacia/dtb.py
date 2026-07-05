@@ -2,18 +2,33 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import struct
-from abc import ABC, abstractmethod, abstractstaticmethod
+from abc import ABC, abstractstaticmethod
 from dataclasses import dataclass
-import libfdt  # type: ignore
 from typing import List, Tuple, Dict, Optional, Sequence
+import libfdt  # type: ignore
 from .arch import Arch
 from .irq import IRQ, ConventionalIRQ
 from .util import ctz
 
 
 class DTB_IRQ_Controller(ABC):
+    """
+    This is an abstract base class representing different kinds of interrupt controller.
+    This is currently a stub and is only implemented by Arm_GIC, but we want to preserve
+    this interface for future expansion.
+    """
+
     @abstractstaticmethod
-    def create(arch: Arch, dtb: "DeviceTreeBlob"): ...
+    def create(arch: Arch, dtb: "DeviceTreeBlob"):
+        """
+        Create an instance of the interrupt controller based upon the Device Tree Blob.
+        Args:
+            arch: Arch - Target system architecture, e.g. aarch64
+            dtb: DeviceTreeBlob - DTB for target system
+        Returns:
+            DTB_IRQ_Controller instance.
+        """
+        ...
 
 
 class Arm_GIC(DTB_IRQ_Controller):

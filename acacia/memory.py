@@ -5,6 +5,7 @@ from typing import Optional, Union
 from dataclasses import dataclass
 import xml.etree.ElementTree as et
 from .arch import SDFMemoryAllocator
+from .system import System
 
 
 class MemoryRegion:
@@ -20,6 +21,7 @@ class MemoryRegion:
         self,
         name: str,
         size: int,
+        sdf: System,
         paddr: Optional[int] = None,
         cached: bool = True,
         physical: bool = False,
@@ -33,6 +35,10 @@ class MemoryRegion:
         self.paddr = paddr
         self.physical = physical
         self.cached = cached
+        self.sdf = sdf
+
+        # Allocate ourselves to SDF
+        self.sdf._add_memory_region(self)
 
     def allocate_paddr(self, allocator: SDFMemoryAllocator) -> Optional[int]:
         """
@@ -114,3 +120,7 @@ class Map:
         if self.setvar_vaddr is not None:
             map.set("setvar_vaddr", str(self.setvar_vaddr))
         return map
+
+    @property
+    def end_vaddr(self):
+        return self.vaddr + self.size

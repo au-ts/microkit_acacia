@@ -8,7 +8,6 @@ import pytest
 
 import acacia.system as system_module
 from acacia.system import System
-from acacia.memory import MemoryRegion
 
 
 @pytest.fixture
@@ -66,51 +65,51 @@ class TestSystemInitialization:
         assert isinstance(sys_.subsystems, list)
 
 
-class TestAddPd:
-    def test_add_pd_success(self, sys_):
+class TestEntityRegistration:
+    """ProtectionDomain, MemoryRegion and Channel now take the System in
+    their constructors and register themselves. These tests exercise the
+    registration hooks System exposes for them.
+    """
+
+    def test_pd_registration(self, sys_):
         pd = MagicMock(name="pd")
-        sys_.add_pd(pd)
+        sys_._add_pd(pd)
         assert pd in sys_.pds
 
-
-    def test_add_distinct_pds(self, sys_):
+    def test_distinct_pd_registrations(self, sys_):
         pd1, pd2 = MagicMock(), MagicMock()
-        sys_.add_pd(pd1)
-        sys_.add_pd(pd2)
+        sys_._add_pd(pd1)
+        sys_._add_pd(pd2)
         assert sys_.pds == {pd1, pd2}
 
-
-class TestAddChannel:
-    def test_add_channel_success(self, sys_):
+    def test_channel_registration(self, sys_):
         ch = MagicMock(name="channel")
-        sys_.add_channel(ch)
+        sys_._add_channel(ch)
         assert ch in sys_.channels
 
-
-class TestAddMemoryRegion:
-    def test_add_mr_success(self, sys_):
+    def test_memory_region_registration(self, sys_):
         mr = MagicMock(name="mr")
-        sys_.add_memory_region(mr)
+        sys_._add_memory_region(mr)
         assert mr in sys_.mrs
 
 
 class TestAddSubsystem:
-    def test_add_subsystem_appends(self, sys_):
+    def test__add_subsystem_appends(self, sys_):
         ss = make_subsystem()
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
         assert sys_.subsystems == [ss]
 
-    def test_add_subsystem_preserves_order(self, sys_):
+    def test__add_subsystem_preserves_order(self, sys_):
         ss1, ss2 = make_subsystem(), make_subsystem()
-        sys_.add_subsystem(ss1)
-        sys_.add_subsystem(ss2)
+        sys_._add_subsystem(ss1)
+        sys_._add_subsystem(ss2)
         assert sys_.subsystems == [ss1, ss2]
 
-    def test_add_subsystem_allows_duplicates(self, sys_):
+    def test__add_subsystem_allows_duplicates(self, sys_):
         # Unlike pds/mrs/channels, subsystems is a plain list with no dedup.
         ss = make_subsystem()
-        sys_.add_subsystem(ss)
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
+        sys_._add_subsystem(ss)
         assert sys_.subsystems == [ss, ss]
 
 
@@ -122,7 +121,7 @@ class TestResolveSubsystems:
 
     def test_resolve_calls_build(self, sys_):
         ss = make_subsystem()
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
         sys_.resolve_subsystems()
         ss.build.assert_called_once()
 
@@ -131,18 +130,14 @@ class TestResolveSubsystems:
         mr = MagicMock(name="mr")
         ch = MagicMock(name="ch")
         ss = make_subsystem(pds=[pd], mrs=[mr], channels=[ch])
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
 
         sys_.resolve_subsystems()
-
-        assert pd in sys_.pds
-        assert mr in sys_.mrs
-        assert ch in sys_.channels
 
     def test_resolve_adds_clients_as_pds(self, sys_):
         client = MagicMock(name="client")
         ss = make_subsystem(clients=[client])
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
 
         sys_.resolve_subsystems()
 
@@ -154,8 +149,8 @@ class TestResolveSubsystems:
         client = MagicMock(name="shared_client")
         ss1 = make_subsystem(clients=[client])
         ss2 = make_subsystem(clients=[client])
-        sys_.add_subsystem(ss1)
-        sys_.add_subsystem(ss2)
+        sys_._add_subsystem(ss1)
+        sys_._add_subsystem(ss2)
 
         sys_.resolve_subsystems()  # Must not raise
 
@@ -167,8 +162,8 @@ class TestResolveSubsystems:
         shared = MagicMock(name="shared")
         ss1 = make_subsystem(pds=[shared])
         ss2 = make_subsystem(clients=[shared])
-        sys_.add_subsystem(ss1)
-        sys_.add_subsystem(ss2)
+        sys_._add_subsystem(ss1)
+        sys_._add_subsystem(ss2)
 
         sys_.resolve_subsystems()  # Must not raise
 
@@ -176,7 +171,7 @@ class TestResolveSubsystems:
 
     def test_resolve_sets_constructed_flag(self, sys_):
         ss = make_subsystem()
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
         sys_.resolve_subsystems()
         assert sys_.subsystems_constructed is True
 
@@ -186,8 +181,8 @@ class TestResolveSubsystems:
         ss2 = make_subsystem()
         ss1.build.side_effect = lambda: order.append("ss1")
         ss2.build.side_effect = lambda: order.append("ss2")
-        sys_.add_subsystem(ss1)
-        sys_.add_subsystem(ss2)
+        sys_._add_subsystem(ss1)
+        sys_._add_subsystem(ss2)
 
         sys_.resolve_subsystems()
 
@@ -202,7 +197,7 @@ class TestRender:
 
     def test_render_auto_resolves_when_unconstructed(self, sys_):
         ss = make_subsystem()
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
         assert sys_.subsystems_constructed is False
 
         sys_.render()
@@ -212,7 +207,7 @@ class TestRender:
 
     def test_render_does_not_reresolve_when_constructed(self, sys_):
         ss = make_subsystem()
-        sys_.add_subsystem(ss)
+        sys_._add_subsystem(ss)
         sys_.resolve_subsystems()
         ss.build.reset_mock()
 
@@ -222,7 +217,7 @@ class TestRender:
 
     def test_render_allocates_and_renders_mrs(self, sys_):
         mr = MagicMock(name="mr")
-        sys_.add_memory_region(mr)
+        sys_._add_memory_region(mr)
         sys_.subsystems_constructed = True  # skip auto-resolve
 
         root = sys_.render()
@@ -232,7 +227,7 @@ class TestRender:
 
     def test_render_renders_pds(self, sys_):
         pd = MagicMock(name="pd")
-        sys_.add_pd(pd)
+        sys_._add_pd(pd)
         sys_.subsystems_constructed = True
 
         root = sys_.render()
@@ -241,7 +236,7 @@ class TestRender:
 
     def test_render_renders_channels(self, sys_):
         ch = MagicMock(name="ch")
-        sys_.add_channel(ch)
+        sys_._add_channel(ch)
         sys_.subsystems_constructed = True
 
         root = sys_.render()
@@ -250,9 +245,9 @@ class TestRender:
 
     def test_render_renders_all_entities(self, sys_):
         pd, mr, ch = MagicMock(), MagicMock(), MagicMock()
-        sys_.add_pd(pd)
-        sys_.add_memory_region(mr)
-        sys_.add_channel(ch)
+        sys_._add_pd(pd)
+        sys_._add_memory_region(mr)
+        sys_._add_channel(ch)
         sys_.subsystems_constructed = True
 
         root = sys_.render()

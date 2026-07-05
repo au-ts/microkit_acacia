@@ -21,9 +21,10 @@ class Channel:
             if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
                 raise ValueError(f"Invalid channel id {self.ch_id}!")
 
-    def __init__(self, end_a: End, end_b: End):
+    def __init__(self, end_a: End, end_b: End, sdf: System):
         self.end_a = end_a
         self.end_b = end_b
+        self.sdf = sdf
 
         # Enforce that PPCs only go to higher priorities
         for pp_caller, pp_receiver in [(end_a, end_b), (end_b, end_a)]:
@@ -38,6 +39,9 @@ class Channel:
         # Allocate channel IDs
         for end in [end_a, end_b]:
             end.ch_id = end.pd.allocate_id(end.ch_id)
+
+        # Allocate ourself to SDF
+        self.sdf._add_channel(self)
 
     def render(self, system_root: et.Element):
         channel = et.SubElement(system_root, "channel")

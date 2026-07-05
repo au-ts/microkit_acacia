@@ -49,7 +49,7 @@ class Arch:
 
     def roundup_to_page(self, n: int) -> int:
         p_sz = self.default_page_size()
-        return n if n % p_sz == 0 else n + p_sz - (n % p_sz)
+        return (n + p_sz - 1) & ~(p_sz - 1)
 
     def rounddown_to_page(self, n: int) -> int:
         p_sz = self.default_page_size()

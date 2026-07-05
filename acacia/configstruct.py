@@ -1,6 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+from __future__ import annotations
 import pathlib
 import os, sys, subprocess
 from dataclasses import dataclass
@@ -11,14 +12,20 @@ from ctypes import (
     c_uint32,
     c_uint16,
     c_uint8,
+    c_int64,
+    c_int32,
+    c_int16,
+    c_int8,
     c_char,
     Array,
     Structure,
     sizeof,
 )
-from ctypes import c_int64, c_int32, c_int16, c_int8
-from typing import List, Dict, Optional, Tuple, Any
-from .memory import Map
+from typing import List, Dict, Optional, Tuple, Any, TYPE_CHECKING
+
+# To avoid circular imports, we only do a "real" import when type checking.
+if TYPE_CHECKING:
+    from acacia.memory import MemoryRegion, Map
 
 # approximately fine..?
 c_uintptr = c_uint64
@@ -27,11 +34,6 @@ c_uintptr = c_uint64
 def uint_max(n):
     return (1 << n) - 1
 
-
-# Microkit constants ... TODO: replace with something not hard coded
-DEVICE_MAGIC_LEN = 5
-DEVICE_MAX_REGIONS = 64
-DEVICE_MAX_IRQS = 64
 
 # TODO: support endianness changes using util ctypes wrapper
 # WARNING: currently assumes host is little endian 64 bit!
@@ -50,7 +52,9 @@ class ConfigStruct:
     """
 
     typedef_name: str
-    # Symbol name/target file is only needed for the top-level struct.
+    # We define a target file and section for config structs that are outputted as data files, i.e.
+    # the top level ConfigStruct in any set of nested ConfigStructs. If we have one inside of the
+    # other, we obviously can't map the sub-struct to a different location than its parent.
     section_name: Optional[str]
     target_file: Optional[str]
     # Dict of field names -> int values, other ConfigStruct ojects, or lists of either (arrays)
@@ -66,15 +70,7 @@ class ConfigStruct:
                 a. Another ConfigStruct
                 b. Any int-like value
                 c. Any string
-                d. A list of ConfigStructs of ints
-            NOTE: we follow the existing sdfgen idiom here by
-            assuming PDs are initialised with the name of a
-            copied ELF file if they are duplicates. In future
-            we could do this automatically...
-
-            This can probably be done by subsystems by doing the ELF copy
-            in-place. At any rate:
-            **This method expects the copied ELF file!**
+                d. A list of ConfigStructs
         """
         self.typedef_name = typedef_name
         self.target_file = target_file
@@ -103,22 +99,10 @@ class DwarfStructMember:
 
 @dataclass
 class DwarfStruct:
-    type_name: str
-    typedef_name: str
+    type_name: str  # The underlying type, e.g. long long
+    typedef_name: str  # Whatever type alias has been defined, e.g. `sddf_blah_t`
     size: int
     members: List[DwarfStructMember]
-
-    def __eq__(self, o):
-        if self.type_name != o.type_name:
-            return False
-        if self.typedef_name != o.typedef_name:
-            return False
-        if len(self.members) != len(o.members):
-            return False
-        for m in range(len(self.members)):
-            if self.members[m] != o.members[m]:
-                return False
-        return True
 
 
 # BUG: we currently have a hard time resolving some types from the C library
@@ -143,7 +127,23 @@ BaseTypesMap: Dict[str, Any] = {
 
 class ConfigStructDwarfDumper:
     """
-    Class encapsulating operating using llvm-dwarfdump as a subprocess call.
+    This class is responsible for taking an ELF file and finding structs matching our Python
+    configstructs. We use llvm-dwarfdump to do this, and with the concrete struct we can form
+    a "blueprint" for how to lay out our Python struct in a C-friendly format.
+
+    E.g. if we have some struct
+    ```
+    typedef struct {
+        uint64_t a;
+        char magic[6];
+    }
+
+    ... we can find the true size of uint64_t and char, and how the struct is padded. We can then take
+    our Python representation with values `int(5)` and `str("Hello!")` and pack them into that shape and
+    generate a configuration blob.
+
+    This class is responsible for driving llvm-dwarfdump while `ConfigStructResolver` is responsible for
+    matching the Python representation to the C representation.
     """
 
     def __init__(self, build_dir: pathlib.Path, dwarfdump_name: str = "llvm-dwarfdump"):
@@ -153,14 +153,13 @@ class ConfigStructDwarfDumper:
         try:
             subprocess.run([self.bin, "--version"])
         except FileNotFoundError as e:
-            print(
-                "Failed to find `llvm-dwarfdump`! Make sure it is installed and on your path..."
-            )
-            raise RuntimeError(f"No LLVM DwarfDump! {e}")
+            raise RuntimeError(
+                f"No LLVM DwarfDump! Make sure {dwarfdump_name} is on your PATH"
+            ) from e
 
-        self.files: Dict[str, List[List[str]]] = (
-            {}
-        )  #  each entry is a DW_Tag, grouped with child elements.
+        self.files: Dict[str, List[List[str]]] = {}
+        #  each entry is a DW_Tag, grouped with child elements e.g.
+        # [ "DW_TAG_blah", "DW_FIELD_zah = 1", "DW_THING = tada" ]
         self.file_structs: Dict[str, Dict[str, DwarfStruct]] = defaultdict(
             dict
         )  # file_name -> dict(struct_name -> index in `files`
@@ -217,7 +216,7 @@ class ConfigStructDwarfDumper:
 
         # Now, scrape typedefs and associated struct types
         typedefs: Dict[str, str] = {}  # type_name -> typedef_name
-        for i, tag in enumerate(self.files[target_file]):
+        for tag in self.files[target_file]:
             if "DW_TAG_typedef" in tag[0]:
                 # Bingo!
                 # These fields sometimes are out of order, so we abuse `next` to search
@@ -682,49 +681,3 @@ class ConfigStructResolver:
         """
         for f in self.files.keys():
             self.resolve_file_and_create_structs(f)
-
-
-def RegionResourceFactory(map: Map, section_name: Optional[str] = None):
-    fields = {"vaddr": map.vaddr, "size": map.mr.size}
-    return ConfigStruct("region_resource_t", section_name=section_name, fields=fields)
-
-
-# TODO: extract to sddf
-def DeviceRegionResourceFactory(region: ConfigStruct, io_addr: int):
-    fields = {"region": region, "io_addr": io_addr}
-    return ConfigStruct("device_region_resource_t", fields=fields)
-
-
-def DeviceIRQResourceFactory(id: int):
-    fields = {"id": id}
-    return ConfigStruct("device_irq_resource_t", fields=fields)
-
-
-def DeviceResourcesFactory(
-    magic_str: str,
-    maps: List[Map],
-    irq_ids: List[int],
-    target_file: str,
-    section_name="device_resources",
-):
-    region_structs = []
-    for m in maps:
-        if m.mr.paddr is None:
-            raise ValueError("Device region map has no physical address")
-        region_structs.append(
-            DeviceRegionResourceFactory(RegionResourceFactory(m), m.mr.paddr)
-        )
-    irq_structs = [DeviceIRQResourceFactory(i) for i in irq_ids]
-    fields = {
-        "magic": magic_str,
-        "num_regions": len(region_structs),
-        "num_irqs": len(irq_structs),
-        "regions": region_structs,
-        "irqs": irq_structs,
-    }
-    return ConfigStruct(
-        "device_resources_t",
-        section_name=section_name,
-        fields=fields,
-        target_file=target_file,
-    )

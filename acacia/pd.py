@@ -5,6 +5,7 @@ from typing import Optional, Set, Union, List, Sequence
 from dataclasses import dataclass
 from abc import ABC
 import xml.etree.ElementTree as et
+from .system import System
 from .memory import MemoryRegion, Map
 from .arch import SDFMemoryAllocator
 from .irq import IRQ
@@ -97,16 +98,26 @@ class Entity:
         if len(self.maps) != 0:
             # python sorted() is adaptive, so this doesn't waste much time on repeats!
             self.maps = sorted(self.maps, key=lambda m: m.vaddr)
-            last_vaddr_end = self.maps[-1].vaddr + self.maps[-1].size
 
-            # pad by one page
-            if last_vaddr_end % page_size:
-                next_vaddr = (last_vaddr_end - (last_vaddr_end % page_size)) + page_size
-            else:
-                next_vaddr = last_vaddr_end
+            # We now want to find a good gap. I.e.
+            # a) we want to be as close to start_vaddr as possible
+            # b) we want to preserve guard pages between mappings
+            # NOTE: we could accelerate this by remembering continguously allocated ranges.
+            prev_guard_page_end = self.map_start_vaddr
+            for m in self.maps:
+                # If the space between the previous end and this start is big enough to fit
+                # our new map AND a guard page on either side, accept it.
+                if prev_guard_page_end + mr.size + page_size < m.vaddr:
+                    # Fits!
+                    break
+                prev_guard_page_end = m.end_vaddr + page_size
 
-            # Add space for a guard page
-            next_vaddr += page_size
+            # Align address to page boundary
+            next_vaddr = (prev_guard_page_end + page_size - 1) & ~(page_size - 1)
+
+            # Add space for a guard page, unless we are still at the start
+            if next_vaddr != self.map_start_vaddr:
+                next_vaddr += page_size
         else:
             next_vaddr = self.map_start_vaddr
 
@@ -193,6 +204,7 @@ class ProtectionDomain(Entity):
         self,
         name: str,
         prog_image: str,
+        sdf: System,
         stack_size: Optional[int] = None,
         cpu: Optional[int] = None,
         smc: bool = False,
@@ -219,15 +231,17 @@ class ProtectionDomain(Entity):
         self.smc = smc
         self.irqs: Set[IRQ] = set()
         self.ioports: List[IOPort] = []
-        self.assigned_ids: List[int] = []
+        self.sdf = sdf
 
         # Parental responsibilities
-        self.assigned_child_ids: List[int] = []
         self.children: List[ProtectionDomain] = []
         self.child_id = None  # Assigned if this PD is made a child.
 
         # VM
         self.vm: Optional[VirtualMachine] = None
+
+        # Allocate ourselves to SDF
+        self.sdf._add_pd(self)
 
     def render(self, parent: et.Element, elem_name: str = "protection_domain"):
         pd = super().render(parent, elem_name)
@@ -261,33 +275,23 @@ class ProtectionDomain(Entity):
         """
         Allocate an ID (or test a requested id) for a channel or IRQ.
         """
+        allocated_irq_ids = [irq.id for irq in self.irqs if irq.id is not None]
+        allocated_ch_ids = [
+            end.ch_id
+            for ch in self.sdf.channels
+            for end in (ch.end_a, ch.end_b)
+            if end.pd is self and end.ch_id is not None
+        ]
+        assigned_ids: List[int] = sorted(allocated_ch_ids + allocated_irq_ids)
+
         if requested_id is not None:
-            if requested_id not in self.assigned_ids:
-                self.assigned_ids.append(requested_id)
+            if requested_id not in assigned_ids:
                 return requested_id
             else:
                 raise RuntimeError("Requested ID is not available!")
 
-        else:
-            new_id = next(i for i in range(MAX_IDS) if i not in self.assigned_ids)
-            self.assigned_ids.append(new_id)
-            return new_id
-
-    def allocate_child_pd_id(self, requested_id: Optional[int] = None):
-        """
-        Allocate an ID (or test a requested id) for a child PD
-        """
-        if requested_id is not None:
-            if requested_id not in self.assigned_child_ids:
-                self.assigned_child_ids.append(requested_id)
-                return requested_id
-            else:
-                raise RuntimeError("Requested ID is not available!")
-
-        else:
-            new_id = next(i for i in range(MAX_IDS) if i not in self.assigned_child_ids)
-            self.assigned_child_ids.append(new_id)
-            return new_id
+        new_id = next(i for i in range(MAX_IDS) if i not in assigned_ids)
+        return new_id
 
     def add_irq(self, irq: IRQ):
         if irq in self.irqs:
@@ -304,8 +308,15 @@ class ProtectionDomain(Entity):
     def add_child_pd(self, child, child_id: Optional[int] = None):
         if child in self.children:
             raise RuntimeError("Cannot make the same PD a child multiple times!")
-        child_id = self.allocate_child_pd_id(child_id)
-        child.child_id = child_id
+        assigned_ids = [child.child_id for child in self.children]
+        if child_id is None:
+            new_child_id = next(i for i in range(MAX_IDS) if i not in assigned_ids)
+        else:
+            if child_id not in assigned_ids:
+                new_child_id = child_id
+            else:
+                raise RuntimeError(f"Child ID {child_id} is unavailable!")
+        child.child_id = new_child_id
         self.children.append(child)
 
     def set_vm(self, vm: VirtualMachine):

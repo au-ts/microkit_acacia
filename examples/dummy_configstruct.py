@@ -1,6 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+from typing import Optional, List
 from acacia import (
     ProtectionDomain,
     Subsystem,
@@ -9,20 +10,68 @@ from acacia import (
     MemoryRegion,
     System,
     SchedulingProperties,
-)
-from acacia.arch import aarch64
-from acacia.configstruct import (
     ConfigStruct,
-    DeviceResourcesFactory,
     ConfigStructResolver,
 )
+from acacia.arch import aarch64
 from acacia.irq import IRQ, ConventionalIRQ
+
+DEVICE_MAGIC_LEN = 5
+DEVICE_MAX_REGIONS = 64
+DEVICE_MAX_IRQS = 64
+
+
+# these factory functions mirror the sDDF ones!
+def RegionResourceFactory(map: "Map", section_name: Optional[str] = None):
+    fields = {"vaddr": map.vaddr, "size": map.mr.size}
+    return ConfigStruct("region_resource_t", section_name=section_name, fields=fields)
+
+
+def DeviceRegionResourceFactory(region: ConfigStruct, io_addr: int):
+    fields = {"region": region, "io_addr": io_addr}
+    return ConfigStruct("device_region_resource_t", fields=fields)
+
+
+def DeviceIRQResourceFactory(id: int):
+    fields = {"id": id}
+    return ConfigStruct("device_irq_resource_t", fields=fields)
+
+
+def DeviceResourcesFactory(
+    magic_str: str,
+    maps: List["Map"],
+    irq_ids: List[int],
+    target_file: str,
+    section_name="device_resources",
+):
+    region_structs = []
+    for m in maps:
+        if m.mr.paddr is None:
+            raise ValueError("Device region map has no physical address")
+        region_structs.append(
+            DeviceRegionResourceFactory(RegionResourceFactory(m), m.mr.paddr)
+        )
+    irq_structs = [DeviceIRQResourceFactory(i) for i in irq_ids]
+    fields = {
+        "magic": magic_str,
+        "num_regions": len(region_structs),
+        "num_irqs": len(irq_structs),
+        "regions": region_structs,
+        "irqs": irq_structs,
+    }
+    return ConfigStruct(
+        "device_resources_t",
+        section_name=section_name,
+        fields=fields,
+        target_file=target_file,
+    )
 
 
 class DummyI2C(Subsystem):
-    def __init__(self, irq_type=ConventionalIRQ):
-        super().__init__("i2c")
+    def __init__(self, sdf: System, irq_type=ConventionalIRQ):
+        super().__init__("i2c", sdf)
         self.driver = None
+        self.sdf = sdf
         self.magic = "dmi2c"
         self.irq_type = irq_type
         self.construct_infrastructure(200)
@@ -40,6 +89,7 @@ class DummyI2C(Subsystem):
             ch = Channel(
                 Channel.End(c, can_notify=False, can_pp=True),
                 Channel.End(self.driver, can_notify=False, can_pp=False),
+                self.sdf,
             )
             self.channels.append(ch)
 
@@ -48,11 +98,12 @@ class DummyI2C(Subsystem):
         self.driver = ProtectionDomain(
             "i2c_driver",
             "i2c_driver.elf",
+            sdf,
             scheduling=SchedulingProperties(driver_prio, passive=True),
         )
         self.pds.append(self.driver)
 
-        dev_mem = MemoryRegion("i2c_ctrl", 0x1000, paddr=0x37370000)
+        dev_mem = MemoryRegion("i2c_ctrl", 0x1000, self.sdf, paddr=0x37370000)
         self.mrs.append(dev_mem)
         dev_mem_map = Map(dev_mem, 0x10000000, Map.Permissions(r=True, w=True))
         self.dev_mem = dev_mem_map
@@ -89,23 +140,23 @@ class DummyI2C(Subsystem):
 
 sdf = System(aarch64, paddr_top=0x100000000)
 
-i2c = DummyI2C()
-client1 = ProtectionDomain("client1", "client1.elf", priority=1)
-client2 = ProtectionDomain("client2", "client2.elf", priority=1)
-client3 = ProtectionDomain("client3", "client3.elf", priority=1)
+i2c = DummyI2C(sdf)
+client1 = ProtectionDomain("client1", "client1.elf", sdf, priority=1)
+client2 = ProtectionDomain("client2", "client2.elf", sdf, priority=1)
+client3 = ProtectionDomain("client3", "client3.elf", sdf, priority=1)
 
 # Add a channel between two of the clients to check that channel mapping is correct.
 # Clients 1 and 2 should have a configstruct with driver_id = 1
 ch12 = Channel(
     Channel.End(client1, can_notify=True, can_pp=False),
     Channel.End(client2, can_notify=True, can_pp=False),
+    sdf,
 )
 sdf.add_channel(ch12)
 
 for c in [client1, client2, client3]:
     i2c.add_client(c)
 
-sdf.add_subsystem(i2c)
 sdf.resolve_subsystems()
 
 structs = i2c.generate_config_structs()
