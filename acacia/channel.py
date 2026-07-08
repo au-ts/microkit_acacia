@@ -21,7 +21,7 @@ class Channel:
             if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
                 raise ValueError(f"Invalid channel id {self.ch_id}!")
 
-    def __init__(self, end_a: End, end_b: End, sdf: System):
+    def __init__(self, sdf: System, end_a: End, end_b: End):
         self.end_a = end_a
         self.end_b = end_b
         self.sdf = sdf

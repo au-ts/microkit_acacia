@@ -7,23 +7,23 @@ import xml.etree.ElementTree as et
 
 sdf = System(aarch64, paddr_top=0x10000)
 
-parent = ProtectionDomain("driver", "driver.elf", sdf, priority=200)
-client_a = ProtectionDomain("client_a", "client_a.elf", sdf, priority=100)
-client_b = ProtectionDomain("client_b", "client_b.elf", sdf, priority=100)
+parent = ProtectionDomain(sdf, "driver", "driver.elf", priority=200)
+client_a = ProtectionDomain(sdf, "client_a", "client_a.elf", priority=100)
+client_b = ProtectionDomain(sdf, "client_b", "client_b.elf", priority=100)
 
 parent.add_child_pd(client_a)
 parent.add_child_pd(client_b, child_id=5)
 
-shm = MemoryRegion("shm", 0x1000, sdf)
+shm = MemoryRegion(sdf, "shm", 0x1000)
 parent.add_map(Map(shm, 0x40000000, "rw"))
 client_a.add_map(Map(shm, 0x40000000, "r"))
 client_b.add_map(Map(shm, 0x40000000, "rw"))
 
 # Channel between sibling PDs
 ch = Channel(
+    sdf,
     Channel.End(pd=client_a, can_notify=True, can_pp=False),
     Channel.End(pd=client_b, can_notify=True, can_pp=False),
-    sdf,
 )
 sdf.add_channel(ch)
 

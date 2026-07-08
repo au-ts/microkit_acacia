@@ -69,7 +69,7 @@ def DeviceResourcesFactory(
 
 class DummyI2C(Subsystem):
     def __init__(self, sdf: System, irq_type=ConventionalIRQ):
-        super().__init__("i2c", sdf)
+        super().__init__(sdf, "i2c")
         self.driver = None
         self.sdf = sdf
         self.magic = "dmi2c"
@@ -87,23 +87,23 @@ class DummyI2C(Subsystem):
                 )
             # Make channel
             ch = Channel(
+                self.sdf,
                 Channel.End(c, can_notify=False, can_pp=True),
                 Channel.End(self.driver, can_notify=False, can_pp=False),
-                self.sdf,
             )
             self.channels.append(ch)
 
     def construct_infrastructure(self, driver_prio: int):
         # Make driver
         self.driver = ProtectionDomain(
+            sdf,
             "i2c_driver",
             "i2c_driver.elf",
-            sdf,
             scheduling=SchedulingProperties(driver_prio, passive=True),
         )
         self.pds.append(self.driver)
 
-        dev_mem = MemoryRegion("i2c_ctrl", 0x1000, self.sdf, paddr=0x37370000)
+        dev_mem = MemoryRegion(self.sdf, "i2c_ctrl", 0x1000, paddr=0x37370000)
         self.mrs.append(dev_mem)
         dev_mem_map = Map(dev_mem, 0x10000000, Map.Permissions(r=True, w=True))
         self.dev_mem = dev_mem_map
@@ -141,16 +141,16 @@ class DummyI2C(Subsystem):
 sdf = System(aarch64, paddr_top=0x100000000)
 
 i2c = DummyI2C(sdf)
-client1 = ProtectionDomain("client1", "client1.elf", sdf, priority=1)
-client2 = ProtectionDomain("client2", "client2.elf", sdf, priority=1)
-client3 = ProtectionDomain("client3", "client3.elf", sdf, priority=1)
+client1 = ProtectionDomain(sdf, "client1", "client1.elf", priority=1)
+client2 = ProtectionDomain(sdf, "client2", "client2.elf", priority=1)
+client3 = ProtectionDomain(sdf, "client3", "client3.elf", priority=1)
 
 # Add a channel between two of the clients to check that channel mapping is correct.
 # Clients 1 and 2 should have a configstruct with driver_id = 1
 ch12 = Channel(
+    sdf,
     Channel.End(client1, can_notify=True, can_pp=False),
     Channel.End(client2, can_notify=True, can_pp=False),
-    sdf,
 )
 sdf.add_channel(ch12)
 

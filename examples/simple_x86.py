@@ -10,43 +10,43 @@ import xml.etree.ElementTree as et
 sdf = System(x86_64, paddr_top=0x10000)
 
 # PDs
-net_driver = ProtectionDomain("net_driver", "net_driver.elf", sdf, priority=200)
+net_driver = ProtectionDomain(sdf, "net_driver", "net_driver.elf", priority=200)
 
 serial_driver = ProtectionDomain(
-    "serial_driver", "serial_driver.elf", sdf, priority=199
+    sdf, "serial_driver", "serial_driver.elf", priority=199
 )
 
-timer_driver = ProtectionDomain("timer_driver", "timer_driver.elf", sdf, priority=254)
+timer_driver = ProtectionDomain(sdf, "timer_driver", "timer_driver.elf", priority=254)
 
-net_virt = ProtectionDomain("net_virt", "net_virt.elf", sdf, priority=198)
+net_virt = ProtectionDomain(sdf, "net_virt", "net_virt.elf", priority=198)
 
 # dummy clients
-client_http = ProtectionDomain("client_http", "client_http.elf", sdf, priority=1)
-client_dns = ProtectionDomain("client_dns", "client_dns.elf", sdf, priority=1)
+client_http = ProtectionDomain(sdf, "client_http", "client_http.elf", priority=1)
+client_dns = ProtectionDomain(sdf, "client_dns", "client_dns.elf", priority=1)
 
 # Channels
 ch_http = Channel(
+    sdf,
     Channel.End(pd=client_http, can_notify=True, can_pp=True),
     Channel.End(pd=net_virt, can_notify=True, can_pp=False),
-    sdf,
 )
 
 ch_dns = Channel(
+    sdf,
     Channel.End(pd=client_dns, can_notify=True, can_pp=True),
     Channel.End(pd=net_virt, can_notify=True, can_pp=False),
-    sdf,
 )
 
 ch_timer_http = Channel(
+    sdf,
     Channel.End(pd=client_http, can_notify=False, can_pp=True),
     Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
-    sdf,
 )
 
 ch_timer_dns = Channel(
+    sdf,
     Channel.End(pd=client_dns, can_notify=False, can_pp=True),
     Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
-    sdf,
 )
 
 sdf.add_channel(ch_http)
@@ -55,8 +55,8 @@ sdf.add_channel(ch_timer_http)
 sdf.add_channel(ch_timer_dns)
 
 # MRs
-net_mmio = MemoryRegion("net_mmio", 0x4000, sdf, paddr=0xFEB00000)
-serial_mmio = MemoryRegion("serial_mmio", 0x1000, sdf, paddr=0xFEB40000)
+net_mmio = MemoryRegion(sdf, "net_mmio", 0x4000, paddr=0xFEB00000)
+serial_mmio = MemoryRegion(sdf, "serial_mmio", 0x1000, paddr=0xFEB40000)
 sdf.add_memory_region(net_mmio)
 sdf.add_memory_region(serial_mmio)
 

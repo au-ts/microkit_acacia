@@ -26,14 +26,14 @@ class TestChannelEnd:
 
 class TestChannel:
     def create_pd(self, sdf, name, priority):
-        return ProtectionDomain(name, f"{name}.elf", sdf, priority=priority)
+        return ProtectionDomain(sdf, name, f"{name}.elf", priority=priority)
 
     def test_valid_channel_creation(self, sdf):
         pd1 = self.create_pd(sdf, "pd1", 100)
         pd2 = self.create_pd(sdf, "pd2", 200)
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=False)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False)
-        ch = Channel(end_a, end_b, sdf)
+        ch = Channel(sdf, end_a, end_b)
         assert ch.end_a.pd == pd1
         assert ch.end_b.pd == pd2
 
@@ -43,7 +43,7 @@ class TestChannel:
         high_pd = self.create_pd(sdf, "high", 200)
         end_a = Channel.End(pd=low_pd, can_notify=True, can_pp=True)  # Low calls high
         end_b = Channel.End(pd=high_pd, can_notify=True, can_pp=False)
-        ch = Channel(end_a, end_b, sdf)  # Should not raise
+        ch = Channel(sdf, end_a, end_b)  # Should not raise
         assert ch.end_a.can_pp
 
     def test_ppc_high_to_low_rejected(self, sdf):
@@ -55,7 +55,7 @@ class TestChannel:
         )  # High calls low - invalid
         end_b = Channel.End(pd=low_pd, can_notify=True, can_pp=False)
         with pytest.raises(RuntimeError):
-            Channel(end_a, end_b, sdf)
+            Channel(sdf, end_a, end_b)
 
     def test_ppc_same_priority_rejected(self, sdf):
         """PPC between same priorities should fail"""
@@ -64,14 +64,14 @@ class TestChannel:
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=True)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False)
         with pytest.raises(RuntimeError):
-            Channel(end_a, end_b, sdf)
+            Channel(sdf, end_a, end_b)
 
     def test_channel_id_allocation(self, sdf):
         pd1 = self.create_pd(sdf, "pd1", 100)
         pd2 = self.create_pd(sdf, "pd2", 200)
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=False, ch_id=None)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False, ch_id=None)
-        Channel(end_a, end_b, sdf)
+        Channel(sdf, end_a, end_b)
         # IDs should have been allocated
         assert end_a.ch_id is not None
         assert end_b.ch_id is not None
@@ -81,7 +81,7 @@ class TestChannel:
         pd2 = self.create_pd(sdf, "pd2", 200)
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=False, ch_id=5)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False, ch_id=10)
-        Channel(end_a, end_b, sdf)
+        Channel(sdf, end_a, end_b)
         assert end_a.ch_id == 5
         assert end_b.ch_id == 10
 
@@ -90,7 +90,7 @@ class TestChannel:
         pd2 = self.create_pd(sdf, "pd2", 200)
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=True, ch_id=1)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False, ch_id=2)
-        ch = Channel(end_a, end_b, sdf)
+        ch = Channel(sdf, end_a, end_b)
         root = et.Element("system")
         ch.render(root)
         ch_elem = root.find("channel")
@@ -116,7 +116,7 @@ class TestChannel:
         pd2 = self.create_pd(sdf, "pd2", 200)
         end_a = Channel.End(pd=pd1, can_notify=False, can_pp=False, ch_id=1)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False, ch_id=2)
-        ch = Channel(end_a, end_b, sdf)
+        ch = Channel(sdf, end_a, end_b)
         root = et.Element("system")
         ch.render(root)
         ends = root.find("channel").findall("end")

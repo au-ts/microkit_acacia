@@ -58,14 +58,14 @@ class TestSchedulingProperties:
 class TestProtectionDomain:
     def test_invalid_program_image(self, sdf):
         with pytest.raises(ValueError, match="Non-elf"):
-            ProtectionDomain("test", "test.bin", sdf)
+            ProtectionDomain(sdf, "test", "test.bin")
 
     def test_valid_program_image(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf)
+        pd = ProtectionDomain(sdf, "test", "test.elf")
         assert pd.prog_image == "test.elf"
 
     def test_priority_convenience_constructor(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         assert pd.priority == 100
 
     def test_priority_and_scheduling_conflict(self, sdf):
@@ -73,30 +73,30 @@ class TestProtectionDomain:
         with pytest.raises(
             RuntimeError, match="Cannot define.*SchedulingCharacteristics"
         ):
-            ProtectionDomain("test", "test.elf", sdf, priority=50, scheduling=sp)
+            ProtectionDomain(sdf, "test", "test.elf", priority=50, scheduling=sp)
 
     def test_stack_size_cpu_optional(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         pd.render(et.Element("system"))
         # Should not raise even without stack_size or cpu
 
     def test_stack_size_rendered(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100, stack_size=0x1000)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100, stack_size=0x1000)
         root = et.Element("system")
         pd.render(root)
         pd_elem = root.find("protection_domain")
         assert pd_elem.get("stack_size") == "4096"
 
     def test_cpu_rendered(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100, cpu=2)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100, cpu=2)
         root = et.Element("system")
         pd.render(root)
         pd_elem = root.find("protection_domain")
         assert pd_elem.get("cpu") == "2"
 
     def test_add_map(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
-        mr = MemoryRegion("test_mr", 0x1000, sdf)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
         m = Map(mr, 0x40000000, "rw")
         pd.add_map(m)
         assert len(pd.maps) == 1
@@ -104,7 +104,7 @@ class TestProtectionDomain:
 
 class TestProtectionDomainIdAllocation:
     def test_allocate_id_auto(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         id1 = pd.allocate_id()
         id2 = pd.allocate_id()
         # nothing should happen, we didn't assign those IDs to anything!
@@ -112,23 +112,23 @@ class TestProtectionDomainIdAllocation:
         assert id2 == 0
 
     def test_allocate_id_specific(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         id_val = pd.allocate_id(requested_id=5)
         assert id_val == 5
 
     def test_allocate_id_duplicate_irq_rejected(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=5)
         pd.add_irq(irq)
         with pytest.raises(RuntimeError, match="not available"):
             pd.allocate_id(requested_id=5)
 
     def test_allocate_id_duplicate_channel_rejected(self, sdf):
-        pd1 = ProtectionDomain("pd1", "pd1.elf", sdf, priority=100)
-        pd2 = ProtectionDomain("pd2", "pd2.elf", sdf, priority=200)
+        pd1 = ProtectionDomain(sdf, "pd1", "pd1.elf", priority=100)
+        pd2 = ProtectionDomain(sdf, "pd2", "pd2.elf", priority=200)
         end_a = Channel.End(pd=pd1, can_notify=True, can_pp=False, ch_id=5)
         end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False, ch_id=6)
-        Channel(end_a, end_b, sdf)
+        Channel(sdf, end_a, end_b)
 
         with pytest.raises(RuntimeError, match="not available"):
             pd1.allocate_id(requested_id=5)
@@ -136,7 +136,7 @@ class TestProtectionDomainIdAllocation:
             pd2.allocate_id(requested_id=6)
 
     def test_allocate_id_reserves_range(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         # Occupy the first five IDs with IRQs.
         for i in range(5):
             irq = ConventionalIRQ(i, ConventionalIRQ.Trigger.EDGE, id=i)
@@ -146,7 +146,7 @@ class TestProtectionDomainIdAllocation:
         assert id_val == 10
 
     def test_allocate_id_limit(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         # Fill all slots with IRQs.
         for i in range(MAX_IDS):
             irq = ConventionalIRQ(i, ConventionalIRQ.Trigger.EDGE, id=i)
@@ -156,13 +156,13 @@ class TestProtectionDomainIdAllocation:
             pd.allocate_id()
 
     def test_allocate_id_respects_channel_ids_in_same_system(self, sdf):
-        pd1 = ProtectionDomain("pd1", "pd1.elf", sdf, priority=100)
-        pd2 = ProtectionDomain("pd2", "pd2.elf", sdf, priority=200)
+        pd1 = ProtectionDomain(sdf, "pd1", "pd1.elf", priority=100)
+        pd2 = ProtectionDomain(sdf, "pd2", "pd2.elf", priority=200)
         # Create a channel whose ends occupy IDs 0 and 1.
         Channel(
+            sdf,
             Channel.End(pd1, can_notify=True, can_pp=False, ch_id=0),
             Channel.End(pd2, can_notify=True, can_pp=False, ch_id=1),
-            sdf,
         )
         assert pd1.allocate_id() == 1
         assert pd2.allocate_id() == 0
@@ -172,7 +172,7 @@ class TestProtectionDomainIrq:
     def test_add_irq_allocates_id(self, sdf):
         from acacia.irq import ConventionalIRQ
 
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
         pd.add_irq(irq)
         assert irq.id is not None
@@ -180,7 +180,7 @@ class TestProtectionDomainIrq:
     def test_add_irq_specific_id(self, sdf):
         from acacia.irq import ConventionalIRQ
 
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=7)
         pd.add_irq(irq)
         assert irq.id == 7
@@ -188,7 +188,7 @@ class TestProtectionDomainIrq:
     def test_add_same_irq_twice_rejected(self, sdf):
         from acacia.irq import ConventionalIRQ
 
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
         pd.add_irq(irq)
         with pytest.raises(RuntimeError, match="same IRQ"):
@@ -197,42 +197,42 @@ class TestProtectionDomainIrq:
 
 class TestChildPdAddition:
     def test_add_child_auto_id(self, sdf):
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
         parent.add_child_pd(child)
         assert child.child_id is not None
         assert child in parent.children
 
     def test_add_child_specific_id(self, sdf):
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
         parent.add_child_pd(child, child_id=10)
         assert child.child_id == 10
 
     def test_add_same_child_twice_rejected(self, sdf):
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
         parent.add_child_pd(child)
         with pytest.raises(RuntimeError, match="same PD"):
             parent.add_child_pd(child)
 
     def test_add_child_max_ids_exhausted(self, sdf):
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
         # Fill up all child slots
         for i in range(MAX_IDS):
-            child = ProtectionDomain(f"child_{i}", f"child_{i}.elf", sdf, priority=50)
+            child = ProtectionDomain(sdf, f"child_{i}", f"child_{i}.elf", priority=50)
             parent.add_child_pd(child)
 
         # Next one should fail when trying to find next available
-        extra_child = ProtectionDomain("extra", "extra.elf", sdf, priority=50)
+        extra_child = ProtectionDomain(sdf, "extra", "extra.elf", priority=50)
         with pytest.raises(StopIteration):  # next() fails when all ids used
             parent.add_child_pd(extra_child)
 
 
 class TestChildPdRendering:
     def test_child_rendered_as_nested_element(self, sdf):
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
         parent.add_child_pd(child, child_id=2)
 
         root = et.Element("system")
@@ -247,7 +247,7 @@ class TestChildPdRendering:
         assert child_elem.get("id") == "2"
 
     def test_child_without_parent_no_id_attribute(self, sdf):
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
         root = et.Element("system")
         child.render(root)
 
@@ -255,9 +255,9 @@ class TestChildPdRendering:
         assert child_elem.get("id") is None
 
     def test_multiple_children_rendered(self, sdf):
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child1 = ProtectionDomain("child1", "child1.elf", sdf, priority=50)
-        child2 = ProtectionDomain("child2", "child2.elf", sdf, priority=50)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child1 = ProtectionDomain(sdf, "child1", "child1.elf", priority=50)
+        child2 = ProtectionDomain(sdf, "child2", "child2.elf", priority=50)
 
         parent.add_child_pd(child1, child_id=1)
         parent.add_child_pd(child2, child_id=2)
@@ -273,9 +273,9 @@ class TestChildPdRendering:
         assert "2" in ids
 
     def test_nested_grandchildren(self, sdf):
-        grandparent = ProtectionDomain("gp", "gp.elf", sdf, priority=200)
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        grandparent = ProtectionDomain(sdf, "gp", "gp.elf", priority=200)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
 
         grandparent.add_child_pd(parent, child_id=1)
         parent.add_child_pd(
@@ -298,11 +298,11 @@ class TestChildPdIntegration:
     def test_child_with_maps_and_irqs(self, sdf):
         from acacia.irq import ConventionalIRQ
 
-        parent = ProtectionDomain("parent", "parent.elf", sdf, priority=100)
-        child = ProtectionDomain("child", "child.elf", sdf, priority=50)
+        parent = ProtectionDomain(sdf, "parent", "parent.elf", priority=100)
+        child = ProtectionDomain(sdf, "child", "child.elf", priority=50)
         parent.add_child_pd(child, child_id=3)
 
-        mr = MemoryRegion("test_mr", 0x1000, sdf)
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
         child.add_map(Map(mr, 0x40000000, "rw"))
 
         irq = ConventionalIRQ(42, ConventionalIRQ.Trigger.EDGE, id=None)
@@ -385,7 +385,7 @@ class TestVirtualMachine:
             SchedulingProperties(priority=100),
             vcpus=[VirtualMachine.VCPU(id=0)],
         )
-        mr = MemoryRegion("test_mr", 0x1000, sdf)
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
         m = Map(mr, 0x40000000, "rw")
         vm.add_map(m)
         assert len(vm.maps) == 1
@@ -411,7 +411,7 @@ class TestVirtualMachine:
 
 class TestProtectionDomainVM:
     def test_set_vm_success(self, sdf):
-        pd = ProtectionDomain("vmm", "vmm.elf", sdf, priority=254)
+        pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm = VirtualMachine(
             "guest",
             SchedulingProperties(priority=100),
@@ -421,7 +421,7 @@ class TestProtectionDomainVM:
         assert pd.vm is vm
 
     def test_set_vm_twice_rejected(self, sdf):
-        pd = ProtectionDomain("vmm", "vmm.elf", sdf, priority=254)
+        pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm1 = VirtualMachine(
             "guest1",
             SchedulingProperties(priority=100),
@@ -437,7 +437,7 @@ class TestProtectionDomainVM:
             pd.set_vm(vm2)
 
     def test_vm_rendered_inside_pd(self, sdf):
-        pd = ProtectionDomain("vmm", "vmm.elf", sdf, priority=254)
+        pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm = VirtualMachine(
             "guest",
             SchedulingProperties(priority=100),
@@ -452,8 +452,8 @@ class TestProtectionDomainVM:
         assert vm_elem.get("name") == "guest"
 
     def test_vm_with_maps_rendered(self, sdf):
-        pd = ProtectionDomain("vmm", "vmm.elf", sdf, priority=254)
-        mr = MemoryRegion("ram", 0x1000, sdf)
+        pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
+        mr = MemoryRegion(sdf, "ram", 0x1000)
         vm = VirtualMachine(
             "guest",
             SchedulingProperties(priority=100),
@@ -471,55 +471,55 @@ class TestProtectionDomainVM:
 
 class TestCreateAutomap:
     def test_first_map_uses_start_vaddr(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
-        mr = MemoryRegion("mr", 0x1000, sdf)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
+        mr = MemoryRegion(sdf, "mr", 0x1000)
         m = pd.create_automap(mr, "rw")
         assert m.vaddr == pd.map_start_vaddr
         assert m.vaddr % 0x1000 == 0
 
     def test_maps_are_page_aligned(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         # Odd-sized region still produces a page-aligned vaddr.
-        mr = MemoryRegion("mr", 0xABC, sdf)
+        mr = MemoryRegion(sdf, "mr", 0xABC)
         m = pd.create_automap(mr, "rw")
         assert m.vaddr % 0x1000 == 0
 
     def test_maps_do_not_overlap(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         sizes = [0x1000, 0x2000, 0x1000, 0x3000, 0x1000]
         for i, size in enumerate(sizes):
-            pd.create_automap(MemoryRegion(f"mr{i}", size, sdf), "rw")
+            pd.create_automap(MemoryRegion(sdf, f"mr{i}", size), "rw")
 
         for i, m1 in enumerate(pd.maps):
             for m2 in pd.maps[i + 1 :]:
                 assert not (m1.vaddr < m2.end_vaddr and m2.vaddr < m1.end_vaddr)
 
     def test_guard_page_between_consecutive_maps(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
-        m1 = pd.create_automap(MemoryRegion("mr1", 0x1000, sdf), "rw")
-        m2 = pd.create_automap(MemoryRegion("mr2", 0x1000, sdf), "rw")
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
+        m1 = pd.create_automap(MemoryRegion(sdf, "mr1", 0x1000), "rw")
+        m2 = pd.create_automap(MemoryRegion(sdf, "mr2", 0x1000), "rw")
         assert m2.vaddr >= m1.end_vaddr + 0x1000
 
     def test_fills_gap_near_start_vaddr(self, sdf):
         # A lone map far above start should leave the region near start_vaddr
         # available; the next automap must use it rather than append at the end.
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         far_map = Map(
-            MemoryRegion("far", 0x1000, sdf),
+            MemoryRegion(sdf, "far", 0x1000),
             pd.map_start_vaddr + 0x10_000_000,
             "rw",
         )
         pd.add_map(far_map)
 
-        m = pd.create_automap(MemoryRegion("gap", 0x1000, sdf), "rw")
+        m = pd.create_automap(MemoryRegion(sdf, "gap", 0x1000), "rw")
         assert m.vaddr == pd.map_start_vaddr
         assert m.vaddr % 0x1000 == 0
 
     def test_fills_gap_between_existing_maps(self, sdf):
-        pd = ProtectionDomain("test", "test.elf", sdf, priority=100)
-        mr1 = MemoryRegion("mr1", 0x1000, sdf)
-        mr2 = MemoryRegion("mr2", 0x1000, sdf)
-        gap_mr = MemoryRegion("gap", 0x1000, sdf)
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
+        mr1 = MemoryRegion(sdf, "mr1", 0x1000)
+        mr2 = MemoryRegion(sdf, "mr2", 0x1000)
+        gap_mr = MemoryRegion(sdf, "gap", 0x1000)
 
         m1 = Map(mr1, pd.map_start_vaddr, "rw")
         m2 = Map(mr2, pd.map_start_vaddr + 0x1000 + 0x10_000_000, "rw")

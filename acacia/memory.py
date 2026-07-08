@@ -19,9 +19,9 @@ class MemoryRegion:
 
     def __init__(
         self,
+        sdf: System,
         name: str,
         size: int,
-        sdf: System,
         paddr: Optional[int] = None,
         cached: bool = True,
         physical: bool = False,

@@ -29,7 +29,7 @@ class Subsystem(ABC):
     At init, the subsystem is just a container to add clients to.
     """
 
-    def __init__(self, name: str, sdf: System, clients_allowed: bool = True):
+    def __init__(self, sdf: System, name: str, clients_allowed: bool = True):
         if type(self) == Subsystem:
             raise TypeError("Cannot instantiate abstract base class!")
         self.name = name

@@ -202,9 +202,9 @@ class ProtectionDomain(Entity):
 
     def __init__(
         self,
+        sdf: System,
         name: str,
         prog_image: str,
-        sdf: System,
         stack_size: Optional[int] = None,
         cpu: Optional[int] = None,
         smc: bool = False,

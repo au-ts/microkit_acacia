@@ -13,8 +13,8 @@ from acacia import (
 
 sdf = System(aarch64, paddr_top=0x10000)
 
-vmm = ProtectionDomain("vmm", "vmm.elf", sdf, priority=254, cpu=0)
-vm_ram = MemoryRegion("vm_ram", 0x40000000, sdf)
+vmm = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254, cpu=0)
+vm_ram = MemoryRegion(sdf, "vm_ram", 0x40000000)
 sdf.add_memory_region(vm_ram)
 
 vcpu0 = VirtualMachine.VCPU(id=0, cpu=0)

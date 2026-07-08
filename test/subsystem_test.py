@@ -7,24 +7,26 @@ from acacia.subsystem import Subsystem
 from acacia.configstruct import ConfigStruct
 from acacia.pd import ProtectionDomain
 from acacia.memory import MemoryRegion
+from acacia.system import System
+from acacia.arch import aarch64
 
 
 @pytest.fixture
 def sdf():
     """A stand-in System for entity constructors."""
-    return MagicMock(name="sdf")
+    return System(aarch64, paddr_top=0x10000000)
 
 
 def create_concrete_subsystem(name="Concrete", sdf=None, **kwargs):
     """Factory producing a minimal concrete Subsystem instance."""
     if sdf is None:
-        sdf = MagicMock(name="sdf")
+        sdf = System(aarch64, paddr_top=0x10000000)
 
     class ConcreteSubsystem(Subsystem):
         def connect_clients(self):
             pass
 
-    return ConcreteSubsystem(name, sdf, **kwargs)
+    return ConcreteSubsystem(sdf, name, **kwargs)
 
 
 class TestSubsystemInitialization:
@@ -47,27 +49,27 @@ class TestSubsystemInitialization:
 class TestSubsystemClientManagement:
     def test_add_client_success(self, sdf):
         ss = create_concrete_subsystem("test", sdf)
-        pd = ProtectionDomain("client", "client.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "client", "client.elf", priority=100)
         ss.add_client(pd)
         assert pd in ss.clients
 
     def test_add_client_not_allowed_raises(self, sdf):
         ss = create_concrete_subsystem("test", sdf, clients_allowed=False)
-        pd = ProtectionDomain("client", "client.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "client", "client.elf", priority=100)
         with pytest.raises(RuntimeError, match="does not allow clients"):
             ss.add_client(pd)
 
     def test_add_duplicate_client_ignored(self, sdf):
         ss = create_concrete_subsystem("test", sdf)
-        pd = ProtectionDomain("client", "client.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "client", "client.elf", priority=100)
         ss.add_client(pd)
         ss.add_client(pd)  # Should be a no-op, not raise
         assert len(ss.clients) == 1
 
     def test_add_multiple_clients_ordered(self, sdf):
         ss = create_concrete_subsystem("test", sdf)
-        pd1 = ProtectionDomain("c1", "c1.elf", sdf, priority=10)
-        pd2 = ProtectionDomain("c2", "c2.elf", sdf, priority=20)
+        pd1 = ProtectionDomain(sdf, "c1", "c1.elf", priority=10)
+        pd2 = ProtectionDomain(sdf, "c2", "c2.elf", priority=20)
         ss.add_client(pd1)
         ss.add_client(pd2)
         assert ss.clients == [pd1, pd2]
@@ -77,7 +79,7 @@ class TestSubsystemGetMethods:
     def test_get_clients_available_unbuilt(self, sdf):
         # Unlike pds/mrs/channels, get_clients() does NOT gate on built.
         ss = create_concrete_subsystem("test", sdf)
-        pd = ProtectionDomain("client", "client.elf", sdf, priority=100)
+        pd = ProtectionDomain(sdf, "client", "client.elf", priority=100)
         ss.add_client(pd)
         assert ss.get_clients() == [pd]
 
@@ -101,7 +103,7 @@ class TestGenerateConfigStructs:
             def generate_config_structs(self):
                 return [sentinel]
 
-        ss = WithConfig("cfg", sdf)
+        ss = WithConfig(sdf, "cfg")
         assert ss.generate_config_structs() == [sentinel]
 
 
@@ -130,7 +132,7 @@ class TestSubsystemBuild:
 
     def test_build_connects_with_clients_present(self, sdf):
         ss = create_concrete_subsystem("test", sdf)
-        pd = ProtectionDomain("c", "c.elf", sdf, priority=10)
+        pd = ProtectionDomain(sdf, "c", "c.elf", priority=10)
         ss.add_client(pd)
         with patch.object(ss, "connect_clients") as mock_connect:
             ss.build()
@@ -157,7 +159,7 @@ class TestSubsystemBuild:
 class TestSubsystemAbstractMethods:
     def test_cannot_instantiate_abstract(self, sdf):
         with pytest.raises(TypeError):
-            Subsystem("abstract", sdf)
+            Subsystem(sdf, "abstract")
 
     def test_generate_config_structs_not_abstract(self, sdf):
         # A subclass providing only connect_clients is concrete, proving
@@ -166,4 +168,4 @@ class TestSubsystemAbstractMethods:
             def connect_clients(self):
                 pass
 
-        Minimal("minimal", sdf)  # Must not raise
+        Minimal(sdf, "minimal")  # Must not raise

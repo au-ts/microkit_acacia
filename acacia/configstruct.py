@@ -79,6 +79,14 @@ class ConfigStruct:
         # serialising anyway.
         self.fields = fields
 
+    def __post_init__(self):
+        # Enforce that string fields are terminated with a null char
+        for f in [_f for _f in self.fields if type(_f) is str]:
+            if self.fields[f].endswith(chr(0)):
+                continue
+            # No null char, add!
+            self.fields[f] += chr(0)
+
     def __getitem__(self, key):
         return self.fields[key]
 
