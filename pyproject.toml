@@ -1,0 +1,18 @@
+[project]
+name = "acacia"
+requires-python = ">= 3.9"
+readme = "README.md"
+dynamic = ["version"]
+
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {file = ["VERSION"]}
+
+[tool.setuptools.package-dir]
+acacia = "acacia"
+
+[tool.setuptools.package-data]
+acacia = ["py.typed"]
