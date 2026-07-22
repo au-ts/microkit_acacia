@@ -316,6 +316,8 @@ class ProtectionDomain(Entity):
                 new_child_id = child_id
             else:
                 raise RuntimeError(f"Child ID {child_id} is unavailable!")
+        # remove child from sdf.
+        self.sdf.pds.remove(child)
         child.child_id = new_child_id
         self.children.append(child)
 
