@@ -173,8 +173,8 @@ class VirtualMachine(Entity):
     def __init__(
         self,
         name: str,
-        scheduling: SchedulingProperties,
         vcpus: Sequence[VCPU],
+        scheduling: Optional[SchedulingProperties] = None,
     ):
         super().__init__(name, scheduling)
         # Check all IDs are unique
@@ -238,7 +238,7 @@ class ProtectionDomain(Entity):
         self.child_id = None  # Assigned if this PD is made a child.
 
         # VM
-        self.vm: Optional[VirtualMachine] = None
+        self.vms: List[VirtualMachine] = []
 
         # Allocate ourselves to SDF
         self.sdf._add_pd(self)
@@ -266,8 +266,8 @@ class ProtectionDomain(Entity):
             iop.render(pd)
         for c in sorted(self.children, key=lambda c: c.name):
             c.render(pd)
-        if self.vm:
-            self.vm.render(pd)
+        for vm in self.vms:
+            vm.render(pd)
 
         return pd
 
@@ -330,11 +330,16 @@ class ProtectionDomain(Entity):
         child.child_id = new_child_id
         self.children.append(child)
 
-    def set_vm(self, vm: VirtualMachine):
-        if self.vm is not None:
-            raise RuntimeError("Can only have one VM per PD!")
-        # If we are targeting x86, scheduling properties are not allowed.
-        self.vm = vm
+    def add_vm(self, vm: VirtualMachine):
+        assert isinstance(vm, VirtualMachine)
+        # If we are targeting x86, scheduling properties are not allowed. We also can only have one
+        # VM on x86, but other platforms allow more.
+        if self.sdf.arch.is_x86():
+            if vm.scheduling is not None:
+                raise ValueError("VMs do not support scheduling properties on x86!")
+            if len(self.vms) > 0:
+                raise ValueError("x86 systems do not support multiple VMs per PD!")
+        self.vms.append(vm)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
