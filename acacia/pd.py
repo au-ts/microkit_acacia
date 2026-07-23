@@ -302,7 +302,16 @@ class ProtectionDomain(Entity):
         return irq.id
 
     def add_ioport(self, ioport: IOPort):
-        ioport.id = self.allocate_id(ioport.id)  # Allocate and reserve ID
+        desired_id = ioport.id
+        assigned_ids = [iop.id for iop in self.ioports]
+        if desired_id is None:
+            new_id = next(i for i in range(MAX_IDS) if i not in assigned_ids)
+        else:
+            if desired_id not in assigned_ids:
+                new_id = desired_id
+            else:
+                raise RuntimeError(f"IOPort ID {desired_id} is unavailable!")
+        ioport.id = new_id
         self.ioports.append(ioport)
 
     def add_child_pd(self, child, child_id: Optional[int] = None):
@@ -324,6 +333,7 @@ class ProtectionDomain(Entity):
     def set_vm(self, vm: VirtualMachine):
         if self.vm is not None:
             raise RuntimeError("Can only have one VM per PD!")
+        # If we are targeting x86, scheduling properties are not allowed.
         self.vm = vm
 
     def __repr__(self):
