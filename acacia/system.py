@@ -16,7 +16,7 @@ from .configstruct import ConfigStruct, ConfigStructResolver
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
     from acacia.pd import ProtectionDomain
-    from acacia.memory import MemoryRegion, Map
+    from acacia.memory import MemoryRegion, Map, IOAddressSpace, IOMap
     from acacia.channel import Channel
     from acacia.configstruct import ConfigStruct
 
@@ -36,6 +36,7 @@ class System:
         self.pds: Set["ProtectionDomain"] = set()
         self.mrs: Set["MemoryRegion"] = set()
         self.channels: Set["Channel"] = set()
+        self.io_spaces: Set["IOAddressSpace"] = set()
         self.subsystems: List[Subsystem] = []
         self.subsystems_constructed = False
         self.dtb = dtb
@@ -48,6 +49,9 @@ class System:
 
     def _add_memory_region(self, mr: "MemoryRegion"):
         self.mrs.add(mr)
+
+    def _add_io_address_space(self, ios: "IOAddressSpace"):
+        self.io_spaces.add(ios)
 
     def _add_subsystem(self, subsystem: Subsystem):
         self.subsystems.append(subsystem)
@@ -91,6 +95,9 @@ class System:
             # Allocate paddr if needed
             mr.allocate_paddr(self.allocator)
             mr.render(system)
+
+        for ios in sorted(self.io_spaces, key=lambda i: i.name):
+            ios.render(system)
 
         for pd in sorted(self.pds, key=lambda p: p.name):
             pd.render(system)
