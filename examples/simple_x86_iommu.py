@@ -5,6 +5,7 @@ from acacia.arch import x86_64
 from acacia import ProtectionDomain, MemoryRegion, Map, System, Channel
 from acacia.irq import IrqIoapic, IrqMsi
 from acacia.x86 import IOPort
+from acacia.memory import IOAddressSpace, IOMap
 import xml.etree.ElementTree as et
 
 sdf = System(x86_64, paddr_top=0x10000)
@@ -59,6 +60,11 @@ serial_map = Map(serial_mmio, 0x2100000, "rw")
 net_driver.add_map(net_map)
 serial_driver.add_map(serial_map)
 
+# IOMMU
+net_iospace = IOAddressSpace(sdf, "net_iospace", "fee:fi.fo", "1")
+net_iomap = IOMap(net_mmio, 0x34000000)
+net_iospace.add_io_map(net_iomap)
+
 # IOAPIC interrupts
 # IOAPIC 0, pin 4, vector 32, active high, edge triggered
 # (resembles old school serial)
@@ -90,4 +96,4 @@ net_driver.add_irq(net_msi_irq)
 serial_ioport = IOPort(addr=0x3F8, size=0x8)  # COM1: 0x3F8-0x3FF
 serial_driver.add_ioport(serial_ioport)
 
-sdf.write_xml_file("simple_x86.system")
+sdf.write_xml_file("simple_x86_iommu.system")

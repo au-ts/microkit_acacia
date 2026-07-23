@@ -4,7 +4,7 @@
 import pytest
 import xml.etree.ElementTree as et
 from unittest.mock import MagicMock
-from acacia.memory import MemoryRegion, Map
+from acacia.memory import MemoryRegion, Map, IOAddressSpace, IOMap
 from acacia.arch import SDFMemoryAllocator, aarch64
 
 
@@ -133,3 +133,97 @@ class TestMap:
         m.render(parent)
         map_elem = parent.find("map")
         assert map_elem.get("setvar_vaddr") == "my_vaddr"
+
+
+class TestIOMap:
+    def test_unreadable_and_unwritable_rejected(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        with pytest.raises(ValueError, match="unreadable and unwritable"):
+            IOMap(mr, 0x40000000, allow_reads=False, allow_writes=False)
+
+    def test_default_permissions_rw(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        iomap = IOMap(mr, 0x40000000)
+        assert iomap.allow_reads
+        assert iomap.allow_writes
+
+    def test_read_only(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        iomap = IOMap(mr, 0x40000000, allow_writes=False)
+        assert iomap.allow_reads
+        assert not iomap.allow_writes
+
+    def test_write_only_allowed(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        iomap = IOMap(mr, 0x40000000, allow_reads=False)
+        assert not iomap.allow_reads
+        assert iomap.allow_writes
+
+    def test_render_rw(self, sdf):
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
+        iomap = IOMap(mr, 0x40000000)
+        parent = et.Element("parent")
+        iomap.render(parent)
+        iomap_elem = parent.find("iomap")
+        assert iomap_elem is not None
+        assert iomap_elem.get("mr") == "test_mr"
+        assert iomap_elem.get("iovaddr") == "0x40000000"
+        assert iomap_elem.get("perms") == "rw"
+
+    def test_render_read_only(self, sdf):
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
+        iomap = IOMap(mr, 0x40000000, allow_writes=False)
+        parent = et.Element("parent")
+        iomap.render(parent)
+        iomap_elem = parent.find("iomap")
+        assert iomap_elem.get("perms") == "r"
+
+    def test_render_write_only(self, sdf):
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
+        iomap = IOMap(mr, 0x40000000, allow_reads=False)
+        parent = et.Element("parent")
+        iomap.render(parent)
+        iomap_elem = parent.find("iomap")
+        assert iomap_elem.get("perms") == "w"
+
+
+class TestIOAddressSpace:
+    def test_construction(self, sdf):
+        ioas = IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")
+        assert ioas.name == "test_ioas"
+        assert ioas.peripheral_id == "0x12345"
+        assert ioas.domain_id == "0x1"
+        assert ioas.iomaps == set()
+
+    def test_add_io_map(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        iomap = IOMap(mr, 0x40000000)
+        ioas = IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")
+        ioas.add_io_map(iomap)
+        assert iomap in ioas.iomaps
+
+    def test_render_with_iomaps(self, sdf):
+        mr = MemoryRegion(sdf, "test_mr", 0x1000)
+        iomap = IOMap(mr, 0x40000000, allow_writes=False)
+        ioas = IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")
+        ioas.add_io_map(iomap)
+        root = et.Element("system")
+        ioas.render(root)
+        ioas_elem = root.find("io_address_space")
+        assert ioas_elem is not None
+        assert ioas_elem.get("name") == "test_ioas"
+        assert ioas_elem.get("peripheral_id") == "0x12345"
+        assert ioas_elem.get("domain_id") == "0x1"
+        iomap_elem = ioas_elem.find("iomap")
+        assert iomap_elem is not None
+        assert iomap_elem.get("mr") == "test_mr"
+        assert iomap_elem.get("iovaddr") == "0x40000000"
+        assert iomap_elem.get("perms") == "r"
+
+    def test_render_no_iomaps(self, sdf):
+        ioas = IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")
+        root = et.Element("system")
+        ioas.render(root)
+        ioas_elem = root.find("io_address_space")
+        assert ioas_elem is not None
+        assert ioas_elem.find("iomap") is None

@@ -1,7 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Union
+from typing import Optional, Union, Set
 from dataclasses import dataclass
 import xml.etree.ElementTree as et
 from .arch import SDFMemoryAllocator
@@ -124,3 +124,65 @@ class Map:
     @property
     def end_vaddr(self):
         return self.vaddr + self.size
+
+
+class IOMap:
+    """
+    Representation of a Microkit io map: a mapping of a MemoryRegion to an IOAddressSpace.
+    """
+
+    def __init__(
+        self,
+        mr: MemoryRegion,
+        iovaddr: int,
+        allow_reads: bool = True,
+        allow_writes: bool = True,
+    ):
+        self.mr = mr
+        self.iovaddr = iovaddr
+        self.allow_reads = allow_reads
+        self.allow_writes = allow_writes
+        if not allow_reads and not allow_writes:
+            # Error here to prevent confusing bugs
+            raise ValueError("IOMaps cannot be unreadable and unwritable!")
+
+    def render(self, parent: et.Element) -> et.Element:
+        iomap = et.SubElement(parent, "iomap")
+        iomap.set("mr", self.mr.name)
+        iomap.set("iovaddr", hex(self.iovaddr))
+        perms_str = "".join(
+            [
+                e[1]
+                for e in zip([self.allow_reads, self.allow_writes], ["r", "w"])
+                if e[0]
+            ]
+        )
+        iomap.set("perms", perms_str)
+        return iomap
+
+
+class IOAddressSpace:
+    """
+    Representation of a Microkit io space (i.e. an IOMMU protected device address space).
+    https://docs.sel4.systems/projects/microkit/manual/latest/#io_address_space
+    """
+
+    def __init__(self, sdf: System, name: str, peripheral_id: str, domain_id: str):
+        self.sdf = sdf
+        self.name = name
+        self.peripheral_id = peripheral_id
+        self.domain_id = domain_id
+        self.iomaps: Set[IOMap] = set()
+        self.sdf._add_io_address_space(self)
+
+    def add_io_map(self, iomap: IOMap):
+        self.iomaps.add(iomap)
+
+    def render(self, system_root: et.Element) -> et.Element:
+        ioas = et.SubElement(system_root, "io_address_space")
+        ioas.set("name", self.name)
+        ioas.set("peripheral_id", self.peripheral_id)
+        ioas.set("domain_id", self.domain_id)
+        for iomap in self.iomaps:
+            iomap.render(ioas)
+        return ioas
