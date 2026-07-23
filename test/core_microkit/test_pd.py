@@ -9,13 +9,19 @@ from acacia.memory import MemoryRegion, Map
 from acacia.channel import Channel
 from acacia.irq import ConventionalIRQ
 from acacia.system import System
-from acacia.arch import aarch64
+from acacia.arch import aarch64, x86_64
 
 
 @pytest.fixture
 def sdf():
     """A stand-in System for entity constructors."""
     return System(aarch64, paddr_top=0x10000000)
+
+
+@pytest.fixture
+def x86sdf():
+    """Stand-in system for checking x86-specific behaviour"""
+    return System(x86_64, paddr_top=0x10000000)
 
 
 @pytest.fixture
@@ -360,30 +366,38 @@ class TestVCPU:
 class TestVirtualMachine:
     def test_init_with_single_vcpu(self):
         v = VirtualMachine.VCPU(id=0)
-        vm = VirtualMachine("vm1", SchedulingProperties(priority=100), vcpus=[v])
+        vm = VirtualMachine(
+            "vm1", vcpus=[v], scheduling=SchedulingProperties(priority=100)
+        )
         assert isinstance(vm.vcpus, list)
         assert len(vm.vcpus) == 1
 
     def test_init_with_vcpu_list(self):
         vcpus = [VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)]
-        vm = VirtualMachine("vm2", SchedulingProperties(priority=100), vcpus=vcpus)
+        vm = VirtualMachine(
+            "vm2", vcpus=vcpus, scheduling=SchedulingProperties(priority=100)
+        )
         assert len(vm.vcpus) == 2
 
     def test_duplicate_vcpu_ids_rejected(self):
         vcpus = [VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=0)]
         with pytest.raises(RuntimeError, match="unique per VM"):
-            VirtualMachine("vm3", SchedulingProperties(priority=100), vcpus=vcpus)
+            VirtualMachine(
+                "vm3", vcpus=vcpus, scheduling=SchedulingProperties(priority=100)
+            )
 
     def test_too_many_vcpus_rejected(self):
         vcpus = [VirtualMachine.VCPU(id=i) for i in range(63)]  # MAX_IDS is 62
         with pytest.raises(RuntimeError, match="supported at max"):
-            VirtualMachine("vm4", SchedulingProperties(priority=100), vcpus=vcpus)
+            VirtualMachine(
+                "vm4", vcpus=vcpus, scheduling=SchedulingProperties(priority=100)
+            )
 
     def test_vm_inherits_entity_maps(self, sdf):
         vm = VirtualMachine(
             "vm5",
-            SchedulingProperties(priority=100),
             vcpus=[VirtualMachine.VCPU(id=0)],
+            scheduling=SchedulingProperties(priority=100),
         )
         mr = MemoryRegion(sdf, "test_mr", 0x1000)
         m = Map(mr, 0x40000000, "rw")
@@ -393,8 +407,8 @@ class TestVirtualMachine:
     def test_vm_render_structure(self):
         vm = VirtualMachine(
             "guest",
-            SchedulingProperties(priority=50, budget=1000, period=2000),
             vcpus=[VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)],
+            scheduling=SchedulingProperties(priority=50, budget=1000, period=2000),
         )
         parent = et.Element("parent")
         vm.render(parent)
@@ -410,40 +424,50 @@ class TestVirtualMachine:
 
 
 class TestProtectionDomainVM:
-    def test_set_vm_success(self, sdf):
+    def test_add_vm_success(self, sdf):
         pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm = VirtualMachine(
             "guest",
-            SchedulingProperties(priority=100),
             vcpus=[VirtualMachine.VCPU(id=0)],
+            scheduling=SchedulingProperties(priority=100),
         )
-        pd.set_vm(vm)
-        assert pd.vm is vm
+        pd.add_vm(vm)
+        assert vm in pd.vms
 
-    def test_set_vm_twice_rejected(self, sdf):
-        pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
+    def test_x86_add_vm_scheduling_rejected(self, x86sdf):
+        pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
         vm1 = VirtualMachine(
             "guest1",
-            SchedulingProperties(priority=100),
+            vcpus=[VirtualMachine.VCPU(id=0)],
+            scheduling=SchedulingProperties(priority=100),
+        )
+        with pytest.raises(
+            ValueError, match="VMs do not support scheduling properties on x86"
+        ):
+            pd.add_vm(vm1)
+
+    def test_x86_add_vm_twice_rejected(self, x86sdf):
+        pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
+        vm1 = VirtualMachine(
+            "guest1",
             vcpus=[VirtualMachine.VCPU(id=0)],
         )
         vm2 = VirtualMachine(
             "guest2",
-            SchedulingProperties(priority=100),
             vcpus=[VirtualMachine.VCPU(id=1)],
         )
-        pd.set_vm(vm1)
-        with pytest.raises(RuntimeError, match="Can only have one VM per PD!"):
-            pd.set_vm(vm2)
+        pd.add_vm(vm1)
+        with pytest.raises(ValueError, match="x86 systems do not support"):
+            pd.add_vm(vm2)
 
     def test_vm_rendered_inside_pd(self, sdf):
         pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm = VirtualMachine(
             "guest",
-            SchedulingProperties(priority=100),
             vcpus=[VirtualMachine.VCPU(id=0)],
+            scheduling=SchedulingProperties(priority=100),
         )
-        pd.set_vm(vm)
+        pd.add_vm(vm)
         root = et.Element("system")
         pd.render(root)
         pd_elem = root.find("protection_domain")
@@ -456,11 +480,11 @@ class TestProtectionDomainVM:
         mr = MemoryRegion(sdf, "ram", 0x1000)
         vm = VirtualMachine(
             "guest",
-            SchedulingProperties(priority=100),
             vcpus=[VirtualMachine.VCPU(id=0)],
+            scheduling=SchedulingProperties(priority=100),
         )
         vm.add_map(Map(mr, 0x40000000, "rw"))
-        pd.set_vm(vm)
+        pd.add_vm(vm)
         root = et.Element("system")
         pd.render(root)
         vm_elem = root.find("protection_domain").find("virtual_machine")
