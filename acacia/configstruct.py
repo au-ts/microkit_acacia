@@ -1,408 +1,613 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from __future__ import annotations
-import pathlib
-import os, sys, subprocess
+import pathlib, os, subprocess
+from lark import Lark, Tree, Token
 from dataclasses import dataclass
-from collections import defaultdict, deque
 from ctypes import (
-    c_void_p,
-    c_uint64,
-    c_uint32,
-    c_uint16,
     c_uint8,
-    c_int64,
-    c_int32,
-    c_int16,
+    c_uint16,
+    c_uint32,
+    c_uint64,
     c_int8,
-    c_char,
-    Array,
-    Structure,
-    sizeof,
+    c_int16,
+    c_int32,
+    c_int64,
+    c_float,
+    c_double,
+    c_longdouble,
+    c_ubyte,
+    c_byte,
+    c_bool,
 )
-from typing import List, Dict, Optional, Tuple, Any, TYPE_CHECKING
+from collections.abc import Sized, Iterable
+from typing import List, Dict, Optional, Any, Union, Tuple
 
-# To avoid circular imports, we only do a "real" import when type checking.
-if TYPE_CHECKING:
-    from acacia.memory import MemoryRegion, Map
+dwarf_dump_grammar = r"""
+    start : entry+
 
-# approximately fine..?
-c_uintptr = c_uint64
+    ?entry :          compile_unit
+                    | unknown_tag
+                    | null "\n"
+                    | single
+                    | group
+
+    id : "0x" HEX_ID
+
+    null : id ":" "NULL\n"
+
+    compile_unit : [null] id ": Compile Unit:" _IGNORE_UNTIL_NEWLINE "\n\n"
+
+    unknown_tag : id ":" "DW_TAG_" _IGNORE_UNTIL_NEWLINE ["\n" _IGNORE_UNTIL_NEWLINE]+ "\n\n"
+
+    single :          id ":" "DW_TAG_base_type\n" attribute* "\n" -> base_tag
+                    | id ":" "DW_TAG_typedef\n" attribute* "\n" -> typedef_tag
+                    | id ":" "DW_TAG_pointer_type\n" attribute* "\n" -> pointer_tag
+
+    group_tag :       id ":" "DW_TAG_array_type\n" attribute* "\n" -> array_tag
+                    | id ":" "DW_TAG_enumeration_type\n" attribute* "\n" -> enumeration_tag
+                    | id ":" "DW_TAG_union_type\n" attribute* "\n" -> union_tag
+                    | id ":" "DW_TAG_structure_type\n" attribute* "\n" -> structure_tag
+
+    member_tag :      id ":" "DW_TAG_member\n" attribute* "\n" -> member_tag
+                    | id ":" "DW_TAG_subrange_type\n" attribute* "\n" -> subrange_tag
+                    | id ":" "DW_TAG_enumerator\n" attribute* "\n" -> enumerator_tag
+
+    group : group_tag (member_tag | group)+ null "\n"
+
+    attribute : "DW_AT_" at_name "(" at_value ")\n"
+
+    !at_name :        "name"
+                    | "encoding"
+                    | "byte_size"
+                    | "type"
+                    | "decl_file"
+                    | "decl_line"
+                    | "decl_column"
+                    | "sibling"
+                    | "data_member_location"
+                    | "upper_bound"
+                    | "count"
+                    | "alignment"
+                    | "const_value"
+
+    at_value :        ESCAPED_STRING -> escaped_string
+                    | NUMBER -> number
+                    | BARE_STRING -> string
+                    | at_value at_value -> pair
+
+    # Terminals
+    HEX_ID : ("0".."9"|"a".."f")~8
+    HEX_NUMBER : "0x" HEXDIGIT+
+    NUMBER : (SIGNED_INT | HEX_NUMBER)
+    BARE_STRING : /[A-Za-z_0-9+\-]+/
+    _IGNORE_UNTIL_NEWLINE : /.+/
+
+    %import common.ESCAPED_STRING
+    %import common.HEXDIGIT
+    %import common.SIGNED_INT
+
+    %ignore " "
+    %ignore "\t"
+"""
 
 
-def uint_max(n):
-    return (1 << n) - 1
+@dataclass
+class Attributes:
+    """
+    Class encapsulating tag attributes in the parsed output of llvm-dwarfdump on
+    a file. Examples:
+
+        attribute
+            at_name	name
+            escaped_string	"i2c_cmd_t"
+
+         attribute
+           at_name	type
+           pair
+             number	0x000001a5
+             escaped_string	"i2c_cmd"
+
+    Sanity checks values for each attribute.
+    """
+
+    valid_attributes = (
+        "name",
+        "decl_file",
+        "encoding",
+        "byte_size",
+        "const_value",
+        "decl_line",
+        "decl_column",
+        "data_member_location",
+        "upper_bound",
+        "count",
+        "alignment",
+        "type",
+        "sibling",
+    )
+
+    @staticmethod
+    def escaped_string(value_tree: Tree) -> str:
+        """
+        Returns the un-escaped string value from lark trees of the form:
+            escaped_string  "DW_ATE_unsigned_32"
+        """
+        if value_tree.data != "escaped_string":
+            raise ValueError(f"Expected escaped_string, found '{value_tree.pretty()}'")
+        assert isinstance(value_tree.children[0], Token)
+        return value_tree.children[0].value[1:-1]
+
+    @staticmethod
+    def string(value_tree: Tree) -> str:
+        """
+        Returns the string value from lark trees of the form:
+            string	DW_ATE_unsigned
+        """
+        if value_tree.data != "string":
+            raise ValueError(f"Expected string, found '{value_tree.pretty()}'")
+        assert isinstance(value_tree.children[0], Token)
+        return value_tree.children[0].value
+
+    @staticmethod
+    def number(value_tree: Tree) -> int:
+        """
+        Returns the numeric value from lark trees of the form:
+            number	0x04
+        """
+        if value_tree.data != "number":
+            raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
+        assert isinstance(value_tree.children[0], Token)
+        value = value_tree.children[0].value
+        if value[:2] == "0x":
+            return int(value, base=16)
+        return int(value)
+
+    @staticmethod
+    def id_number(value_tree: Tree) -> int:
+        """
+        Returns the numeric value from lark trees of the form:
+            number	0x0000005b
+        """
+        if value_tree.data != "number":
+            raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
+        assert isinstance(value_tree.children[0], Token)
+        value = value_tree.children[0].value
+        if value[:2] != "0x" or len(value) != 10:
+            raise ValueError(f"Expected type ID, found '{value}'")
+        return int(value, base=16)
+
+    @staticmethod
+    def pair(value_tree: Tree) -> Tuple[int, str]:
+        """
+        Returns a tuple of the numeric value and string from lark trees of the form:
+            pair
+            number	0x0000005b
+            escaped_string	"int"
+        """
+        if value_tree.data != "pair" or len(value_tree.children) != 2:
+            raise ValueError(f"Expected pair, found '{value_tree.pretty()}'")
+        number = Attributes.id_number(value_tree.children[0])
+        escaped_string = Attributes.escaped_string(value_tree.children[1])
+        return number, escaped_string
+
+    def extract_attribute(self, tree: Tree):
+        """
+        Given an attribute tree of the form:
+            attribute
+                at_name	name
+                escaped_string	"i2c_cmd_t"
+        extract the value of the attribute.
+        """
+        if tree.data != "attribute":
+            raise ValueError(f"Expected attribute tree, found '{tree.pretty()}'")
+
+        assert isinstance(tree.children[0].children[0], Token)
+        at_name = tree.children[0].children[0].value
+        if at_name not in self.valid_attributes:
+            raise ValueError(
+                f"Found invalid attribute name '{at_name}' in attribute '{tree.pretty()}'"
+            )
+
+        setattr(self, at_name, tree.children[1])
+
+    def __getattr__(self, name: str):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        elif name in self.valid_attributes:
+            return None
+        else:
+            raise AttributeError(f"Attributes class has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Union[tuple, Tree]):
+        if name == "valid_attributes":
+            object.__setattr__(self, name, value)
+
+        assert isinstance(value, Tree)
+
+        if name in self.__dict__:
+            raise AttributeError(
+                f"Attempting to reset initialised attribute '{name}' from '{self.__dict__[name]}' to '{value.pretty()}'"
+            )
+
+        at_value: Union[str, int, Tuple[int, str]]
+        match name:
+            case at_name if at_name in ("name", "decl_file"):
+                at_value = self.escaped_string(value)
+            case "encoding":
+                encoding = self.string(value)
+                if len(encoding) < 7 or encoding[:7] != "DW_ATE_":
+                    raise ValueError(
+                        f"Found an encoding attribute '{encoding}' without the 'DW_ATE_' prefix"
+                    )
+                at_value = encoding[7:]
+            case "byte_size":
+                at_value = self.number(value)
+                if at_value <= 0:
+                    raise ValueError(f"Found a non positive byte size '{at_value}'")
+            case "const_value":
+                at_value = self.number(value)
+            case "type":
+                at_value = self.pair(value)
+            case "sibling":
+                at_value = self.id_number(value)
+            case at_name if at_name in (
+                "decl_line",
+                "decl_column",
+                "data_member_location",
+                "upper_bound",
+                "count",
+                "alignment",
+            ):
+                at_value = self.number(value)
+                if at_value < 0:
+                    raise ValueError(f"Found a negative {name} '{at_value}'")
+            case _:
+                raise AttributeError(f"Attributes class has no attribute '{name}'")
+
+        object.__setattr__(self, name, at_value)
+
+    def __repr__(self):
+        ret_string = "Attributes:\n"
+        for at_name in self.valid_attributes:
+            at_value = getattr(self, at_name)
+            if at_value is not None:
+                ret_string += f"    {at_name}: {at_value}\n"
+        ret_string += "\n"
+        return ret_string
 
 
-# TODO: support endianness changes using util ctypes wrapper
-# WARNING: currently assumes host is little endian 64 bit!
-# WARNING: currently assumes target is 64 bit!
-# Sidenote: the Zig sdfgen made both of these assumptions too...
+class CType:
+    """
+    Class encapsulating a tag entry or C type found in the parsed output of
+    llvm-dwarfdump on a file. Examples:
 
-# NOTE: The code here that maps the ConfigStruct values into the binary blob
-# can do with a bit more love.
+        unknown_tag
+            id	0000000c
+
+    or
+
+      base_tag
+        id	0000002b
+        attribute
+          at_name	name
+          escaped_string	"DW_ATE_unsigned_32"
+        attribute
+          at_name	encoding
+          string	DW_ATE_unsigned
+        attribute
+          at_name	byte_size
+          number	0x04
+
+    or
+
+        group
+            structure_tag
+              id	000000f9
+              attribute
+                ...
+            member_tag
+              id	000000fe
+              attribute
+                ...
+            member_tag
+              id	00000107
+              attribute
+                ...
+            null
+              id	00000110
+    """
+
+    special_tags = (
+        "unknown_tag",
+        "null",
+        "compile_unit",
+    )
+
+    single_tags = (
+        "base_tag",
+        "typedef_tag",
+        "pointer_tag",
+    )
+
+    member_tags = (
+        "subrange_tag",
+        "enumerator_tag",
+        "member_tag",
+    )
+
+    group_tags = {
+        "array_tag": ("subrange_tag"),
+        "enumeration_tag": ("enumerator_tag"),
+        "union_tag": ("member_tag", "group"),
+        "structure_tag": ("member_tag", "group"),
+    }
+
+    required_attributes = {
+        "base_tag": ["encoding", "byte_size"],
+        "typedef_tag": ["name", "type"],
+        "member_tag": ["data_member_location", "name", "type"],
+        "array_tag": ["type"],
+    }
+
+    def __init__(self, entry_tree: Tree, type_collector: Dict[int, CType]):
+        """
+        Properties:
+            tag_type: type of tag entry, must be a member of special_tags,
+                single_tags, member_tags or group_tags
+            id: numeric identifier
+            attributes: tag entry attribute values
+            members: IDs of member tags, non-empty only for group_tag types
+        Args:
+            entry_tree: The lark tree corresponding to the tag
+            type_collector: A dictionary of ID to CType mappings of all the CTypes found in the parsed tree from
+        """
+
+        self.collector: Dict[int, CType] = type_collector
+        self._id: Optional[int] = None
+        self.attributes: Attributes = Attributes()
+        self.members: List[int] = list()
+        self.tag_type: str = entry_tree.data
+
+        tag_children = entry_tree.children
+        match self.tag_type:
+            case "compile_unit":
+                if len(tag_children) not in (1, 2):
+                    raise ValueError(
+                        f"Found a compile_unit tree with an invalid number of children '{len(tag_children)}' (expected 1 or 2), tree '{entry_tree.pretty()}'"
+                    )
+                for child in tag_children:
+                    if child.data == "null":
+                        CType(child, type_collector)
+                    else:
+                        self.id = self.extract_id(child)
+            case "group":
+                if len(tag_children) < 2:
+                    raise ValueError(
+                        f"Found a group tree with an invalid number of children '{len(tag_children)}' (expected > 2), tree '{entry_tree.pretty()}'"
+                    )
+                leader = CType(tag_children[0], type_collector)
+                for member in tag_children[1:-1]:
+                    member = CType(member, type_collector)
+                    if member.tag_type not in self.group_tags[leader.tag_type]:
+                        raise ValueError(
+                            f"Found an unexpected member tag '{member.tag_type}' in group tag '{leader.tag_type}' (expected '{self.group_tags[leader.tag_type]}'), tree '{entry_tree.pretty()}'"
+                        )
+                    if member.id:
+                        leader.members.append(member.id)
+                if CType(tag_children[-1], type_collector).tag_type != "null":
+                    raise ValueError(
+                        f"Found a group tree with non-null final child, tree '{entry_tree.pretty()}'"
+                    )
+            case tag if (
+                tag in self.special_tags
+                or self.single_tags
+                or self.member_tags
+                or self.group_tags
+            ):
+                if len(tag_children) == 0:
+                    raise ValueError(
+                        f"Found a '{self.tag_type}' tree with no ID, tree '{entry_tree.pretty()}'"
+                    )
+                self.id = self.extract_id(tag_children[0])
+                for child in tag_children[1:]:
+                    self.attributes.extract_attribute(child)
+            case _:
+                raise ValueError(
+                    f"Found an unknown tag type: '{self.tag_type}', tree '{entry_tree.pretty()}'"
+                )
+
+        if self.tag_type in self.required_attributes:
+            for attribute in self.required_attributes[self.tag_type]:
+                if self.attributes.__getattr__(attribute) is None:
+                    raise AttributeError(
+                        f"CType of type '{self.tag_type}' is missing required attribute '{attribute}', CType '{self}'"
+                    )
+
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, new_id: int):
+        if self._id is not None:
+            raise AttributeError(
+                f"Attempted to reset initialised ID from '{self._id}' to '{new_id}', CType '{self}"
+            )
+        elif new_id in self.collector:
+            raise ValueError(
+                f"Attempted to reuse ID '{new_id}' from existing CType '{self.collector[new_id]}' for new CType '{self}'"
+            )
+        self._id = new_id
+        self.collector[new_id] = self
+
+    def base_type(self) -> CType:
+        """
+        Find the underlying base type of a CType.
+
+        Returns self for all CTypes with types not in "typedef_tag",
+        "member_tag" or "array_tag".
+        """
+        if self.tag_type not in ("typedef_tag", "member_tag", "array_tag"):
+            return self
+
+        if self.attributes.alignment is not None:
+            raise ValueError(
+                f"Requesting base type of CType '{self}' with non-zero alignment '{self,self.attributes.alignment}' (not supported)"
+            )
+
+        base_type = self.collector[self.attributes.type[0]]
+        while base_type.tag_type == "typedef_tag":
+            base_type = self.collector[base_type.attributes.type[0]]
+
+        if base_type.tag_type in (self.special_tags or self.member_tags):
+            raise ValueError(
+                f"CType '{self}' resolved to base type '{base_type}' of invalid tag type '{base_type.tag_type}'"
+            )
+        return base_type
+
+    def array_count(self) -> int:
+        """
+        Find the number of entries in an "array_tag" CType. Returns 0 if the
+        subrange type does not have a count attribute.
+        """
+        if self.tag_type != "array_tag":
+            raise TypeError(
+                f"Provided CType tag '{self.tag_type}' is not an 'array_tag'"
+            )
+        subrange_type = self.collector[self.members[0]]
+        if subrange_type.attributes.count is not None:
+            return subrange_type.attributes.count
+        return 0
+
+    @staticmethod
+    def extract_id(id_tree: Tree):
+        """
+        Returns the numeric value from lark trees of the form:
+            id 0000423e
+        """
+        if id_tree.data != "id":
+            raise ValueError(f"Expected ID tree, found '{id_tree}'")
+        assert isinstance(id_tree.children[0], Token)
+        id_string = id_tree.children[0].value
+        return int(id_string, base=16)
+
+    @staticmethod
+    def sanity_check_type_ids(all_types: Dict[int, CType]):
+        """
+        Given a complete dictionary of type IDs to CTypes, ensure all type ID
+        references are contained in the dictionary.
+        """
+        for new_type in all_types.values():
+            if new_type.tag_type in ("typedef_tag", "member_tag", "array_tag"):
+                if new_type.attributes.type[0] not in all_types:
+                    raise ValueError(
+                        f"Base type ID {new_type.attributes.type[0]} is not a valid type, CType '{new_type}'"
+                    )
+            if new_type.tag_type == "array_tag":
+                if len(new_type.members) != 1:
+                    raise ValueError(
+                        f"Array type has the wrong number of members '{len(new_type.members)}', expected 1 (subrange type), CType '{new_type}'"
+                    )
+
+    @staticmethod
+    def find_type_by_name(all_types: Dict[int, CType], type_name: str) -> CType:
+        """
+        Given a type name, find the underlying base type.
+        """
+        type_match = []
+        for c_type in all_types.values():
+            if c_type.attributes.name == type_name:
+                type_match.append(c_type)
+
+        if len(type_match) == 0:
+            raise ValueError(f"Could not find a type with name '{type_name}'")
+        elif len(type_match) > 1:
+            raise ValueError(
+                f"Found multiple types with name '{type_name}': {type_match}"
+            )
+        return type_match[0].base_type()
+
+    def __repr__(self):
+        ret_string = f"CType:\n    ID: {self.id}\n    type: {self.tag_type}\n    members: {self.members}\n"
+        ret_string += self.attributes.__repr__()
+        return ret_string
 
 
 class ConfigStruct:
     """
-    Python representation of a config struct. This is
-    effectively a template which is best-effort stored into
-    the matching struct found in an ELF file.
+    Python representation of a C configuration struct. This class provides a
+    template for creating a configuration struct which will be serialised into a
+    matching C struct found in a component's ELF file.
     """
 
-    typedef_name: str
-    # We define a target file and section for config structs that are outputted as data files, i.e.
-    # the top level ConfigStruct in any set of nested ConfigStructs. If we have one inside of the
-    # other, we obviously can't map the sub-struct to a different location than its parent.
-    section_name: Optional[str]
-    target_file: Optional[str]
-    # Dict of field names -> int values, other ConfigStruct ojects, or lists of either (arrays)
-    fields: Dict[str, Any]
-
-    def __init__(self, typedef_name, target_file=None, section_name=None, fields={}):
+    def __init__(
+        self,
+        fields: Dict[str, Any],
+        type_name: Optional[str] = None,
+        section_name: Optional[pathlib.Path] = None,
+        target_file: Optional[pathlib.Path] = None,
+    ):
         """
         Args:
-            typedef_name: type of struct in C
-            target_file: ELF file this will be patched into.
-            section_name: name of section OR symbol to patch config struct into
             fields: dictionary of field names -> values. Can be:
                 a. Another ConfigStruct
                 b. Any int-like value
-                c. Any string
-                d. A list of ConfigStructs
+                c. Any string or bytes
+                d. A list of values
+            type_name: type of struct in C
+            section_name: name of section to patch config struct into
+            target_file: ELF file this will be patched into
         """
-        self.typedef_name = typedef_name
-        self.target_file = target_file
-        self.section_name = section_name
-        # TODO: add datatype validation for fields. Not strictly needed as this should fail when
-        # serialising anyway.
         self.fields = fields
-
-    def __post_init__(self):
-        # Enforce that string fields are terminated with a null char
-        for f in [_f for _f in self.fields if type(_f) is str]:
-            if self.fields[f].endswith(chr(0)):
-                continue
-            # No null char, add!
-            self.fields[f] += chr(0)
-
-    def __getitem__(self, key):
-        return self.fields[key]
-
-    def __contains__(self, key):
-        return key in self.fields
+        self.type_name = type_name
+        self.section_name = section_name
+        self.target_file = target_file
 
     def __repr__(self):
-        return f"<ConfigStruct {self.typedef_name}@{self.target_file} {self.fields}>"
+        return f"<ConfigStruct {self.type_name} {self.fields}>"
 
 
-@dataclass
-class DwarfStructMember:
-    field_name: str
-    type_name: str
-    entries: int  # How many array entries are there? 1 if not an array.
-    offset: int
-
-
-@dataclass
-class DwarfStruct:
-    type_name: str  # The underlying type, e.g. long long
-    typedef_name: str  # Whatever type alias has been defined, e.g. `sddf_blah_t`
-    size: int
-    members: List[DwarfStructMember]
-
-
-# BUG: we currently have a hard time resolving some types from the C library
-# I have added uintptr_t, size_t and void * here as a hack to get around
-# this for now.
-BaseTypesMap: Dict[str, Any] = {
-    "char": c_char,
-    "uint64_t": c_uint64,
-    "uint32_t": c_uint32,
-    "uint16_t": c_uint16,
-    "uint8_t": c_uint8,
-    "int64_t": c_int64,
-    "int32_t": c_int32,
-    "int16_t": c_int16,
-    "int8_t": c_int8,
-    "size_t": c_uint64,  # HACK: probs should handle this differently
-    "uintptr_t": c_uint64,  # HACK: probs should handle this differently
-    "void *": c_uint64,  # HACK: probs should handle this differently
-    "_Bool": c_uint8,  # HACK: probs should handle this differently
+BaseTypesMap: Dict[str, Dict[int, Any]] = {
+    "unsigned": {
+        1: c_uint8,
+        2: c_uint16,
+        4: c_uint32,
+        8: c_uint64,
+    },
+    "signed": {
+        1: c_int8,
+        2: c_int16,
+        4: c_int32,
+        8: c_int64,
+    },
+    "float": {
+        4: c_float,
+        8: c_double,
+        16: c_longdouble,
+    },
+    "boolean": {
+        1: c_bool,
+    },
+    "unsigned_char": {
+        1: c_ubyte,
+    },
+    "signed_char": {
+        1: c_byte,
+    },
 }
-
-
-class ConfigStructDwarfDumper:
-    """
-    This class is responsible for taking an ELF file and finding structs matching our Python
-    configstructs. We use llvm-dwarfdump to do this, and with the concrete struct we can form
-    a "blueprint" for how to lay out our Python struct in a C-friendly format.
-
-    E.g. if we have some struct
-    ```
-    typedef struct {
-        uint64_t a;
-        char magic[6];
-    }
-
-    ... we can find the true size of uint64_t and char, and how the struct is padded. We can then take
-    our Python representation with values `int(5)` and `str("Hello!")` and pack them into that shape and
-    generate a configuration blob.
-
-    This class is responsible for driving llvm-dwarfdump while `ConfigStructResolver` is responsible for
-    matching the Python representation to the C representation.
-    """
-
-    def __init__(self, build_dir: pathlib.Path, dwarfdump_name: str = "llvm-dwarfdump"):
-        self.bin = dwarfdump_name
-        self.build_dir = build_dir
-        # Check that llvm-dwarfdump is available
-        try:
-            subprocess.run([self.bin, "--version"])
-        except FileNotFoundError as e:
-            raise RuntimeError(
-                f"No LLVM DwarfDump! Make sure {dwarfdump_name} is on your PATH"
-            ) from e
-
-        self.files: Dict[str, List[List[str]]] = {}
-        #  each entry is a DW_Tag, grouped with child elements e.g.
-        # [ "DW_TAG_blah", "DW_FIELD_zah = 1", "DW_THING = tada" ]
-        self.file_structs: Dict[str, Dict[str, DwarfStruct]] = defaultdict(
-            dict
-        )  # file_name -> dict(struct_name -> index in `files`
-        self.file_typedef_to_type: Dict[str, Dict[str, str]] = {}
-
-    def _eat_dwarf(self, target_file):
-        # Goblin delicacy
-        try:
-            ret = subprocess.run(
-                [self.bin, target_file], capture_output=True, text=True, check=True
-            )
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Failed to eat DWARF from {target_file}! Does file exist?"
-            ) from e
-        if ret.returncode != 0:
-            raise RuntimeError(f"Couldn't dump {target_file} -> {ret.stderr}")
-        return ret
-
-    def get_struct_by_typedef(self, target_file: str, typedef_name: str):
-        true_type = self.get_typedef_base_type(target_file, typedef_name)
-        return self.file_structs[target_file][true_type]
-
-    def _parse_file(self, target_file: str):
-        """
-        Parse a dwarf file and record all DIEs that might be config struct relevant.
-        """
-        if target_file in self.files:
-            raise RuntimeWarning("Trying to parse an already-parsed file!")
-
-        elf = os.path.join(self.build_dir, target_file)
-        raw = self._eat_dwarf(elf)
-
-        # Create a list of lists, where each element is a single DW_TAG block broken up into lines.
-        out = []
-        curr: List[str] = []
-        for l in raw.stdout.splitlines():
-            if len(l) <= 1:
-                # New element
-                if len(curr) != 0:
-                    out.append(curr)
-                    curr = []
-            else:
-                curr.append(l)
-        self.files[target_file] = out
-        self._dump_file(target_file)
-
-    def _dump_file(self, target_file: str):
-        def search_quotes(term, lines):
-            try:
-                return next(x.split('"')[1] for x in lines if term in x)
-            except StopIteration:
-                raise RuntimeError(f"Failed to find {term} in {lines}")
-
-        # Now, scrape typedefs and associated struct types
-        typedefs: Dict[str, str] = {}  # type_name -> typedef_name
-        for tag in self.files[target_file]:
-            if "DW_TAG_typedef" in tag[0]:
-                # Bingo!
-                # These fields sometimes are out of order, so we abuse `next` to search
-                # for the fields we want.
-                typedef_name = search_quotes("DW_AT_name", tag)
-                if typedef_name in BaseTypesMap:
-                    # We don't want to store type mappings for stdint.h types.
-                    # The fixed width version is more informative!
-                    continue
-                type_name = search_quotes("DW_AT_type", tag)
-                typedefs[type_name] = typedef_name
-
-        # Do structs separately for neatness ... not ideal for performance. TODO: speedier?
-        file = self.files[target_file]
-        for i in range(len(file)):
-            # Skip until struct found
-            if "DW_TAG_structure_type" not in file[i][0]:
-                continue
-
-            # Now at a struct. The next several tags should be `DW_TAG_members`
-            # representing the struct members.
-            try:
-                struct_name = search_quotes("DW_AT_name", file[i])
-            except RuntimeError:
-                # If name not found, this is an anonymous struct. Not one we care
-                # about for config structs.
-                continue
-
-            # We don't care about this if there's no matching typedef
-            if struct_name not in typedefs:
-                continue
-
-            # Get size
-            size = int(
-                next(
-                    x.split("(")[1].split(")")[0]
-                    for x in file[i]
-                    if "DW_AT_byte_size" in x
-                ),
-                base=16,
-            )
-
-            # If struct already discovered, we don't wanna store it
-            already_discovered = struct_name in self.file_structs[target_file]
-            # We can find the same struct twice when it is used
-            # across multiple compile units as an include ... ugh!
-            # For sanity, we check that this definition just *matches*.
-
-            # Now clear to scrape members. Iterate ahead of outer loop `i`.
-            members = []
-            for u in range(i + 1, len(file)):
-                if "DW_TAG_member" not in file[u][0]:
-                    # No more members!
-                    break
-
-                # Grab member deets
-                member_name = search_quotes("DW_AT_name", file[u])
-                member_type_raw = search_quotes("DW_AT_type", file[u])
-                arr_size = 1
-                member_type = member_type_raw
-
-                # Separate out array size if existing
-                if "[" in member_type_raw:
-                    arr_size = member_type_raw.split("[")[1].split("]")[0]
-                    member_type = member_type_raw.split("[")[0]
-
-                offset = int(
-                    next(
-                        x.split("(")[1].split(")")[0]
-                        for x in file[u]
-                        if "DW_AT_data_member_location" in x
-                    ),
-                    base=16,
-                )
-                members.append(
-                    DwarfStructMember(member_name, member_type, arr_size, offset)
-                )
-
-            if len(members) == 0:
-                raise RuntimeWarning("Found a struct with no members!")
-
-            # Check / store struct finally
-            s = DwarfStruct(struct_name, typedefs[struct_name], size, members)
-            if already_discovered:
-                # Make sure discovered struct is exactly the same as what we expect.
-                if s != self.file_structs[target_file][struct_name]:
-                    # If this happens, we no longer have a source of truth!
-                    raise RuntimeError(
-                        f"{s} is duplicated but instances are not identical!"
-                    )
-            else:
-                self.file_structs[target_file][struct_name] = s
-
-        self.file_typedef_to_type[target_file] = {
-            typedefs[k]: k for k in typedefs.keys()
-        }
-        return
-
-    def discover_config_var(self, target_var, target_file):
-        if target_file not in self.files:
-            self._parse_file(target_file)
-
-        search_quotes = lambda term, lines: next(
-            x.split('"')[1] for x in lines if term in x
-        )
-        # Search file text to find variable definition
-        # TODO: enable/add to logic here to pull out details for set_mr_prefill
-        # / set_var_vaddr. Currently this is not needed.
-        if False:
-            for i, tag in enumerate(self.files[target_file]):
-                if "DW_TAG_variable" in tag[0]:
-                    name = search_quotes("DW_AT_name", tag)
-                    if name != target_var:
-                        continue
-                    else:
-                        # Found!
-                        # TODO: do something with this
-                        ...
-        return
-
-    def find_struct_and_children(
-        self, target_file, typedef_name
-    ) -> Tuple[DwarfStruct, List[DwarfStruct]]:
-        """
-        Given a typedef, return the DWARF representation of that struct, and a
-        list of all child struct definitions (also in DWARF representation).
-        """
-        if target_file not in self.files:
-            self._parse_file(target_file)
-
-        # First: find struct
-        top_struct = self.get_struct_by_typedef(target_file, typedef_name)
-
-        # We now should have the DWARF struct for the top-level struct. The
-        # next thing to do is to recursively find the DWARF struct for any
-        # child structs (and any descendents of those child structs).
-        # Fields in a `ConfigStruct` names paired with a Python value for
-        # the field - i.e. another ConfigStruct, an `int`, a list of the latter
-        # two, or a `str`. We want to find the field by name, divine the actual
-        # type, and then try inject the Python value to that container.
-        child_structs = []
-        to_check = deque([x for x in top_struct.members])
-        while len(to_check) != 0:
-            curr = to_check.popleft()
-            true_child_type = self.get_typedef_base_type(target_file, curr.type_name)
-            if true_child_type in BaseTypesMap:
-                continue  # Just an int type
-            child_struct = self.get_struct_by_typedef(target_file, curr.type_name)
-            child_structs.append(child_struct)
-        return (top_struct, child_structs)
-
-    def get_typedef_base_type(self, target_file, typedef_name):
-        """
-        Given a typedef name, find the underlying type recursively. I.e. this should
-        end up with a structure OR a numeric type somewhere.
-        """
-        curr = typedef_name
-        # We exit if we find something in the basetypesmap because there are
-        # always terminal typedefs that map the fixed-width types to implementation-
-        # defined C types like unsigned char. We don't actually want those for the
-        # scope of building structs, so we just stop decoding!
-        while (
-            curr in self.file_typedef_to_type[target_file] and curr not in BaseTypesMap
-        ):
-            curr = self.file_typedef_to_type[target_file][curr]
-        return curr
 
 
 class ConfigStructResolver:
     """
-    A representation of a configuration structure that will be patched
-    into ELF files. This records:
+    This class records all configuration structs of a system. As structs are
+    added to this class, their target files are dwarf dumped and parsed, and all
+    CTypes they contain are collected into a dictionary.
 
-        1. The target file to install data to,
-        2. The specific struct to target,
-        3. The values to install into the struct,
-        4. The memory layout of the target struct, derived from the
-           DWARF symbols in the ELF file.
+    Once all structs of the system are added, they are serialised one-by-one
+    based on the memory layout of their types derived from the DWARF symbols in
+    the ELF file. Each serialised struct is then written to a file in the build
+    directory.
     """
 
     def __init__(
@@ -413,279 +618,236 @@ class ConfigStructResolver:
     ):
         """
         Args:
-            target_file: name of elf file
-            section_name: name of symbol to patch
-            typedef_name: name of struct typedef in C
-            pystruct: dict of field names, each containing either:
-                      a. ctypes fixed-width containers with names matching struct fields
-                      b. instances of child structs (identically formatted dicts).
+            build_dir: name of the build directory, used for emitting serialised
+                structs
+            endian: endianness of encoding
+            dwarfdump_name: name of dwarf dump command
         """
-
-        self.files: Dict[str, List[ConfigStruct]] = defaultdict(list)
-        self.dwarfdump = ConfigStructDwarfDumper(
-            build_dir, dwarfdump_name=dwarfdump_name
-        )
-        self.build_dir = build_dir
         if endian != "little":
             raise NotImplementedError("Big endian is not currently supported!")
 
-    def add_struct(self, s: ConfigStruct):
-        if s.section_name is None:
-            raise ValueError(
-                "Cannot patch in a config struct without a symbol name to target!"
-            )
-        if s.target_file is None:
-            raise ValueError("Cannot patch in a config struct without a file target!")
+        self.build_dir = build_dir
+        self.dwarfdump_name = dwarfdump_name
+        self.files: Dict[pathlib.Path, Dict[int, CType]] = dict()
+        self.config_structs: List[ConfigStruct] = []
 
-        self.files[s.target_file].append(s)
+        try:
+            subprocess.run([self.dwarfdump_name, "--version"])
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                f"No LLVM DwarfDump! Make sure {self.dwarfdump_name} is on your PATH"
+            ) from e
+
+    def add_struct(self, s: ConfigStruct):
+        """
+        Add a configuration struct to the resolver.
+        """
+        if s.section_name is None:
+            raise ValueError("Cannot emit a config struct without a section name!")
+        if s.target_file is None:
+            raise ValueError("Cannot patch in a config struct without a target file!")
+        if s.type_name is None:
+            raise ValueError("Cannot patch in a config struct without a type name!")
+
+        if s.target_file not in self.files:
+            self.files[s.target_file] = self.resolve_target_file(s.target_file)
+
+        self.config_structs.append(s)
 
     def add_structs(self, lst: List[ConfigStruct]):
+        """
+        Add a list of configuration structs to the resolver.
+        """
         for s in lst:
             self.add_struct(s)
 
-    def get_structs_by_file(self, target_file: str):
-        return self.files[target_file]
-
-    @staticmethod
-    def _check_int_fits(value: int, ctype_cls: Any, field_name: str):
-        size_bits = sizeof(ctype_cls) * 8
-        if issubclass(ctype_cls, (c_int8, c_int16, c_int32, c_int64)):
-            lo = -(1 << (size_bits - 1))
-            hi = (1 << (size_bits - 1)) - 1
-            if not (lo <= value <= hi):
-                raise ValueError(
-                    f"Field '{field_name}': signed value {value} out of range for "
-                    f"{ctype_cls.__name__} ({lo}..{hi})"
-                )
-        else:
-            hi = (1 << size_bits) - 1
-            if not (0 <= value <= hi):
-                raise ValueError(
-                    f"Field '{field_name}': unsigned value {value} out of range for "
-                    f"{ctype_cls.__name__} (0..{hi})"
-                )
-
-    def _serialize_ctype(self, value: Any, ctype_cls) -> bytes:
+    def resolve_target_file(self, target_file: pathlib.Path) -> Dict[int, CType]:
         """
-        Serialize a single Python value into explicit little-endian raw bytes.
-        Width is taken from ctypes via sizeof(), and signedness is derived from
-        the ctypes class so we do not rely on host struct layout.
+        Dwarf dump a target file, parse the output and collect all CTypes into a dictionary.
         """
-        if ctype_cls is c_char:
-            if isinstance(value, str):
-                value = value.encode("utf-8")
-            if isinstance(value, bytes):
-                return value[:1] if value else b"\x00"
-            return bytes([int(value) & 0xFF])
-
-        size = sizeof(ctype_cls)
-        signed = issubclass(ctype_cls, (c_int8, c_int16, c_int32, c_int64))
-        return int(value).to_bytes(size, byteorder="little", signed=signed)
-
-    @staticmethod
-    def _insert_bytes(blob: bytearray, offset: int, data: bytes):
-        if offset < 0:
-            raise ValueError(f"Negative offset {offset}")
-        end = offset + len(data)
-        if end > len(blob):
-            raise ValueError(
-                f"Write of {len(data)} bytes at offset {offset} exceeds blob size {len(blob)}"
+        try:
+            output = subprocess.run(
+                [self.dwarfdump_name, target_file],
+                capture_output=True,
+                text=True,
+                check=True,
             )
-        blob[offset:end] = data
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"Failed to eat DWARF from {target_file}! Does file exist?"
+            ) from e
+        if output.returncode != 0:
+            raise RuntimeError(f"Couldn't dump {target_file} -> {output.stderr}")
 
-    def _flatten_and_write(
-        self,
-        blob: bytearray,
-        dwarf_struct: DwarfStruct,
-        base_offset: int,
-        py_fields: Dict[str, Any],
-        target_file: str,
-    ):
+        # Remove lines before first tag entry and add extra newline
+        raw_lines = output.stdout.splitlines()
+        for i in range(len(raw_lines)):
+            if raw_lines[i][:11] == "0x00000000:":
+                break
+
+        if i == len(raw_lines):
+            raise RuntimeError(
+                "Could not find tag entry with ID 0 in DWARF dump output"
+            )
+
+        raw_output = "\n".join(raw_lines[i:]) + "\n\n"
+
+        try:
+            output_tree = Lark(
+                dwarf_dump_grammar,
+                parser="lalr",
+                propagate_positions=False,
+                maybe_placeholders=False,
+            ).parse(raw_output)
+        except:
+            raise RuntimeError("Could not parse DWARF dump output!")
+
+        type_collector: Dict[int, CType] = dict()
+        for dwarf_entry in output_tree.children:
+            assert isinstance(dwarf_entry, Tree)
+            CType(dwarf_entry, type_collector)
+
+        CType.sanity_check_type_ids(type_collector)
+        return type_collector
+
+    def _flatten_and_write(self, user_value: Any, c_type: CType) -> bytearray:
         """
-        Recursively unroll a DwarfStruct into *blob* at *base_offset*.
-        Nested structs are inlined field-by-field; no ctypes.Structure layout
-        is used, so host struct padding/alignment rules are never involved.
+        Serialise the provided user value as an instance of the provided CType.
         """
-        # (a) Every key supplied by the user must exist in the DWARF layout.
-        member_names = {m.field_name for m in dwarf_struct.members}
-        for field_name in py_fields.keys():
-            if field_name not in member_names:
-                raise ValueError(
-                    f"ConfigStruct field '{field_name}' not found in DWARF struct "
-                    f"'{dwarf_struct.typedef_name}' (members: {sorted(member_names)})"
-                )
+        out_blob = bytearray()
+        type_size = c_type.attributes.byte_size
 
-        for member in sorted(dwarf_struct.members, key=lambda m: m.offset):
-            abs_offset = base_offset + member.offset
-            field_name = member.field_name
-            entries = int(member.entries)
-
-            try:
-                if field_name not in py_fields:
+        match c_type.tag_type:
+            case "pointer_tag":
+                type_size = 8
+                # We assume pointers are 8 byte unsigned
+                py_ctype = c_uint64(user_value)
+                if user_value != py_ctype.value:
                     raise ValueError(
-                        f"Field {field_name} isn't in ConfigStruct but is in DWARF!"
+                        f"Could not represent '{user_value}' as C base type '{c_uint64.__name__}', got '{py_ctype.value}'"
                     )
 
-                py_val = py_fields[field_name]
-                resolved_type = self.dwarfdump.get_typedef_base_type(
-                    target_file, member.type_name
+                py_bytes = bytes(py_ctype)
+                out_blob.extend(py_bytes)
+                assert len(out_blob) == type_size
+            case "base_tag":
+                if (
+                    c_type.attributes.encoding not in BaseTypesMap
+                    or type_size not in BaseTypesMap[c_type.attributes.encoding]
+                ):
+                    raise ValueError(
+                        f"Found base tag type with unexpected encoding {c_type.attributes.encoding} and byte size {type_size}"
+                    )
+                ctype_cls = BaseTypesMap[c_type.attributes.encoding][type_size]
+
+                if c_type.attributes.encoding in (
+                    "unsigned, signed, float, boolean"
+                ) or not (isinstance(user_value, str) or isinstance(user_value, bytes)):
+                    try:
+                        py_ctype = ctype_cls(user_value)
+                    except:
+                        raise ValueError(
+                            f"Could not create C base type '{ctype_cls.__name__}' from value '{user_value}'"
+                        )
+
+                    if user_value != py_ctype.value:
+                        raise ValueError(
+                            f"Could not represent '{user_value}' as C base type '{ctype_cls.__name__}', got '{py_ctype.value}'"
+                        )
+
+                    py_bytes = bytes(py_ctype)
+                else:
+                    if isinstance(user_value, str):
+                        if len(user_value) != 1:
+                            raise ValueError(
+                                f"User provided value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                            )
+                        py_bytes = user_value.encode()
+                    elif isinstance(user_value, bytes):
+                        if len(user_value) != 1:
+                            raise ValueError(
+                                f"User provided value '{user_value!r}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                            )
+                        py_bytes = user_value
+
+                out_blob.extend(py_bytes)
+                assert len(out_blob) == type_size
+            case "array_tag":
+                entry_type = c_type.base_type()
+                if not c_type.array_count() or not entry_type.attributes.byte_size:
+                    raise ValueError(
+                        f"Can't fill an array with size = count '{c_type.array_count()}' * entry_size '{entry_type.attributes.byte_size}' == 0, CType '{c_type}'"
+                    )
+
+                if (
+                    not isinstance(user_value, Iterable)
+                    or not isinstance(user_value, Sized)
+                    or len(user_value) > c_type.array_count()
+                ):
+                    raise ValueError(
+                        f"Can't fill an array with non-iterable or too-large an iterable '{user_value}', CType '{c_type}'"
+                    )
+
+                for entry_value in user_value:
+                    out_blob.extend(self._flatten_and_write(entry_value, entry_type))
+
+                type_size = c_type.array_count() * entry_type.attributes.byte_size
+
+                # Strings must be null-terminated
+                if entry_type.attributes.name == "char":
+                    if len(out_blob) == type_size and out_blob[-1] != 0:
+                        raise ValueError(
+                            f"Arrays of chars must be zero terminated, string '{user_value}', CType '{c_type}'"
+                        )
+
+                # Pad the remaining array entries
+                assert len(out_blob) <= type_size
+                out_blob.extend(bytearray(type_size - len(out_blob)))
+            case "structure_tag":
+                member_types = list(
+                    c_type.collector[member_id] for member_id in c_type.members
                 )
 
-                if resolved_type in BaseTypesMap:
-                    ctype_cls = BaseTypesMap[resolved_type]
-                    type_size = sizeof(ctype_cls)
+                # Every member must have a field value, and vice versa
+                if set(user_value.fields.keys()) != set(
+                    member.attributes.name for member in member_types
+                ):
+                    raise ValueError(
+                        f"User provided keys '{set(user_value.fields.keys())}' do not match structure type member names '{set(member.attributes.name for member in member_types)}', CType '{c_type}'"
+                    )
 
-                    if ctype_cls is c_char:
-                        if isinstance(py_val, str):
-                            data = py_val.encode("utf-8")
-                        elif isinstance(py_val, bytes):
-                            data = py_val
-                        else:
-                            raise TypeError(
-                                f"Field '{field_name}': expected str or bytes for char type, "
-                                f"got {type(py_val).__name__}"
-                            )
-                        total_extent = type_size * entries
-                        if len(data) > total_extent:
-                            raise ValueError(
-                                f"Field '{field_name}': data length {len(data)} exceeds "
-                                f"char array extent {total_extent}"
-                            )
-                        self._insert_bytes(blob, abs_offset, data)
-                        if len(data) < total_extent:
-                            blob[abs_offset + len(data) : abs_offset + total_extent] = (
-                                b"\x00" * (total_extent - len(data))
-                            )
+                for member in sorted(
+                    member_types, key=lambda m: m.attributes.data_member_location
+                ):
+                    start_byte = member.attributes.data_member_location
 
-                    elif isinstance(py_val, list):
-                        if len(py_val) > entries:
-                            raise ValueError(
-                                f"Field '{field_name}': list has {len(py_val)} elements, "
-                                f"but DWARF expects at most {entries}"
-                            )
-                        for i, elem in enumerate(py_val):
-                            elem_offset = abs_offset + i * type_size
-                            if not isinstance(elem, int):
-                                raise TypeError(
-                                    f"Field '{field_name}': array element must be int, "
-                                    f"got {type(elem).__name__}"
-                                )
-                            self._check_int_fits(elem, ctype_cls, field_name)
-                            self._insert_bytes(
-                                blob,
-                                elem_offset,
-                                self._serialize_ctype(elem, ctype_cls),
-                            )
+                    # Pad up to this member
+                    assert len(out_blob) <= start_byte
+                    out_blob.extend(bytearray(start_byte - len(out_blob)))
 
-                    elif isinstance(py_val, int):
-                        if entries != 1:
-                            raise ValueError(
-                                f"Field '{field_name}': scalar integer provided for array "
-                                f"field (expected {entries} entries)"
-                            )
-                        self._check_int_fits(py_val, ctype_cls, field_name)
-                        self._insert_bytes(
-                            blob, abs_offset, self._serialize_ctype(py_val, ctype_cls)
-                        )
+                    member_value = user_value.fields[member.attributes.name]
+                    out_blob.extend(
+                        self._flatten_and_write(member_value, member.base_type())
+                    )
 
-                    else:
-                        raise TypeError(
-                            f"Field '{field_name}' of {member}: unsupported Python type {type(py_val).__name__} "
-                            f"for primitive ctype {ctype_cls.__name__}"
-                        )
+                assert len(out_blob) <= type_size
+                out_blob.extend(bytearray(type_size - len(out_blob)))
+            case _:
+                raise ValueError(f"Trying to flatten unexpected CType '{c_type}'")
 
-                else:
-                    # Struct type (or array of structs) – recurse after looking up layout.
-                    try:
-                        child_struct = self.dwarfdump.get_struct_by_typedef(
-                            target_file, member.type_name
-                        )
-                    except (KeyError, RuntimeError) as e:
-                        raise RuntimeError(
-                            f"Field '{field_name}': unable to resolve struct type "
-                            f"'{resolved_type}' (typedef '{member.type_name}')"
-                        ) from e
-
-                    if isinstance(py_val, ConfigStruct):
-                        if entries != 1:
-                            raise ValueError(
-                                f"Field '{field_name}': scalar ConfigStruct provided for "
-                                f"array field (expected {entries} entries)"
-                            )
-                        self._flatten_and_write(
-                            blob, child_struct, abs_offset, py_val.fields, target_file
-                        )
-                    elif isinstance(py_val, int):
-                        # Special case: allow assignment of 0 to structs that are unused
-                        if py_val == 0:
-                            pass
-                        else:
-                            raise TypeError(
-                                "Cannot assign a non-zero int to a struct field!"
-                            )
-
-                    elif isinstance(py_val, list):
-                        if len(py_val) > entries:
-                            raise ValueError(
-                                f"Field '{field_name}': list has {len(py_val)} elements, "
-                                f"but DWARF expects at most {entries}"
-                            )
-                        stride = child_struct.size
-                        for i, elem in enumerate(py_val):
-                            elem_offset = abs_offset + i * stride
-                            if not isinstance(elem, ConfigStruct):
-                                raise TypeError(
-                                    f"Field '{field_name}': expected ConfigStruct in list, "
-                                    f"got {type(elem).__name__}"
-                                )
-                            self._flatten_and_write(
-                                blob,
-                                child_struct,
-                                elem_offset,
-                                elem.fields,
-                                target_file,
-                            )
-
-                    else:
-                        raise TypeError(
-                            f"Field '{field_name}': unsupported Python type {type(py_val).__name__} "
-                            f"for struct field"
-                        )
-            except Exception as e:
-                e_type = type(e)
-                raise e_type(
-                    f"While parsing {dwarf_struct.type_name}->{member} of {dwarf_struct} \n\n-> {e}"
-                ) from e
-
-    def resolve_file_and_create_structs(self, target_file: str):
-        """
-        Resolve all structs for a given file, and emit binary blobs to patch in for
-        all configstructs currently available. Blobs written directly to self.build_dir.
-        """
-        if target_file not in self.dwarfdump.files:
-            self.dwarfdump._parse_file(target_file)
-
-        for pystruct in self.files[target_file]:
-            struct, _ = self.dwarfdump.find_struct_and_children(
-                target_file, pystruct.typedef_name
-            )
-
-            blob = bytearray(struct.size)
-            self._flatten_and_write(blob, struct, 0, pystruct.fields, target_file)
-
-            if pystruct.target_file is None or pystruct.section_name is None:
-                raise ValueError("ConfigStruct has missing target_file or section_name")
-            blob_name = (
-                f"{pystruct.target_file.split('.elf')[0]}_{pystruct.section_name}.data"
-            )
-            blob_path = os.path.join(self.build_dir, blob_name)
-            with open(blob_path, "wb") as f:
-                f.write(blob)
+        return out_blob
 
     def resolve_and_create_all(self):
         """
         Try generate data files for all currently known config structs. Output
         will be placed in `self.build_dir`.
         """
-        for f in self.files.keys():
-            self.resolve_file_and_create_structs(f)
+        for config_struct in self.config_structs:
+            c_type = CType.find_type_by_name(
+                self.files[config_struct.target_file], config_struct.type_name
+            )
+            blob = self._flatten_and_write(config_struct, c_type)
+            blob_name = f"{config_struct.target_file.split('.elf')[0]}_{config_struct.section_name}.data"
+            blob_path = os.path.join(self.build_dir, blob_name)
+            with open(blob_path, "wb") as f:
+                f.write(blob)
