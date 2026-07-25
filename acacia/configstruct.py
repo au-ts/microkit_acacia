@@ -1,6 +1,6 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
-
+from __future__ import annotations
 import pathlib, os, subprocess
 from lark import Lark, Tree, Token
 from dataclasses import dataclass
@@ -350,7 +350,7 @@ class CType:
         "array_tag": ["type"],
     }
 
-    def __init__(self, entry_tree: Tree, type_collector: Dict[int, CType]):
+    def __init__(self, entry_tree: Tree, type_collector: Dict[int, "CType"]):
         """
         Properties:
             tag_type: type of tag entry, must be a member of special_tags,
