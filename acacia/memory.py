@@ -25,6 +25,7 @@ class MemoryRegion:
         paddr: Optional[int] = None,
         cached: bool = True,
         physical: bool = False,
+        receive_all_untypeds: bool = False,
     ):
         self.name = name
         if size <= 0:
@@ -36,6 +37,7 @@ class MemoryRegion:
         self.physical = physical
         self.cached = cached
         self.sdf = sdf
+        self.receive_all_untypeds = receive_all_untypeds
 
         # Allocate ourselves to SDF
         self.sdf._add_memory_region(self)
@@ -59,6 +61,7 @@ class MemoryRegion:
         mr.set("size", hex(self.size))
         if self.paddr is not None:
             mr.set("phys_addr", hex(self.paddr))
+        mr.set("receive_all_untypeds", self.receive_all_untypeds)
 
 
 class Map:
