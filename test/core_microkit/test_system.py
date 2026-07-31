@@ -9,14 +9,7 @@ import pytest
 
 import acacia.system as system_module
 from acacia.system import System
-
-
-@pytest.fixture
-def mock_allocator():
-    """Patch SDFMemoryAllocator so System.__init__ doesn't need a real Arch."""
-    with patch.object(system_module, "SDFMemoryAllocator") as alloc_cls:
-        alloc_cls.return_value = MagicMock(name="allocator_instance")
-        yield alloc_cls
+from acacia.memory import MemoryRegion
 
 
 @pytest.fixture
@@ -28,7 +21,7 @@ def arch():
 
 
 @pytest.fixture
-def sys_(mock_allocator, arch):
+def sys_(arch):
     """A System with all heavy collaborators mocked out."""
     return System(arch, paddr_top=0x8000_0000)
 
@@ -47,11 +40,6 @@ def make_subsystem(pds=(), mrs=(), channels=(), clients=(), built=False):
 class TestSystemInitialization:
     def test_init_stores_arch(self, sys_, arch):
         assert sys_.arch is arch
-
-    def test_init_creates_allocator_with_page_size(self, mock_allocator, arch):
-        sys_ = System(arch, paddr_top=0xDEAD_0000)
-        mock_allocator.assert_called_once_with(arch, 0xDEAD_0000)
-        assert sys_.allocator is mock_allocator.return_value
 
     def test_init_empty_collections(self, sys_):
         assert sys_.pds == set()
@@ -299,7 +287,7 @@ class TestAutoAllocate:
 
         sys_.auto_allocate()
 
-        mr_virtual.allocate_paddr.assert_not_called()
+        mr_virtual._set_paddr.assert_not_called()
 
     def test_auto_allocate_skips_preallocated_memory_regions(self, sys_):
         """Test that memory regions with already assigned paddr are skipped."""
@@ -311,20 +299,7 @@ class TestAutoAllocate:
 
         sys_.auto_allocate()
 
-        mr_preallocated.allocate_paddr.assert_not_called()
-
-    def test_auto_allocate_allocates_unallocated_physical_regions(self, sys_):
-        """Test that physical memory regions without paddr get allocated."""
-        mr_unallocated = MagicMock(name="unallocated_mr")
-        mr_unallocated.physical = True
-        mr_unallocated.paddr = None
-        mr_unallocated.allocate_paddr.return_value = 0x2000
-
-        sys_._add_memory_region(mr_unallocated)
-
-        sys_.auto_allocate()
-
-        mr_unallocated.allocate_paddr.assert_called_once_with(sys_.allocator)
+        mr_preallocated._set_paddr.assert_not_called()
 
     def test_auto_allocate_mixed_memory_regions(self, sys_):
         """Test auto_allocate with a mix of virtual, preallocated, and unallocated regions."""
@@ -335,14 +310,20 @@ class TestAutoAllocate:
         mr_preallocated = MagicMock(name="preallocated_mr")
         mr_preallocated.physical = True
         mr_preallocated.paddr = 0x1000
+        mr_preallocated.name = "a"
+        mr_preallocated.size = 0x1000
 
         mr_unallocated1 = MagicMock(name="unallocated_mr1")
         mr_unallocated1.physical = True
         mr_unallocated1.paddr = None
+        mr_unallocated1.name = "b"
+        mr_unallocated1.size = 0x1000
 
         mr_unallocated2 = MagicMock(name="unallocated_mr2")
         mr_unallocated2.physical = True
         mr_unallocated2.paddr = None
+        mr_unallocated2.name = "c"
+        mr_unallocated2.size = 0x1000
 
         sys_._add_memory_region(mr_virtual)
         sys_._add_memory_region(mr_preallocated)
@@ -351,11 +332,205 @@ class TestAutoAllocate:
 
         sys_.auto_allocate()
 
-        # Only unallocated physical regions should have allocate_paddr called
-        mr_virtual.allocate_paddr.assert_not_called()
-        mr_preallocated.allocate_paddr.assert_not_called()
-        mr_unallocated1.allocate_paddr.assert_called_once_with(sys_.allocator)
-        mr_unallocated2.allocate_paddr.assert_called_once_with(sys_.allocator)
+        # Only unallocated physical regions should have _set_paddr called
+        mr_virtual._set_paddr.assert_not_called()
+        mr_preallocated._set_paddr.assert_not_called()
+        mr_unallocated1._set_paddr.assert_called_once()
+        mr_unallocated2._set_paddr.assert_called_once()
+
+    def test_auto_allocate_allocates_unallocated_physical_regions(self, sys_):
+        """Test that physical memory regions without paddr get allocated."""
+        mr = MemoryRegion(sys_, "unallocated_mr", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Should have been allocated
+        assert mr.paddr is not None
+        # Should be page-aligned
+        assert mr.paddr % 0x1000 == 0
+
+    def test_auto_allocate_mixed_memory_regions(self, sys_):
+        """Test auto_allocate with a mix of virtual, preallocated, and unallocated regions."""
+        mr_virtual = MemoryRegion(sys_, "virtual_mr", 0x1000, physical=False)
+        mr_preallocated = MemoryRegion(sys_, "preallocated_mr", 0x1000, paddr=0x1000)
+        mr_unallocated1 = MemoryRegion(sys_, "unallocated_mr1", 0x1000, physical=True)
+        mr_unallocated2 = MemoryRegion(sys_, "unallocated_mr2", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Only unallocated physical regions should have been allocated
+        assert mr_virtual.paddr is None  # virtual, untouched
+        assert mr_preallocated.paddr == 0x1000  # preallocated, unchanged
+        assert mr_unallocated1.paddr is not None  # allocated
+        assert mr_unallocated2.paddr is not None  # allocated
+
+    def test_auto_allocate_single_unallocated_from_top(self, sys_):
+        """Test that allocation starts from paddr_top when no other regions exist."""
+        mr = MemoryRegion(sys_, "region_a", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Should allocate at paddr_top, page-aligned
+        expected_paddr = sys_.paddr_top - 0x1000
+        expected_paddr = expected_paddr & ~0xFFF
+        assert mr.paddr == expected_paddr
+
+    def test_auto_allocate_page_alignment(self, sys_):
+        """Test that allocated addresses are properly page-aligned."""
+        mr = MemoryRegion(
+            sys_, "unaligned_mr", 0x1234, physical=True
+        )  # Non-page-aligned size
+
+        sys_.auto_allocate()
+
+        # Resulting paddr should be page-aligned
+        assert mr.paddr % 0x1000 == 0
+
+    def test_auto_allocate_between_two_preallocated_regions(self, sys_):
+        """Test allocation into a gap between two preallocated regions."""
+        sys_.paddr_top = 0x7000_3000
+        # Preallocate regions with a gap between them
+        mr_low = MemoryRegion(sys_, "low_region", 0x1000, paddr=0x7000_0000)
+        mr_high = MemoryRegion(sys_, "high_region", 0x1000, paddr=0x7000_2000)
+
+        # Unallocated region that should fit in the gap
+        mr_unalloc = MemoryRegion(sys_, "gap_region", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Should allocate in the gap at 0x7000_1000 (page-aligned)
+        assert mr_unalloc.paddr == 0x7000_1000
+
+    def test_auto_allocate_multiple_in_sequence(self, sys_):
+        """Test allocating multiple regions after each other."""
+        mr1 = MemoryRegion(sys_, "region_a", 0x1000, physical=True)
+        mr2 = MemoryRegion(sys_, "region_b", 0x1000, physical=True)
+        mr3 = MemoryRegion(sys_, "region_c", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # All should have been allocated
+        assert mr1.paddr is not None
+        assert mr2.paddr is not None
+        assert mr3.paddr is not None
+
+        # Should be page-aligned
+        assert mr1.paddr % 0x1000 == 0
+        assert mr2.paddr % 0x1000 == 0
+        assert mr3.paddr % 0x1000 == 0
+
+    def test_auto_allocate_respects_preallocated_addresses(self, sys_):
+        """Test that preallocated regions' addresses are never modified."""
+        mr_pre = MemoryRegion(sys_, "preallocated", 0x1000, paddr=0x7000_1000)
+        mr_unalloc = MemoryRegion(sys_, "unallocated", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Preallocated should not be touched
+        assert mr_pre.paddr == 0x7000_1000
+
+        # Unallocated should get an address
+        assert mr_unalloc.paddr is not None
+
+    def test_auto_allocate_with_gap_below_preallocated(self, sys_):
+        """Test allocation in gap below a preallocated region."""
+        mr_pre = MemoryRegion(sys_, "preallocated", 0x1000, paddr=0x7000_0000)
+        mr_unalloc = MemoryRegion(sys_, "unallocated", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Unallocated should be placed above preallocated with paddr_top=8000_0000
+        assert mr_unalloc.paddr is not None
+        assert mr_unalloc.paddr % 0x1000 == 0
+        assert mr_unalloc.paddr + 0x1000 > 0x7000_0000
+
+    def test_auto_allocate_finds_best_gap(self, sys_):
+        """Test that allocator finds the gap closest to paddr_top."""
+        sys_.paddr_top = 0x7000_4000
+        mr_highest = MemoryRegion(sys_, "highest", 0x1000, paddr=0x7000_3000)
+        mr_low = MemoryRegion(sys_, "low", 0x1000, paddr=0x7000_0000)
+        mr_unalloc = MemoryRegion(sys_, "unallocated", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Should allocate in the gap at 0x7000_2000-0x7000_3000 (the higher gap)
+        assert mr_unalloc.paddr == 0x7000_2000
+
+    def test_auto_allocate_region_too_large_for_gap(self, sys_):
+        """Test that allocation skips gaps that are too small."""
+        mr_pre1 = MemoryRegion(sys_, "pre1", 0x1000, paddr=0x7FFF_F000)
+        mr_pre2 = MemoryRegion(sys_, "pre2", 0x1000, paddr=0x7FFF_C000)
+
+        # Region that's too large for the gap between pre1 and pre2
+        mr_unalloc = MemoryRegion(sys_, "unallocated", 0x3000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Should allocate below the lowest preallocated region
+        assert mr_unalloc.paddr is not None
+        assert mr_unalloc.paddr + 0x3000 <= mr_pre2.paddr
+
+    def test_auto_allocate_consistency_by_name(self, sys_):
+        """Test that allocation order is deterministic based on name."""
+        mr_zebra = MemoryRegion(sys_, "zebra", 0x1000, physical=True)
+        mr_apple = MemoryRegion(sys_, "apple", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Both should be allocated
+        assert mr_zebra.paddr is not None
+        assert mr_apple.paddr is not None
+
+        # Due to sorting by name (reverse), "zebra" should come second in allocation
+        assert mr_zebra.paddr < mr_apple.paddr
+
+    def test_auto_allocate_empty_system(self, sys_):
+        """Test that auto_allocate handles empty system gracefully."""
+        sys_.auto_allocate()
+        # Should not raise any errors
+
+    def test_auto_allocate_all_preallocated(self, sys_):
+        """Test that auto_allocate handles system with only preallocated regions."""
+        mr1 = MemoryRegion(sys_, "region1", 0x1000, paddr=0x7000_0000)
+        mr2 = MemoryRegion(sys_, "region2", 0x1000, paddr=0x7000_1000)
+
+        sys_.auto_allocate()
+
+        # None should have been modified
+        assert mr1.paddr == 0x7000_0000
+        assert mr2.paddr == 0x7000_1000
+
+    def test_auto_allocate_with_virtual_regions(self, sys_):
+        """Test that virtual regions are completely ignored."""
+        mr_virtual = MemoryRegion(sys_, "virtual", 0x1000, physical=False)
+        mr_physical = MemoryRegion(sys_, "physical", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Virtual region should not be touched
+        assert mr_virtual.paddr is None
+
+        # Physical region should be allocated
+        assert mr_physical.paddr is not None
+
+    def test_auto_allocate_updates_used_range_during_allocation(self, sys_):
+        """Test that later allocations account for earlier auto-allocated regions."""
+        # First allocation will place a region, so second allocation
+        # should account for it being in used_range
+        mr1 = MemoryRegion(sys_, "region_a", 0x1000, physical=True)
+        mr2 = MemoryRegion(sys_, "region_b", 0x1000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Both allocated
+        assert mr1.paddr is not None
+        assert mr2.paddr is not None
+
+        # Should be page-aligned and non-overlapping
+        assert mr1.paddr % 0x1000 == 0
+        assert mr2.paddr % 0x1000 == 0
+        # Each region is 0x1000, so they shouldn't overlap
+        assert abs(mr1.paddr - mr2.paddr) >= 0x1000
 
 
 class TestRender:

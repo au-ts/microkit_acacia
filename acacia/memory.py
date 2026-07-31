@@ -4,7 +4,6 @@
 from typing import Optional, Union, Set
 from dataclasses import dataclass
 import xml.etree.ElementTree as et
-from .arch import SDFMemoryAllocator
 from .system import System
 
 
@@ -40,17 +39,17 @@ class MemoryRegion:
         # Allocate ourselves to SDF
         self.sdf._add_memory_region(self)
 
-    def allocate_paddr(self, allocator: SDFMemoryAllocator) -> Optional[int]:
+    def _set_paddr(self, paddr: int) -> Optional[int]:
         """
-        Allocate a new paddr given the current top pointer.
-
-        Returns:
-            int: new paddr_top
+        Set the paddr for this MR if it wasn't set already.
         """
-        if self.paddr is not None or not self.physical:
+        assert paddr >= 0
+        if self.paddr is not None:
             return None  # nothing to do if already assigned or virtual
+        if not self.physical:
+            raise RuntimeError("Cannot set paddr on a virtual MemoryRegion!")
 
-        self.paddr = allocator.allocate(self.size)
+        self.paddr = paddr
         return self.paddr
 
     def render(self, system_root: et.Element):

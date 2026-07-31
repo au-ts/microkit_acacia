@@ -69,18 +69,3 @@ riscv64 = Arch(ArchID.riscv64)
 riscv32 = Arch(ArchID.riscv32)
 x86 = Arch(ArchID.x86)
 x86_64 = Arch(ArchID.x86_64)
-
-
-class SDFMemoryAllocator:
-    """
-    Class encapsulating the physical memory map of the system.
-    Used for assigning physical addresses to physical MRs
-    """
-
-    def __init__(self, arch: Arch, paddr_top: int):
-        self.arch = arch
-        self.paddr_top = paddr_top
-
-    def allocate(self, sz) -> int:
-        self.paddr_top = self.paddr_top - sz
-        return self.paddr_top

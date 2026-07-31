@@ -8,7 +8,7 @@ from typing import List, Set, Optional
 from unittest.mock import MagicMock
 from typing import TYPE_CHECKING
 
-from .arch import Arch, ArchID, SDFMemoryAllocator
+from .arch import Arch, ArchID
 from .subsystem import Subsystem
 from .dtb import DeviceTreeBlob
 from .configstruct import ConfigStruct, ConfigStructResolver
@@ -30,7 +30,7 @@ class System:
         self, sys_arch: Arch, paddr_top: int, dtb: Optional[DeviceTreeBlob] = None
     ):
         self.arch = sys_arch
-        self.allocator = SDFMemoryAllocator(sys_arch, paddr_top)
+        self.paddr_top = paddr_top
 
         # We store sets, not lists. No duplicates allowed!
         self.pds: Set["ProtectionDomain"] = set()
@@ -92,8 +92,69 @@ class System:
         Currently this only handles assigning paddrs to physical memory regions
         without explicit addresses.
         """
-        for p_mr in [m for m in self.mrs if m.physical and not m.paddr]:
-            p_mr.allocate_paddr(self.allocator)
+        physical_mrs = [m for m in self.mrs if m.physical]
+        used_range = [m for m in physical_mrs if m.paddr is not None]
+
+        # Cluster MRs by name to ensure consistency. Reverse since we pop from end
+        to_alloc = sorted(
+            [m for m in physical_mrs if m.paddr is None],
+            key=lambda m: m.name,
+            reverse=True,
+        )
+        page_size = self.arch.default_page_size()
+
+        while to_alloc:
+            mr = to_alloc.pop()
+
+            # (re)Sort used_range in descending order since we're allocating from top
+            used_range = sorted(
+                [m for m in physical_mrs if m.paddr is not None],
+                key=lambda m: m.paddr,
+                reverse=True,
+            )
+
+            if len(used_range) != 0:
+                # we want to be as close to paddr_top as possible
+                prev_page_start = self.paddr_top
+                next_paddr = None
+
+                for m in used_range:
+                    # Check if we can fit in between the previous page
+                    this_page_end = m.paddr + m.size
+                    """
+                    -----  paddr_top 0x1000_0000 (initial prev_page_start)
+                    | b?|
+                    |   |
+                    |---|  end of a     -> 0x9999_9000
+                    | a |                   (0x1000)
+                    |---|  start of a   -> 0x9999_8000
+
+                    important: paddrs are allocated from the top down, but MRs are allocated up!
+                    we need to see if we can can fit our new mr between the end of the next
+                    allocated MR and the prev_page_start.
+                    """
+                    assert prev_page_start >= this_page_end
+                    if prev_page_start >= this_page_end + mr.size:
+                        # fits!
+                        next_paddr = prev_page_start - mr.size
+                        break
+                    # move prev start to the start of this region if we don' fit
+                    prev_page_start = m.paddr
+
+                if next_paddr is None:
+                    # No suitable gap found, place after the last allocated region's start
+                    next_paddr = prev_page_start - mr.size
+
+            else:
+                next_paddr = self.paddr_top - mr.size
+
+            # Align address to page boundary
+            final_paddr = next_paddr & ~(page_size - 1)
+            if final_paddr < 0:
+                raise RuntimeError(
+                    f"System has run out of physical memory when allocating {mr}!"
+                )
+            mr._set_paddr(final_paddr)
 
     def make_config_structs(self, build_dir: pathlib.Path = pathlib.Path("./")):
         # We can't get config structs without resolving subsystems first

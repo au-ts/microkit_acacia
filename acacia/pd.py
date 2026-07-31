@@ -7,7 +7,6 @@ from abc import ABC
 import xml.etree.ElementTree as et
 from .system import System
 from .memory import MemoryRegion, Map
-from .arch import SDFMemoryAllocator
 from .irq import IRQ
 from .x86 import IOPort
 

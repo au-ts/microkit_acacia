@@ -3,7 +3,7 @@
 
 import pytest
 from typing import Optional
-from acacia.arch import Arch, ArchID, PageSizeID, SDFMemoryAllocator
+from acacia.arch import Arch, ArchID, PageSizeID
 from acacia import aarch64, x86_64, riscv32, MemoryRegion
 from enum import Enum
 
@@ -56,10 +56,3 @@ class TestArch:
 
         with pytest.raises(RuntimeError, match="Invalid page size"):
             aarch64.get_page_size(FakePageSize.huge)
-
-
-class TestSDFMemoryAllocator:
-    def test_initialization(self):
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
-        assert alloc.paddr_top == 0x80000000
-        assert alloc.arch == aarch64
