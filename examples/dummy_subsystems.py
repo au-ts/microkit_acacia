@@ -143,7 +143,7 @@ timer.add_client(client)
 for s in [i2c, timer, clk]:
     sdf.add_subsystem(s)
 
-sdf.resolve_subsystems()
+sdf.assemble()
 for p in sdf.pds:
     print(p)
 

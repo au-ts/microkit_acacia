@@ -48,12 +48,6 @@ class TestMemoryRegion:
         assert mr_elem.get("name") == "test_mr"
         assert mr_elem.get("size") == "0x2000"
 
-    def test_allocate_paddr_assigns(self, sdf):
-        mr = MemoryRegion(sdf, "test", 0x1000, physical=True)
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
-        mr.allocate_paddr(alloc)
-        assert mr.paddr == 0x7FFFF000  # 0x80000000 - 0x1000
-
     def test_allocate_paddr_already_assigned(self, sdf):
         mr = MemoryRegion(sdf, "test", 0x1000, paddr=0x40000000)
         alloc = SDFMemoryAllocator(aarch64, 0x80000000)

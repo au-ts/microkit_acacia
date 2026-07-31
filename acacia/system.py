@@ -38,7 +38,7 @@ class System:
         self.channels: Set["Channel"] = set()
         self.io_spaces: Set["IOAddressSpace"] = set()
         self.subsystems: List[Subsystem] = []
-        self.subsystems_constructed = False
+        self.system_assembled = False
         self.dtb = dtb
 
     def _add_pd(self, pd: "ProtectionDomain"):
@@ -56,11 +56,24 @@ class System:
     def _add_subsystem(self, subsystem: Subsystem):
         self.subsystems.append(subsystem)
 
+    def assemble(self):
+        """
+        Run all automated connection steps.
+        1. Resolve subsystems and connect their clients.
+        2. Allocate any memory addresses that are not assigned yet,
+        """
+        self.resolve_subsystems()
+        # allocate AFTER subsystems are built to make sure we don't miss anything
+        self.auto_allocate()
+        self.system_assembled = True
+
     def resolve_subsystems(self):
         """
         Construct all subsystems and their client connections.
         """
         for s in self.subsystems:
+            if s.built:
+                continue
             print(f"Installing {s}...")
             # Build subsystem and record entities
             s.build()
@@ -71,13 +84,22 @@ class System:
                     print(f"\tadding client {client}...")
                     self._add_pd(client)
 
-        self.subsystems_constructed = True
+    def auto_allocate(self):
+        """
+        Allocate all un-allocated memory and other resources which can be left
+        blank for automatic assignment.
+
+        Currently this only handles assigning paddrs to physical memory regions
+        without explicit addresses.
+        """
+        for p_mr in [m for m in self.mrs if m.physical and not m.paddr]:
+            p_mr.allocate_paddr(self.allocator)
 
     def make_config_structs(self, build_dir: pathlib.Path = pathlib.Path("./")):
         # We can't get config structs without resolving subsystems first
-        if not self.subsystems_constructed:
-            print("System::make_config_structs - auto-resolving systems")
-            self.resolve_subsystems()
+        if not self.system_assembled:
+            print("System::make_config_structs - auto-assembling")
+            self.assemble()
         # TODO: support big endian?
         resolver = ConfigStructResolver(build_dir, endian="little")
         for s in self.subsystems:
@@ -85,15 +107,13 @@ class System:
         resolver.resolve_and_create_all()
 
     def render(self) -> et.Element:
-        if not self.subsystems_constructed:
-            print("System::render - auto-resolving subsystems")
-            self.resolve_subsystems()
+        if not self.system_assembled:
+            print("System::render - auto-assembling")
+            self.assemble()
         system = et.Element("system")
 
         # QoL: sort memory everything by name
         for mr in sorted(self.mrs, key=lambda m: m.name):
-            # Allocate paddr if needed
-            mr.allocate_paddr(self.allocator)
             mr.render(system)
 
         for ios in sorted(self.io_spaces, key=lambda i: i.name):
