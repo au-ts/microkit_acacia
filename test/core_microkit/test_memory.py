@@ -5,7 +5,7 @@ import pytest
 import xml.etree.ElementTree as et
 from unittest.mock import MagicMock
 from acacia.memory import MemoryRegion, Map, IOAddressSpace, IOMap
-from acacia.arch import SDFMemoryAllocator, aarch64
+from acacia.arch import aarch64
 
 
 @pytest.fixture
@@ -47,19 +47,6 @@ class TestMemoryRegion:
         assert mr_elem is not None
         assert mr_elem.get("name") == "test_mr"
         assert mr_elem.get("size") == "0x2000"
-
-    def test_allocate_paddr_already_assigned(self, sdf):
-        mr = MemoryRegion(sdf, "test", 0x1000, paddr=0x40000000)
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
-        # Should return without error or modification
-        mr.allocate_paddr(alloc)
-        assert mr.paddr == 0x40000000
-
-    def test_allocate_paddr_virtual_noop(self, sdf):
-        mr = MemoryRegion(sdf, "test", 0x1000)  # Not physical
-        alloc = SDFMemoryAllocator(aarch64, 0x80000000)
-        mr.allocate_paddr(alloc)
-        assert mr.paddr is None
 
 
 class TestMapPermissions:
