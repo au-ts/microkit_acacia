@@ -3,6 +3,7 @@
 
 import xml.etree.ElementTree as et
 from unittest.mock import MagicMock, patch, call
+from typing import Optional
 
 import pytest
 
@@ -32,13 +33,14 @@ def sys_(mock_allocator, arch):
     return System(arch, paddr_top=0x8000_0000)
 
 
-def make_subsystem(pds=(), mrs=(), channels=(), clients=()):
-    """Build a mock Subsystem exposing the resolve_subsystems contract."""
+def make_subsystem(pds=(), mrs=(), channels=(), clients=(), built=False):
+    """Build a mock Subsystem exposing the assemble contract."""
     ss = MagicMock(name="subsystem")
     ss.get_pds.return_value = list(pds)
     ss.get_mrs.return_value = list(mrs)
     ss.get_channels.return_value = list(channels)
     ss.get_clients.return_value = list(clients)
+    ss.built = built
     return ss
 
 
@@ -56,7 +58,7 @@ class TestSystemInitialization:
         assert sys_.mrs == set()
         assert sys_.channels == set()
         assert sys_.subsystems == []
-        assert sys_.subsystems_constructed is False
+        assert sys_.system_assembled is False
 
     def test_init_collection_types(self, sys_):
         assert isinstance(sys_.pds, set)
@@ -116,34 +118,131 @@ class TestAddSubsystem:
 class TestResolveSubsystems:
     def test_resolve_empty(self, sys_):
         sys_.resolve_subsystems()
-        assert sys_.subsystems_constructed is True
         assert sys_.pds == set()
 
-    def test_resolve_calls_build(self, sys_):
-        ss = make_subsystem()
-        sys_._add_subsystem(ss)
-        sys_.resolve_subsystems()
-        ss.build.assert_called_once()
+    def test_resolve_skips_already_built_subsystem(self, sys_):
+        """Test that subsystems with built=True are skipped during resolve_subsystems."""
+        ss_built = make_subsystem(built=True)
+        ss_not_built = make_subsystem(built=False)
 
-    def test_resolve_collects_entities(self, sys_):
+        sys_._add_subsystem(ss_built)
+        sys_._add_subsystem(ss_not_built)
+
+        sys_.resolve_subsystems()
+
+        # Built subsystem should not have build() called
+        ss_built.build.assert_not_called()
+        # Not built subsystem should have build() called
+        ss_not_built.build.assert_called_once()
+
+    def test_resolve_only_calls_build_on_unbuilt_subsystems(self, sys_):
+        """Test that build() is only called on subsystems where built=False."""
+        ss1 = make_subsystem(built=True)
+        ss2 = make_subsystem(built=False)
+        ss3 = make_subsystem(built=True)
+
+        sys_._add_subsystem(ss1)
+        sys_._add_subsystem(ss2)
+        sys_._add_subsystem(ss3)
+
+        sys_.resolve_subsystems()
+
+        ss1.build.assert_not_called()
+        ss2.build.assert_called_once()
+        ss3.build.assert_not_called()
+
+    def test_resolve_processes_subsystems_in_order(self, sys_):
+        """Test that subsystems are processed in order regardless of built status."""
+        order = []
+        ss1 = make_subsystem(built=False)
+        ss2 = make_subsystem(built=True)
+        ss3 = make_subsystem(built=False)
+
+        def make_tracker(name):
+            return lambda: order.append(name)
+
+        ss1.build.side_effect = make_tracker("ss1")
+        ss2.build.side_effect = make_tracker("ss2")
+        ss3.build.side_effect = make_tracker("ss3")
+
+        sys_._add_subsystem(ss1)
+        sys_._add_subsystem(ss2)
+        sys_._add_subsystem(ss3)
+
+        sys_.resolve_subsystems()
+
+        # Only ss1 and ss3 should be tracked (ss2 is already built)
+        assert order == ["ss1", "ss3"]
+
+    def test_resolve_skips_client_addition_for_built_subsystem(self, sys_):
+        """Test that clients from built subsystems are not added."""
+        client_built = MagicMock(name="client_built")
+        client_not_built = MagicMock(name="client_not_built")
+
+        ss_built = make_subsystem(clients=[client_built], built=True)
+        ss_not_built = make_subsystem(clients=[client_not_built], built=False)
+
+        sys_._add_subsystem(ss_built)
+        sys_._add_subsystem(ss_not_built)
+
+        sys_.resolve_subsystems()
+
+        # Client from built subsystem should NOT be added
+        assert client_built not in sys_.pds
+        # Client from not built subsystem should be added
+        assert client_not_built in sys_.pds
+
+
+class TestAssemble:
+    def test_assemble_calls_resolve_and_auto_allocate(self, sys_):
+        """Test that assemble() calls both resolve_subsystems() and auto_allocate()."""
+        sys_.resolve_subsystems = MagicMock(wraps=sys_.resolve_subsystems)
+        sys_.auto_allocate = MagicMock(wraps=sys_.auto_allocate)
+
+        sys_.assemble()
+
+        sys_.resolve_subsystems.assert_called_once()
+        sys_.auto_allocate.assert_called_once()
+        assert sys_.system_assembled is True
+
+    def test_assemble_empty(self, sys_):
+        sys_.assemble()
+        assert sys_.system_assembled is True
+        assert sys_.pds == set()
+
+    def test_assemble_calls_build_on_unbuilt_only(self, sys_):
+        """Test that assemble() respects the built flag via resolve_subsystems."""
+        ss_built = make_subsystem(built=True)
+        ss_not_built = make_subsystem(built=False)
+
+        sys_._add_subsystem(ss_built)
+        sys_._add_subsystem(ss_not_built)
+
+        sys_.assemble()
+
+        ss_built.build.assert_not_called()
+        ss_not_built.build.assert_called_once()
+        assert sys_.system_assembled is True
+
+    def test_assemble_collects_entities(self, sys_):
         pd = MagicMock(name="pd")
         mr = MagicMock(name="mr")
         ch = MagicMock(name="ch")
         ss = make_subsystem(pds=[pd], mrs=[mr], channels=[ch])
         sys_._add_subsystem(ss)
 
-        sys_.resolve_subsystems()
+        sys_.assemble()
 
-    def test_resolve_adds_clients_as_pds(self, sys_):
+    def test_assemble_adds_clients_as_pds(self, sys_):
         client = MagicMock(name="client")
         ss = make_subsystem(clients=[client])
         sys_._add_subsystem(ss)
 
-        sys_.resolve_subsystems()
+        sys_.assemble()
 
         assert client in sys_.pds
 
-    def test_resolve_skips_already_installed_client(self, sys_):
+    def test_assemble_skips_already_installed_client(self, sys_):
         # A client shared between two subsystems must only be added once and
         # must NOT trigger the duplicate-PD RuntimeError.
         client = MagicMock(name="shared_client")
@@ -152,11 +251,11 @@ class TestResolveSubsystems:
         sys_._add_subsystem(ss1)
         sys_._add_subsystem(ss2)
 
-        sys_.resolve_subsystems()  # Must not raise
+        sys_.assemble()  # Must not raise
 
         assert client in sys_.pds
 
-    def test_resolve_client_colliding_with_pd_skipped(self, sys_):
+    def test_assemble_client_colliding_with_pd_skipped(self, sys_):
         # If the same object is reported as a PD by one subsystem and a client
         # by another, the client path must skip it rather than re-add.
         shared = MagicMock(name="shared")
@@ -165,17 +264,17 @@ class TestResolveSubsystems:
         sys_._add_subsystem(ss1)
         sys_._add_subsystem(ss2)
 
-        sys_.resolve_subsystems()  # Must not raise
+        sys_.assemble()  # Must not raise
 
         assert shared in sys_.pds
 
-    def test_resolve_sets_constructed_flag(self, sys_):
+    def test_assemble_sets_constructed_flag(self, sys_):
         ss = make_subsystem()
         sys_._add_subsystem(ss)
-        sys_.resolve_subsystems()
-        assert sys_.subsystems_constructed is True
+        sys_.assemble()
+        assert sys_.system_assembled is True
 
-    def test_resolve_processes_subsystems_in_order(self, sys_):
+    def test_assemble_processes_subsystems_in_order(self, sys_):
         order = []
         ss1 = make_subsystem()
         ss2 = make_subsystem()
@@ -184,9 +283,79 @@ class TestResolveSubsystems:
         sys_._add_subsystem(ss1)
         sys_._add_subsystem(ss2)
 
-        sys_.resolve_subsystems()
+        sys_.assemble()
 
         assert order == ["ss1", "ss2"]
+
+
+class TestAutoAllocate:
+    def test_auto_allocate_skips_virtual_memory_regions(self, sys_):
+        """Test that virtual memory regions (physical=False) are skipped."""
+        mr_virtual = MagicMock(name="virtual_mr")
+        mr_virtual.physical = False
+        mr_virtual.paddr = None
+
+        sys_._add_memory_region(mr_virtual)
+
+        sys_.auto_allocate()
+
+        mr_virtual.allocate_paddr.assert_not_called()
+
+    def test_auto_allocate_skips_preallocated_memory_regions(self, sys_):
+        """Test that memory regions with already assigned paddr are skipped."""
+        mr_preallocated = MagicMock(name="preallocated_mr")
+        mr_preallocated.physical = True
+        mr_preallocated.paddr = 0x1000
+
+        sys_._add_memory_region(mr_preallocated)
+
+        sys_.auto_allocate()
+
+        mr_preallocated.allocate_paddr.assert_not_called()
+
+    def test_auto_allocate_allocates_unallocated_physical_regions(self, sys_):
+        """Test that physical memory regions without paddr get allocated."""
+        mr_unallocated = MagicMock(name="unallocated_mr")
+        mr_unallocated.physical = True
+        mr_unallocated.paddr = None
+        mr_unallocated.allocate_paddr.return_value = 0x2000
+
+        sys_._add_memory_region(mr_unallocated)
+
+        sys_.auto_allocate()
+
+        mr_unallocated.allocate_paddr.assert_called_once_with(sys_.allocator)
+
+    def test_auto_allocate_mixed_memory_regions(self, sys_):
+        """Test auto_allocate with a mix of virtual, preallocated, and unallocated regions."""
+        mr_virtual = MagicMock(name="virtual_mr")
+        mr_virtual.physical = False
+        mr_virtual.paddr = None
+
+        mr_preallocated = MagicMock(name="preallocated_mr")
+        mr_preallocated.physical = True
+        mr_preallocated.paddr = 0x1000
+
+        mr_unallocated1 = MagicMock(name="unallocated_mr1")
+        mr_unallocated1.physical = True
+        mr_unallocated1.paddr = None
+
+        mr_unallocated2 = MagicMock(name="unallocated_mr2")
+        mr_unallocated2.physical = True
+        mr_unallocated2.paddr = None
+
+        sys_._add_memory_region(mr_virtual)
+        sys_._add_memory_region(mr_preallocated)
+        sys_._add_memory_region(mr_unallocated1)
+        sys_._add_memory_region(mr_unallocated2)
+
+        sys_.auto_allocate()
+
+        # Only unallocated physical regions should have allocate_paddr called
+        mr_virtual.allocate_paddr.assert_not_called()
+        mr_preallocated.allocate_paddr.assert_not_called()
+        mr_unallocated1.allocate_paddr.assert_called_once_with(sys_.allocator)
+        mr_unallocated2.allocate_paddr.assert_called_once_with(sys_.allocator)
 
 
 class TestRender:
@@ -195,40 +364,30 @@ class TestRender:
         assert isinstance(root, et.Element)
         assert root.tag == "system"
 
-    def test_render_auto_resolves_when_unconstructed(self, sys_):
+    def test_render_auto_assembles_when_unconstructed(self, sys_):
         ss = make_subsystem()
         sys_._add_subsystem(ss)
-        assert sys_.subsystems_constructed is False
+        assert sys_.system_assembled is False
 
         sys_.render()
 
         ss.build.assert_called_once()
-        assert sys_.subsystems_constructed is True
+        assert sys_.system_assembled is True
 
-    def test_render_does_not_reresolve_when_constructed(self, sys_):
+    def test_render_does_not_reassemble_when_constructed(self, sys_):
         ss = make_subsystem()
         sys_._add_subsystem(ss)
-        sys_.resolve_subsystems()
+        sys_.assemble()
         ss.build.reset_mock()
 
         sys_.render()
 
         ss.build.assert_not_called()
 
-    def test_render_allocates_and_renders_mrs(self, sys_):
-        mr = MagicMock(name="mr")
-        sys_._add_memory_region(mr)
-        sys_.subsystems_constructed = True  # skip auto-resolve
-
-        root = sys_.render()
-
-        mr.allocate_paddr.assert_called_once_with(sys_.allocator)
-        mr.render.assert_called_once_with(root)
-
     def test_render_renders_pds(self, sys_):
         pd = MagicMock(name="pd")
         sys_._add_pd(pd)
-        sys_.subsystems_constructed = True
+        sys_.system_assembled = True
 
         root = sys_.render()
 
@@ -237,7 +396,7 @@ class TestRender:
     def test_render_renders_channels(self, sys_):
         ch = MagicMock(name="ch")
         sys_._add_channel(ch)
-        sys_.subsystems_constructed = True
+        sys_.system_assembled = True
 
         root = sys_.render()
 
@@ -248,7 +407,7 @@ class TestRender:
         sys_._add_pd(pd)
         sys_._add_memory_region(mr)
         sys_._add_channel(ch)
-        sys_.subsystems_constructed = True
+        sys_.system_assembled = True
 
         root = sys_.render()
 
@@ -268,7 +427,7 @@ class TestWriteXmlFile:
 
     def test_write_xml_file_produces_valid_xml(self, sys_, tmp_path):
         # End-to-end on an empty (but constructed) system: file must parse back.
-        sys_.subsystems_constructed = True
+        sys_.system_assembled = True
         out = tmp_path / "sys.xml"
 
         sys_.write_xml_file(str(out))
@@ -278,7 +437,7 @@ class TestWriteXmlFile:
         assert tree.getroot().tag == "system"
 
     def test_write_xml_file_writes_declaration(self, sys_, tmp_path):
-        sys_.subsystems_constructed = True
+        sys_.system_assembled = True
         out = tmp_path / "sys.xml"
 
         sys_.write_xml_file(str(out))

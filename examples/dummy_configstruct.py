@@ -157,7 +157,7 @@ sdf.add_channel(ch12)
 for c in [client1, client2, client3]:
     i2c.add_client(c)
 
-sdf.resolve_subsystems()
+sdf.assemble()
 
 structs = i2c.generate_config_structs()
 r = ConfigStructResolver("./dummy_configstruct_build")
