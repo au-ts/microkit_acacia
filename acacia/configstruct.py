@@ -697,12 +697,12 @@ class ConfigStructResolver:
                         "unsigned, signed, float, boolean"
                     ):
                         raise ValueError(
-                            f"User provided string or bytes value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                            f"User provided string or bytes value '{user_value!r}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
                         )
 
                     if len(user_value) != 1:
                         raise ValueError(
-                            f"User provided value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                            f"User provided value '{user_value!r}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
                         )
 
                     if isinstance(user_value, str):
@@ -737,7 +737,7 @@ class ConfigStructResolver:
                 if (
                     not (
                         isinstance(user_value, List)
-                        or isinstance(user_value, Tuple)
+                        or isinstance(user_value, tuple)
                         or isinstance(user_value, str)
                         or isinstance(user_value, bytes)
                         or isinstance(user_value, bytearray)
@@ -757,7 +757,7 @@ class ConfigStructResolver:
                 if entry_type.attributes.name == "char":
                     if len(out_blob) == type_size and out_blob[-1] != 0:
                         raise ValueError(
-                            f"Arrays of chars must be zero terminated, string '{user_value}', CType '{c_type}'"
+                            f"Arrays of chars must be zero terminated, string '{user_value!r}', CType '{c_type}'"
                         )
 
                 # Pad the remaining array entries
