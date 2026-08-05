@@ -720,8 +720,13 @@ class ConfigStructResolver:
         match c_type.tag_type:
             case "pointer_tag":
                 type_size = 8
-                # We assume pointers are 8 byte unsigned
-                py_ctype = c_uint64(user_value)
+                try:
+                    # We assume pointers are 8 byte unsigned
+                    py_ctype = c_uint64(user_value)
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not create C pointer type from value '{user_value}'"
+                    ) from e
                 if user_value != py_ctype.value:
                     raise ValueError(
                         f"Could not represent '{user_value}' as C base type '{c_uint64.__name__}', got '{py_ctype.value}'"
@@ -745,10 +750,10 @@ class ConfigStructResolver:
                 ) or not (isinstance(user_value, str) or isinstance(user_value, bytes)):
                     try:
                         py_ctype = ctype_cls(user_value)
-                    except:
+                    except Exception as e:
                         raise ValueError(
                             f"Could not create C base type '{ctype_cls.__name__}' from value '{user_value}'"
-                        )
+                        ) from e
 
                     if user_value != py_ctype.value:
                         raise ValueError(
@@ -769,6 +774,10 @@ class ConfigStructResolver:
                                 f"User provided value '{user_value!r}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
                             )
                         py_bytes = user_value
+                    else:
+                        raise ValueError(
+                            f"User provided value '{user_value}' which is not a string or bytes, so cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                        )
 
                 out_blob.extend(py_bytes)
                 assert len(out_blob) == type_size
