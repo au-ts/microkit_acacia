@@ -10,3 +10,4 @@ from .subsystem import Subsystem, SubsystemBuildError
 from .dtb import DTBNode, DeviceTreeBlob
 from .configstruct import ConfigStruct, ConfigStructResolver
 from .x86 import IOPort
+from .dwarf_dump_grammar import grammar
