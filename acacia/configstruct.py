@@ -159,7 +159,7 @@ class Attributes:
             raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
         assert isinstance(value_tree.children[0], Token)
         value = value_tree.children[0].value
-        if value.startswith('0x'):
+        if value.startswith("0x"):
             return int(value, base=16)
         return int(value)
 
@@ -173,7 +173,7 @@ class Attributes:
             raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
         assert isinstance(value_tree.children[0], Token)
         value = value_tree.children[0].value
-        if not value.startswith('0x') or len(value) != 10:
+        if not value.startswith("0x") or len(value) != 10:
             raise ValueError(f"Expected type ID, found '{value}'")
         return int(value, base=16)
 
@@ -268,7 +268,16 @@ class Attributes:
         object.__setattr__(self, name, at_value)
 
     def __repr__(self):
-        return "Attributes:\n    " + "\n    ".join([f"{at_name}: {getattr(self, at_name)}" for at_name in self.valid_attributes]) + "\n"
+        return (
+            "Attributes:\n    "
+            + "\n    ".join(
+                [
+                    f"{at_name}: {getattr(self, at_name)}"
+                    for at_name in self.valid_attributes
+                ]
+            )
+            + "\n"
+        )
 
 
 class CType:
@@ -751,7 +760,9 @@ class ConfigStructResolver:
                 ctype_cls = BaseTypesMap[c_type.attributes.encoding][type_size]
 
                 if isinstance(user_value, str) or isinstance(user_value, bytes):
-                    if c_type.attributes.encoding in ("unsigned, signed, float, boolean"):
+                    if c_type.attributes.encoding in (
+                        "unsigned, signed, float, boolean"
+                    ):
                         raise ValueError(
                             f"User provided string or bytes value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
                         )
@@ -791,11 +802,13 @@ class ConfigStructResolver:
                     )
 
                 if (
-                    not (isinstance(user_value, List)
-                         or isinstance(user_value, Tuple)
-                         or isinstance(user_value, str)
-                         or isinstance(user_value, bytes)
-                         or isinstance(user_value, bytearray))
+                    not (
+                        isinstance(user_value, List)
+                        or isinstance(user_value, Tuple)
+                        or isinstance(user_value, str)
+                        or isinstance(user_value, bytes)
+                        or isinstance(user_value, bytearray)
+                    )
                     or len(user_value) > c_type.array_count()
                 ):
                     raise ValueError(
