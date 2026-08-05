@@ -21,7 +21,7 @@ from ctypes import (
     c_bool,
 )
 from collections.abc import Sized, Iterable
-from typing import List, Tuple, String, Dict, Optional, Any, Union
+from typing import List, Tuple, Dict, Optional, Any, Union
 
 dwarf_dump_grammar = r"""
     start : entry+
@@ -159,7 +159,7 @@ class Attributes:
             raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
         assert isinstance(value_tree.children[0], Token)
         value = value_tree.children[0].value
-        if value[:2] == "0x":
+        if value.startswith('0x'):
             return int(value, base=16)
         return int(value)
 
@@ -173,7 +173,7 @@ class Attributes:
             raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
         assert isinstance(value_tree.children[0], Token)
         value = value_tree.children[0].value
-        if value[:2] != "0x" or len(value) != 10:
+        if not value.startswith('0x') or len(value) != 10:
             raise ValueError(f"Expected type ID, found '{value}'")
         return int(value, base=16)
 
@@ -236,7 +236,7 @@ class Attributes:
                 at_value = self.escaped_string(value)
             case "encoding":
                 encoding = self.string(value)
-                if len(encoding) < 7 or encoding[:7] != "DW_ATE_":
+                if not encoding.startswith("DW_ATE_"):
                     raise ValueError(
                         f"Found an encoding attribute '{encoding}' without the 'DW_ATE_' prefix"
                     )
@@ -268,13 +268,7 @@ class Attributes:
         object.__setattr__(self, name, at_value)
 
     def __repr__(self):
-        ret_string = "Attributes:\n"
-        for at_name in self.valid_attributes:
-            at_value = getattr(self, at_name)
-            if at_value is not None:
-                ret_string += f"    {at_name}: {at_value}\n"
-        ret_string += "\n"
-        return ret_string
+        return "Attributes:\n    " + "\n    ".join([f"{at_name}: {getattr(self, at_name)}" for at_name in self.valid_attributes]) + "\n"
 
 
 class CType:
@@ -682,7 +676,7 @@ class ConfigStructResolver:
         # Remove lines before first tag entry and add extra newline
         raw_lines = output.stdout.splitlines()
         for i in range(len(raw_lines)):
-            if raw_lines[i][:11] == "0x00000000:":
+            if raw_lines[i][:11].startswith("0x00000000:"):
                 break
 
         if i == len(raw_lines):
@@ -745,9 +739,23 @@ class ConfigStructResolver:
                     )
                 ctype_cls = BaseTypesMap[c_type.attributes.encoding][type_size]
 
-                if c_type.attributes.encoding in (
-                    "unsigned, signed, float, boolean"
-                ) or not (isinstance(user_value, str) or isinstance(user_value, bytes)):
+                if isinstance(user_value, str) or isinstance(user_value, bytes):
+                    if c_type.attributes.encoding in ("unsigned, signed, float, boolean"):
+                        raise ValueError(
+                            f"User provided string or bytes value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                        )
+
+                    if len(user_value) != 1:
+                        raise ValueError(
+                            f"User provided value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
+                        )
+
+                    if isinstance(user_value, str):
+                        py_bytes = user_value.encode()
+                    else:
+                        py_bytes = user_value
+
+                else:
                     try:
                         py_ctype = ctype_cls(user_value)
                     except Exception as e:
@@ -761,23 +769,6 @@ class ConfigStructResolver:
                         )
 
                     py_bytes = bytes(py_ctype)
-                else:
-                    if isinstance(user_value, str):
-                        if len(user_value) != 1:
-                            raise ValueError(
-                                f"User provided value '{user_value}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
-                            )
-                        py_bytes = user_value.encode()
-                    elif isinstance(user_value, bytes):
-                        if len(user_value) != 1:
-                            raise ValueError(
-                                f"User provided value '{user_value!r}' which cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
-                            )
-                        py_bytes = user_value
-                    else:
-                        raise ValueError(
-                            f"User provided value '{user_value}' which is not a string or bytes, so cannot be used for C Base type '{ctype_cls.__name__}', CType '{c_type}'"
-                        )
 
                 out_blob.extend(py_bytes)
                 assert len(out_blob) == type_size
@@ -789,15 +780,15 @@ class ConfigStructResolver:
                     )
 
                 if (
-                    not isinstance(user_value, List)
-                    or not isinstance(user_value, Tuple)
-                    or not isinstance(user_value, String)
-                    or not isinstance(user_value, bytes)
-                    or not isinstance(user_value, bytearray)
+                    not (isinstance(user_value, List)
+                         or isinstance(user_value, Tuple)
+                         or isinstance(user_value, str)
+                         or isinstance(user_value, bytes)
+                         or isinstance(user_value, bytearray))
                     or len(user_value) > c_type.array_count()
                 ):
                     raise ValueError(
-                        f"Can't fill an array with non-iterable or too-large an iterable '{user_value}', CType '{c_type}'"
+                        f"Can't fill an array with a non-iterable or too-large an iterable '{user_value}', CType '{c_type}'"
                     )
 
                 for entry_value in user_value:
