@@ -541,6 +541,7 @@ class ConfigStruct:
         type_name: Optional[str] = None,
         section_name: Optional[pathlib.Path] = None,
         target_file: Optional[pathlib.Path] = None,
+        empty: bool = False,
     ):
         """
         Args:
@@ -553,6 +554,10 @@ class ConfigStruct:
             section_name: name of section to patch config struct into
             target_file: ELF file this will be patched into
         """
+        self.empty = empty
+        if (self.empty and len(fields)):
+            raise ValueError("Empty config structs cannot have fields!")
+
         self.fields = fields
         self.type_name = type_name
         self.section_name = section_name
@@ -710,6 +715,12 @@ class ConfigStructResolver:
         """
         out_blob = bytearray()
         type_size = c_type.attributes.byte_size
+
+        # If we were provided an "empty" config struct for this C type, 0 fill
+        # the region
+        if isinstance(user_value, ConfigStruct) and user_value.empty:
+            out_blob.extend(0 for _ in range(type_size))
+            return out_blob
 
         match c_type.tag_type:
             case "pointer_tag":
