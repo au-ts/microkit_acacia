@@ -21,7 +21,7 @@ from ctypes import (
     c_bool,
 )
 from collections.abc import Sized, Iterable
-from typing import List, Dict, Optional, Any, Union, Tuple
+from typing import List, Tuple, String, Dict, Optional, Any, Union
 
 dwarf_dump_grammar = r"""
     start : entry+
@@ -789,8 +789,11 @@ class ConfigStructResolver:
                     )
 
                 if (
-                    not isinstance(user_value, Iterable)
-                    or not isinstance(user_value, Sized)
+                    not isinstance(user_value, List)
+                    or not isinstance(user_value, Tuple)
+                    or not isinstance(user_value, String)
+                    or not isinstance(user_value, bytes)
+                    or not isinstance(user_value, bytearray)
                     or len(user_value) > c_type.array_count()
                 ):
                     raise ValueError(
