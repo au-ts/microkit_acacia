@@ -338,10 +338,10 @@ class CType:
     }
 
     required_attributes = {
-        "base_tag": ["encoding", "byte_size"],
-        "typedef_tag": ["name", "type"],
-        "member_tag": ["data_member_location", "name", "type"],
-        "array_tag": ["type"],
+        "base_tag": ("encoding", "byte_size"),
+        "typedef_tag": ("name", "type"),
+        "member_tag": ("data_member_location", "name", "type"),
+        "array_tag": ("type",),
     }
 
     def __init__(self, entry_tree: Tree, type_collector: Dict[int, "CType"]):
