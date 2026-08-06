@@ -375,16 +375,14 @@ class TestAutoAllocate:
         expected_paddr = expected_paddr & ~0xFFF
         assert mr.paddr == expected_paddr
 
-    def test_auto_allocate_page_alignment(self, sys_):
-        """Test that allocated addresses are properly page-aligned."""
+    def test_size_align_enforced(self, sys_):
+        """Test that MRs with non-aligned addresses are rejected"""
         mr = MemoryRegion(
             sys_, "unaligned_mr", 0x1234, physical=True
         )  # Non-page-aligned size
 
-        sys_.auto_allocate()
-
-        # Resulting paddr should be page-aligned
-        assert mr.paddr % 0x1000 == 0
+        with pytest.raises(RuntimeError, match="page-unaligned"):
+            sys_.auto_allocate()
 
     def test_auto_allocate_between_two_preallocated_regions(self, sys_):
         """Test allocation into a gap between two preallocated regions."""
