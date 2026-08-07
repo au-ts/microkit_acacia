@@ -653,7 +653,23 @@ class ConfigStructResolver:
 
     def _flatten_and_write(self, user_value: Any, c_type: CType) -> bytearray:
         """
-        Serialise the provided user value as an instance of the provided CType.
+        Returns the serialised bytes of the C type with value user_value. Used
+        to create serialised configuration structs for Acacia components.
+
+        This function is recursive. If the C type is an array or struct type,
+        the function will call itself on each of the entries/members, until
+        eventually a "base" type or "pointer" type is reached.
+
+        The user value will then be serialised into bytes of the base C type
+        using the ctypes module.
+
+        The bytes of each struct member are then placed at the member's offset
+        within the struct. Members are filled from offset 0 onwards. Zero-filled
+        padding is added between members if the member's bytes do not reach the
+        next offset.
+
+        We only support pointer types for 64 bit architectures. Pointers are
+        translated into 8 byte unsigned C types.
         """
         out_blob = bytearray()
         type_size = c_type.attributes.byte_size
