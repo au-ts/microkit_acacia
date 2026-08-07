@@ -25,7 +25,6 @@ from collections.abc import Sized, Iterable
 from typing import List, Tuple, Dict, Optional, Any, Union
 
 
-@dataclass
 class Attributes:
     """
     Class encapsulating tag attributes in the parsed output of llvm-dwarfdump on
