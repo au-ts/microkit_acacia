@@ -497,7 +497,7 @@ class ConfigStruct:
             target_file: ELF file this will be patched into
         """
         self.empty = empty
-        if (self.empty and len(fields)):
+        if self.empty and len(fields):
             raise ValueError("Empty config structs cannot have fields!")
 
         self.fields = fields
@@ -568,7 +568,9 @@ class ConfigStructResolver:
         if endian != "little":
             raise NotImplementedError("Big endian is not currently supported!")
         elif not arch_64_bit:
-            raise NotImplementedError("Non-64 bit architectures are not currently supported!")
+            raise NotImplementedError(
+                "Non-64 bit architectures are not currently supported!"
+            )
 
         self.build_dir = build_dir
         self.dwarfdump_name = dwarfdump_name
