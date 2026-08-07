@@ -162,7 +162,7 @@ for c in [client1, client2, client3]:
 sdf.assemble()
 
 structs = i2c.generate_config_structs()
-r = ConfigStructResolver("./dummy_configstruct_build")
+r = ConfigStructResolver("./dummy_configstruct_build", arch_64_bit=sdf.arch.is_64_bit())
 for s in structs:
     print(s)
     r.add_struct(s)

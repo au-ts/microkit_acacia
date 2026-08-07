@@ -556,6 +556,7 @@ class ConfigStructResolver:
         build_dir: pathlib.Path,
         endian="little",
         dwarfdump_name: str = "llvm-dwarfdump",
+        arch_64_bit: bool = True,
     ):
         """
         Args:
@@ -566,6 +567,8 @@ class ConfigStructResolver:
         """
         if endian != "little":
             raise NotImplementedError("Big endian is not currently supported!")
+        elif not arch_64_bit:
+            raise NotImplementedError("Non-64 bit architectures are not currently supported!")
 
         self.build_dir = build_dir
         self.dwarfdump_name = dwarfdump_name
