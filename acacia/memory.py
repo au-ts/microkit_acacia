@@ -24,6 +24,7 @@ class MemoryRegion:
         paddr: Optional[int] = None,
         cached: bool = True,
         physical: bool = False,
+        prefill_bootinfo: Optional[str] = None,
     ):
         self.name = name
         if size <= 0:
@@ -35,6 +36,7 @@ class MemoryRegion:
         self.physical = physical
         self.cached = cached
         self.sdf = sdf
+        self.prefill_bootinfo = prefill_bootinfo
 
         # Allocate ourselves to SDF
         self.sdf._add_memory_region(self)
@@ -58,6 +60,8 @@ class MemoryRegion:
         mr.set("size", hex(self.size))
         if self.paddr is not None:
             mr.set("phys_addr", hex(self.paddr))
+        if self.prefill_bootinfo is not None:
+            mr.set("prefill_bootinfo", self.prefill_bootinfo)
 
 
 class Map:
