@@ -39,6 +39,17 @@ class TestMemoryRegion:
         mr = MemoryRegion(sdf, "test", 0x1000, cached=False)
         assert not mr.cached
 
+    def test_prefill_bootinfo(self, sdf):
+        mr = MemoryRegion(
+            sdf, "bootinfo_x86_tsc_freq", size=0x1000, prefill_bootinfo="x86_tsc_freq"
+        )
+        root = et.Element("system")
+        mr.render(root)
+        mr_elem = root.find("memory_region")
+        assert mr_elem is not None
+        assert mr_elem.get("name") == "bootinfo_x86_tsc_freq"
+        assert mr_elem.get("prefill_bootinfo") == "x86_tsc_freq"
+
     def test_render(self, sdf):
         mr = MemoryRegion(sdf, "test_mr", 0x2000)
         root = et.Element("system")
