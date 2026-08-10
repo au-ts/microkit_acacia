@@ -66,12 +66,9 @@ jobs:
           python -c 'import acacia; print(dir(acacia))'
 
       - name: Install dev dependencies
-        # pytest does not support py3.9
-        if: ${{ matrix.version != '3.9' }}
         run: |
           pip3 install -r dev-requirements.txt
 
       - name: Run tests
-        if: ${{ matrix.version != '3.9' }}
         run: |
           pytest .
