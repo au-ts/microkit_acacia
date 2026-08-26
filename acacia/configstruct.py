@@ -789,6 +789,12 @@ class ConfigStructResolver:
                         f"User provided keys '{set(user_value.fields.keys())}' do not match structure type member names '{set(member.attributes.name for member in member_types)}', CType '{c_type}'"
                     )
 
+                # Every structure tag member must have a specified data member location
+                if None in set(m.attributes.data_member_location for m in member_types):
+                    raise ValueError(
+                        f"Structure type '{c_type}' has member without offset location, struct bit fields are not supported."
+                    )
+
                 for member in sorted(
                     member_types, key=lambda m: m.attributes.data_member_location
                 ):
