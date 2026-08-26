@@ -1,4 +1,5 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-pylibfdt==1.7.2.post1
+# Current this PR https://github.com/devicetree-org/pylibfdt/pull/10. FIXME: update to v.1.8.2+ when released
+pylibfdt @ git+https://github.com/rpardini/devicetree-pylibfdt.git@sync-with-upstream-26.08
