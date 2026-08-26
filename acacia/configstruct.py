@@ -61,13 +61,13 @@ class Attributes:
 
     @staticmethod
     def _get_single_child_token(value_tree: Tree, data: str) -> Token:
-       if value_tree.data != data:
-           raise ValueError(f"Expected {data}, found '{value_tree.pretty()}'")
+        if value_tree.data != data:
+            raise ValueError(f"Expected {data}, found '{value_tree.pretty()}'")
 
-       assert len(value_tree.children) == 1
-       token = value_tree.children[0]
-       assert isinstance(token, Token)
-       return token
+        assert len(value_tree.children) == 1
+        token = value_tree.children[0]
+        assert isinstance(token, Token)
+        return token
 
     @staticmethod
     def escaped_string(value_tree: Tree) -> str:
@@ -334,8 +334,11 @@ class CType:
                     raise ValueError(
                         f"Found a group tree with non-null final child, tree '{entry_tree.pretty()}'"
                     )
-            case tag if (
-                tag in (*self.special_tags, *self.single_tags, *self.member_tags, *self.group_tags)
+            case tag if tag in (
+                *self.special_tags,
+                *self.single_tags,
+                *self.member_tags,
+                *self.group_tags,
             ):
                 if len(tag_children) == 0:
                     raise ValueError(
