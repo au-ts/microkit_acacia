@@ -114,8 +114,8 @@ class Attributes:
         """
         Returns a tuple of the numeric value and string from lark trees of the form:
             pair
-            number	0x0000005b
-            escaped_string	"int"
+                number	0x0000005b
+                escaped_string	"int"
         """
         if value_tree.data != "pair" or len(value_tree.children) != 2:
             raise ValueError(f"Expected pair, found '{value_tree.pretty()}'")
@@ -153,7 +153,7 @@ class Attributes:
 
     def __setattr__(self, name: str, value: Union[tuple, Tree]):
         if name == "valid_attributes":
-            object.__setattr__(self, name, value)
+            super().__setattr__(self, name, value)
 
         assert isinstance(value, Tree)
 
@@ -197,7 +197,7 @@ class Attributes:
             case _:
                 raise AttributeError(f"Attributes class has no attribute '{name}'")
 
-        object.__setattr__(self, name, at_value)
+        super().__setattr__(self, name, at_value)
 
     def __repr__(self):
         return (
@@ -285,7 +285,7 @@ class CType:
         "array_tag": ("type",),
     }
 
-    def __init__(self, entry_tree: Tree, type_collector: Dict[int, "CType"]):
+    def __init__(self, entry_tree: Tree, type_collector: Dict[int, CType]):
         """
         Properties:
             tag_type: type of tag entry, must be a member of special_tags,
@@ -335,10 +335,7 @@ class CType:
                         f"Found a group tree with non-null final child, tree '{entry_tree.pretty()}'"
                     )
             case tag if (
-                tag in self.special_tags
-                or self.single_tags
-                or self.member_tags
-                or self.group_tags
+                tag in (*self.special_tags, *self.single_tags, *self.member_tags, *self.group_tags)
             ):
                 if len(tag_children) == 0:
                     raise ValueError(
@@ -354,7 +351,7 @@ class CType:
 
         if self.tag_type in self.required_attributes:
             for attribute in self.required_attributes[self.tag_type]:
-                if self.attributes.__getattr__(attribute) is None:
+                if getattr(self.attributes, attribute) is None:
                     raise AttributeError(
                         f"CType of type '{self.tag_type}' is missing required attribute '{attribute}', CType '{self}'"
                     )
@@ -395,7 +392,7 @@ class CType:
         while base_type.tag_type == "typedef_tag":
             base_type = self.collector[base_type.attributes.type[0]]
 
-        if base_type.tag_type in (self.special_tags or self.member_tags):
+        if base_type.tag_type in (*self.special_tags, *self.member_tags):
             raise ValueError(
                 f"CType '{self}' resolved to base type '{base_type}' of invalid tag type '{base_type.tag_type}'"
             )
@@ -464,9 +461,7 @@ class CType:
         return type_match[0].base_type()
 
     def __repr__(self):
-        ret_string = f"CType:\n    ID: {self.id}\n    type: {self.tag_type}\n    members: {self.members}\n"
-        ret_string += self.attributes.__repr__()
-        return ret_string
+        return f"CType:\n    ID: {self.id}\n    type: {self.tag_type}\n    members: {self.members}\n{self.attributes!r}"
 
 
 class ConfigStruct:
@@ -621,21 +616,18 @@ class ConfigStructResolver:
             raise RuntimeError(
                 f"Failed to eat DWARF from {target_file}! Does file exist?"
             ) from e
-        if output.returncode != 0:
-            raise RuntimeError(f"Couldn't dump {target_file} -> {output.stderr}")
 
         # Remove lines before first tag entry and add extra newline
         raw_lines = output.stdout.splitlines()
-        for i in range(len(raw_lines)):
-            if raw_lines[i][:11].startswith("0x00000000:"):
+        for start in range(len(raw_lines)):
+            if raw_lines[start].startswith("0x00000000:"):
                 break
-
-        if i == len(raw_lines):
+        else:
             raise RuntimeError(
                 "Could not find tag entry with ID 0 in DWARF dump output"
             )
 
-        raw_output = "\n".join(raw_lines[i:]) + "\n\n"
+        raw_output = "\n".join(raw_lines[start:]) + "\n\n"
 
         try:
             output_tree = Lark(
@@ -644,8 +636,8 @@ class ConfigStructResolver:
                 propagate_positions=False,
                 maybe_placeholders=False,
             ).parse(raw_output)
-        except:
-            raise RuntimeError("Could not parse DWARF dump output!")
+        except Exception as e:
+            raise RuntimeError("Could not parse DWARF dump output!") from e
 
         type_collector: Dict[int, CType] = dict()
         for dwarf_entry in output_tree.children:
@@ -686,6 +678,7 @@ class ConfigStructResolver:
 
         match c_type.tag_type:
             case "pointer_tag":
+                assert type_size == None
                 type_size = 8
                 try:
                     # We assume pointers are 8 byte unsigned
@@ -756,7 +749,7 @@ class ConfigStructResolver:
 
                 if (
                     not (
-                        isinstance(user_value, List)
+                        isinstance(user_value, list)
                         or isinstance(user_value, tuple)
                         or isinstance(user_value, str)
                         or isinstance(user_value, bytes)
@@ -827,7 +820,7 @@ class ConfigStructResolver:
                 self.files[config_struct.target_file], config_struct.type_name
             )
             blob = self._flatten_and_write(config_struct, c_type)
-            blob_name = f"{config_struct.target_file.split('.elf')[0]}_{config_struct.section_name}.data"
+            blob_name = f"{config_struct.target_file.removesuffix('.elf')}_{config_struct.section_name}.data"
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
                 f.write(blob)
