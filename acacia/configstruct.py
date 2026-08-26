@@ -75,7 +75,7 @@ class Attributes:
         Returns the un-escaped string value from lark trees of the form:
             escaped_string  "DW_ATE_unsigned_32"
         """
-        str_tok = CType._get_single_child_token(value_tree, "escaped_string")
+        str_tok = Attributes._get_single_child_token(value_tree, "escaped_string")
         return str_tok.value[1:-1]
 
     @staticmethod
@@ -84,7 +84,7 @@ class Attributes:
         Returns the string value from lark trees of the form:
             string	DW_ATE_unsigned
         """
-        str_tok = CType._get_single_child_token(value_tree, "string")
+        str_tok = Attributes._get_single_child_token(value_tree, "string")
         return str_tok.value
 
     @staticmethod
@@ -93,7 +93,7 @@ class Attributes:
         Returns the numeric value from lark trees of the form:
             number	0x04
         """
-        str_val = CType._get_single_child_token(value_tree, "number").value
+        str_val = Attributes._get_single_child_token(value_tree, "number").value
         if str_val.startswith("0x"):
             return int(str_val, base=16)
         return int(str_val)
@@ -104,7 +104,7 @@ class Attributes:
         Returns the numeric value from lark trees of the form:
             number	0x0000005b
         """
-        str_val = CType._get_single_child_token(value_tree, "number").value
+        str_val = Attributes._get_single_child_token(value_tree, "number").value
         if not str_val.startswith("0x") or len(str_val) != 10:
             raise ValueError(f"Expected type ID, found '{str_val}'")
         return int(str_val, base=16)
@@ -153,7 +153,7 @@ class Attributes:
 
     def __setattr__(self, name: str, value: Union[tuple, Tree]):
         if name == "valid_attributes":
-            super().__setattr__(self, name, value)
+            super().__setattr__(name, value)
 
         assert isinstance(value, Tree)
 
@@ -197,7 +197,7 @@ class Attributes:
             case _:
                 raise AttributeError(f"Attributes class has no attribute '{name}'")
 
-        super().__setattr__(self, name, at_value)
+        super().__setattr__(name, at_value)
 
     def __repr__(self):
         return (
