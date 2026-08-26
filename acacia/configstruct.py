@@ -60,15 +60,23 @@ class Attributes:
     )
 
     @staticmethod
+    def _get_single_child_token(value_tree: Tree, data: str) -> Token:
+       if value_tree.data != data:
+           raise ValueError(f"Expected {data}, found '{value_tree.pretty()}'")
+
+       assert len(value_tree.children) == 1
+       token = value_tree.children[0]
+       assert isinstance(token, Token)
+       return token
+
+    @staticmethod
     def escaped_string(value_tree: Tree) -> str:
         """
         Returns the un-escaped string value from lark trees of the form:
             escaped_string  "DW_ATE_unsigned_32"
         """
-        if value_tree.data != "escaped_string":
-            raise ValueError(f"Expected escaped_string, found '{value_tree.pretty()}'")
-        assert isinstance(value_tree.children[0], Token)
-        return value_tree.children[0].value[1:-1]
+        str_tok = CType._get_single_child_token(value_tree, "escaped_string")
+        return str_tok.value[1:-1]
 
     @staticmethod
     def string(value_tree: Tree) -> str:
@@ -76,10 +84,8 @@ class Attributes:
         Returns the string value from lark trees of the form:
             string	DW_ATE_unsigned
         """
-        if value_tree.data != "string":
-            raise ValueError(f"Expected string, found '{value_tree.pretty()}'")
-        assert isinstance(value_tree.children[0], Token)
-        return value_tree.children[0].value
+        str_tok = CType._get_single_child_token(value_tree, "string")
+        return str_tok.value
 
     @staticmethod
     def number(value_tree: Tree) -> int:
@@ -87,13 +93,10 @@ class Attributes:
         Returns the numeric value from lark trees of the form:
             number	0x04
         """
-        if value_tree.data != "number":
-            raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
-        assert isinstance(value_tree.children[0], Token)
-        value = value_tree.children[0].value
-        if value.startswith("0x"):
-            return int(value, base=16)
-        return int(value)
+        str_val = CType._get_single_child_token(value_tree, "number").value
+        if str_val.startswith("0x"):
+            return int(str_val, base=16)
+        return int(str_val)
 
     @staticmethod
     def id_number(value_tree: Tree) -> int:
@@ -101,13 +104,10 @@ class Attributes:
         Returns the numeric value from lark trees of the form:
             number	0x0000005b
         """
-        if value_tree.data != "number":
-            raise ValueError(f"Expected number, found '{value_tree.pretty()}'")
-        assert isinstance(value_tree.children[0], Token)
-        value = value_tree.children[0].value
-        if not value.startswith("0x") or len(value) != 10:
-            raise ValueError(f"Expected type ID, found '{value}'")
-        return int(value, base=16)
+        str_val = CType._get_single_child_token(value_tree, "number").value
+        if not str_val.startswith("0x") or len(str_val) != 10:
+            raise ValueError(f"Expected type ID, found '{str_val}'")
+        return int(str_val, base=16)
 
     @staticmethod
     def pair(value_tree: Tree) -> Tuple[int, str]:
