@@ -34,7 +34,7 @@ Acacia is not yet on PyPi, but we will upload it once we reach our first stable 
 
 ## Examples
 
-The `examples/` subdirectory contains several simple scripts demonstrating the basic functioanality of Acacia.
+The `examples/` subdirectory contains several simple scripts demonstrating the basic functionality of Acacia.
 
 ## Testing
 

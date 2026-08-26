@@ -176,7 +176,9 @@ class System:
             print("System::make_config_structs - auto-assembling")
             self.assemble()
         # TODO: support big endian?
-        resolver = ConfigStructResolver(build_dir, endian="little")
+        resolver = ConfigStructResolver(
+            build_dir, endian="little", arch_64_bit=self.arch.is_64_bit()
+        )
         for s in self.subsystems:
             resolver.add_structs(s.generate_config_structs())
         resolver.resolve_and_create_all()

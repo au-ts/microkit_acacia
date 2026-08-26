@@ -24,17 +24,19 @@ DEVICE_MAX_IRQS = 64
 # these factory functions mirror the sDDF ones!
 def RegionResourceFactory(map: "Map", section_name: Optional[str] = None):
     fields = {"vaddr": map.vaddr, "size": map.mr.size}
-    return ConfigStruct("region_resource_t", section_name=section_name, fields=fields)
+    return ConfigStruct(
+        fields, type_name="region_resource_t", section_name=section_name
+    )
 
 
 def DeviceRegionResourceFactory(region: ConfigStruct, io_addr: int):
     fields = {"region": region, "io_addr": io_addr}
-    return ConfigStruct("device_region_resource_t", fields=fields)
+    return ConfigStruct(fields, "device_region_resource_t")
 
 
 def DeviceIRQResourceFactory(id: int):
     fields = {"id": id}
-    return ConfigStruct("device_irq_resource_t", fields=fields)
+    return ConfigStruct(fields, "device_irq_resource_t")
 
 
 def DeviceResourcesFactory(
@@ -60,9 +62,9 @@ def DeviceResourcesFactory(
         "irqs": irq_structs,
     }
     return ConfigStruct(
+        fields,
         "device_resources_t",
         section_name=section_name,
-        fields=fields,
         target_file=target_file,
     )
 
@@ -127,10 +129,10 @@ class DummyI2C(Subsystem):
             ch_id = end.ch_id
             fields = {"driver_id": ch_id}
             return ConfigStruct(
+                fields,
                 "i2c_client_config_t",
-                client_pd.prog_image,
                 "i2c_client_config",
-                fields=fields,
+                client_pd.prog_image,
             )
 
         # client_structs = [client_struct_factory(c,n) for n,c in enumerate(self.clients)]
@@ -160,7 +162,7 @@ for c in [client1, client2, client3]:
 sdf.assemble()
 
 structs = i2c.generate_config_structs()
-r = ConfigStructResolver("./dummy_configstruct_build")
+r = ConfigStructResolver("./dummy_configstruct_build", arch_64_bit=sdf.arch.is_64_bit())
 for s in structs:
     print(s)
     r.add_struct(s)
