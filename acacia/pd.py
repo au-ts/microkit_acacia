@@ -272,6 +272,11 @@ class ProtectionDomain(Entity):
         for id in self.vpmus:
             et.SubElement(pd, "vpmu").set("virq_id", str(id))
 
+        csp = et.SubElement(pd, "cspace")
+        cap_tcb = et.SubElement(csp, "cap_tcb")
+        cap_tcb.set("slot", "1")
+        cap_tcb.set("pd", self.name)
+
         return pd
 
     def allocate_id(self, requested_id: Optional[int] = None):
