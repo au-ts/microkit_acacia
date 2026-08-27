@@ -5,6 +5,7 @@ from typing import Optional, Union, Set
 from dataclasses import dataclass
 import xml.etree.ElementTree as et
 from .system import System
+import pathlib
 
 
 class MemoryRegion:
@@ -20,16 +21,19 @@ class MemoryRegion:
         self,
         sdf: System,
         name: str,
-        size: int,
+        *, 
+        size: Optional[int] = None,
         paddr: Optional[int] = None,
         cached: bool = True,
         physical: bool = False,
         prefill_bootinfo: Optional[str] = None,
+        prefill_path: Optional[pathlib.Path] = None,
     ):
         self.name = name
-        if size <= 0:
+        if size is not None and size <= 0:
             raise ValueError("Size must be positive and non-zero!")
         self.size = size
+
         if paddr is not None:
             physical = True
         self.paddr = paddr
@@ -37,6 +41,7 @@ class MemoryRegion:
         self.cached = cached
         self.sdf = sdf
         self.prefill_bootinfo = prefill_bootinfo
+        self.prefill_path = prefill_path
 
         # Allocate ourselves to SDF
         self.sdf._add_memory_region(self)
@@ -57,11 +62,15 @@ class MemoryRegion:
     def render(self, system_root: et.Element):
         mr = et.SubElement(system_root, "memory_region")
         mr.set("name", self.name)
-        mr.set("size", hex(self.size))
+        if self.size is not None:
+            mr.set("size", hex(self.size))
         if self.paddr is not None:
             mr.set("phys_addr", hex(self.paddr))
         if self.prefill_bootinfo is not None:
             mr.set("prefill_bootinfo", self.prefill_bootinfo)
+        if self.prefill_path is not None:
+            mr.set("prefill_path", str(self.prefill_path))
+
 
 
 class Map:
@@ -92,6 +101,8 @@ class Map:
         vaddr: int,
         permissions: Union[Permissions, str],
         setvar_vaddr: Optional[str] = None,
+        setvar_size: Optional[str] = None,
+        setvar_prefill_size: Optional[str] = None,
     ):
         self.mr = mr
 
@@ -107,6 +118,8 @@ class Map:
             permissions = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.perms = permissions
         self.setvar_vaddr = setvar_vaddr
+        self.setvar_size = setvar_size
+        self.setvar_prefill_size = setvar_prefill_size
         self.vaddr = vaddr
 
     @property
@@ -122,6 +135,10 @@ class Map:
             map.set("cached", "false")
         if self.setvar_vaddr is not None:
             map.set("setvar_vaddr", str(self.setvar_vaddr))
+        if self.setvar_size is not None:
+            map.set("setvar_size", self.setvar_size)
+        if self.setvar_prefill_size is not None:
+            map.set("setvar_prefill_size", self.setvar_prefill_size)
         return map
 
     @property
