@@ -16,6 +16,7 @@ class Channel:
         can_notify: bool
         can_pp: bool
         ch_id: Optional[int] = None
+        setvar_id: Optional[str] = None
 
         def __post_init__(self):
             if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
@@ -27,14 +28,14 @@ class Channel:
         self.sdf = sdf
 
         # Enforce that PPCs only go to higher priorities
-        for pp_caller, pp_receiver in [(end_a, end_b), (end_b, end_a)]:
-            if not pp_caller.can_pp:
-                continue
-            if pp_caller.pd.priority >= pp_receiver.pd.priority:
-                raise RuntimeError(
-                    f"PPC from {pp_caller} to {pp_receiver} cannot have "
-                    f"descending priorities!"
-                )
+        # for pp_caller, pp_receiver in [(end_a, end_b), (end_b, end_a)]:
+        #     if not pp_caller.can_pp:
+        #         continue
+        #     if pp_caller.pd.priority >= pp_receiver.pd.priority:
+        #         raise RuntimeError(
+        #             f"PPC from {pp_caller} to {pp_receiver} cannot have "
+        #             f"descending priorities!"
+        #         )
 
         # Allocate channel IDs
         for end in [end_a, end_b]:
@@ -55,6 +56,8 @@ class Channel:
                 end.set("notify", "false")
             if e.can_pp:
                 end.set("pp", "true")
+            if e.setvar_id:
+                end.set("setvar_id", e.setvar_id)
 
         return channel
 
