@@ -229,6 +229,7 @@ class ProtectionDomain(Entity):
         self.cpu = cpu
         self.smc = smc
         self.irqs: Set[IRQ] = set()
+        self.vpmus: Set[int] = set()
         self.ioports: List[IOPort] = []
         self.sdf = sdf
 
@@ -267,6 +268,9 @@ class ProtectionDomain(Entity):
             c.render(pd)
         for vm in self.vms:
             vm.render(pd)
+
+        for id in self.vpmus:
+            et.SubElement(pd, "vpmu").set("virq_id", str(id))
 
         return pd
 
@@ -339,6 +343,11 @@ class ProtectionDomain(Entity):
             if len(self.vms) > 0:
                 raise ValueError("x86 systems do not support multiple VMs per PD!")
         self.vms.append(vm)
+
+    def add_vpmu(self, id: Optional[int]=None):
+        if id is None:
+            id = next(i for i in range(MAX_IDS) if i not in self.vpmus)
+        self.vpmus.add(id)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
