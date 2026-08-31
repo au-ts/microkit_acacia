@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from abc import ABC
 import xml.etree.ElementTree as et
 from .system import System
-from .memory import MemoryRegion, Map
+from .memory import MemoryRegion, Map, PageTables
 from .irq import IRQ
 from .x86 import IOPort
 
@@ -239,6 +239,7 @@ class ProtectionDomain(Entity):
 
         # VM
         self.vms: List[VirtualMachine] = []
+        self.pagetables: List[PageTables] = []
 
         # Allocate ourselves to SDF
         self.sdf._add_pd(self)
@@ -271,6 +272,8 @@ class ProtectionDomain(Entity):
 
         for id in self.vpmus:
             et.SubElement(pd, "vpmu").set("virq_id", str(id))
+        for pts in self.pagetables:
+            pts.render(pd)
 
         csp = et.SubElement(pd, "cspace")
         cap_tcb = et.SubElement(csp, "cap_tcb")
@@ -353,6 +356,9 @@ class ProtectionDomain(Entity):
         if id is None:
             id = next(i for i in range(MAX_IDS) if i not in self.vpmus)
         self.vpmus.add(id)
+
+    def add_pagetables(self, pt: PageTables):
+        self.pagetables.append(pt)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"

@@ -206,3 +206,26 @@ class IOAddressSpace:
         for iomap in self.iomaps:
             iomap.render(ioas)
         return ioas
+
+class PageTables:
+    def __init__(self, setvar:str):
+        self.setvar = setvar
+        self.pds: List[str] = []
+        self.ids: List[int] = []
+
+    def add_entry(self, pd_name: str, index: Optional[int] = None):
+        id = index if index is not None else next(i for i in range(63) if i not in self.ids)
+        if id in self.ids:
+            raise ValueError(f"Failed to add {pd_name} to index {index}: duplicated index")
+        self.pds.append(pd_name)
+        self.ids.append(id)
+
+    def render(self, parent: et.Element, elem_name: str = "page_tables"):
+        entity = et.SubElement(parent, elem_name);
+        entity.set("setvar", self.setvar) 
+        for (pd, id) in zip(self.pds, self.ids):
+            subtable = et.SubElement(entity, "pd")
+            subtable.set("name", pd)
+            subtable.set("index", str(id))
+
+        return entity
