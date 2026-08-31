@@ -1,11 +1,12 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Union, Set
+from typing import Optional, Union, Set, List, Tuple
 from dataclasses import dataclass
 import xml.etree.ElementTree as et
 from .system import System
 import pathlib
+from enum import Enum
 
 
 class MemoryRegion:
@@ -229,3 +230,26 @@ class PageTables:
             subtable.set("index", str(id))
 
         return entity
+
+class Cap(Enum):
+    SchedCtxt = "sc"
+    TCB = "tcb"
+    VSpace = "vspace"
+
+class CSpace:
+    def __init__(self):
+        self.caps: List[Tuple[Cap, int, str]] = []
+        self.used_indices: Set[int] = set()
+
+    def add_cap(self, cap: Cap, slot: int, pd_name: str):
+        if slot in self.used_indices:
+            raise ValueError(f"Duplicate slot {slot}")
+        self.caps.append((cap, slot, pd_name))
+
+    def render(self, parent: et.Element, elem_name: str = "cspace"):
+        cspace = et.SubElement(parent, elem_name)
+        for cap in self.caps:
+            cap_elem = et.SubElement(cspace, f"cap_{cap[0].value}")
+            cap_elem.set("slot", str(cap[1]))
+            cap_elem.set("pd", cap[2])
+        return cspace

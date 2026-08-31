@@ -1,7 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 from .pd import ProtectionDomain, VirtualMachine, SchedulingProperties
-from .memory import MemoryRegion, Map, PageTables
+from .memory import MemoryRegion, Map, PageTables, CSpace, Cap
 from .channel import Channel
 from .irq import IRQ, ConventionalIRQ, IrqIoapic, IrqMsi
 from .system import System

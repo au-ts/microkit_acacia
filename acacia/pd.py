@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from abc import ABC
 import xml.etree.ElementTree as et
 from .system import System
-from .memory import MemoryRegion, Map, PageTables
+from .memory import MemoryRegion, Map, PageTables, CSpace
 from .irq import IRQ
 from .x86 import IOPort
 
@@ -232,6 +232,7 @@ class ProtectionDomain(Entity):
         self.vpmus: Set[int] = set()
         self.ioports: List[IOPort] = []
         self.sdf = sdf
+        self.cspaces: List[CSpace] = []
 
         # Parental responsibilities
         self.children: List[ProtectionDomain] = []
@@ -261,6 +262,7 @@ class ProtectionDomain(Entity):
             pd.set("cpu", str(self.cpu))
         if self.smc:
             pd.set("smc", "true")
+
         for i in sorted(self.irqs, key=lambda ir: ir.id or 0):
             i.render(pd)
         for iop in sorted(self.ioports, key=lambda i: i.addr):
@@ -272,13 +274,12 @@ class ProtectionDomain(Entity):
 
         for id in self.vpmus:
             et.SubElement(pd, "vpmu").set("virq_id", str(id))
+
         for pts in self.pagetables:
             pts.render(pd)
 
-        csp = et.SubElement(pd, "cspace")
-        cap_tcb = et.SubElement(csp, "cap_tcb")
-        cap_tcb.set("slot", "1")
-        cap_tcb.set("pd", self.name)
+        for cspace in self.cspaces:
+            cspace.render(pd)
 
         return pd
 
@@ -359,6 +360,9 @@ class ProtectionDomain(Entity):
 
     def add_pagetables(self, pt: PageTables):
         self.pagetables.append(pt)
+
+    def add_cspace(self, csp: CSpace):
+        self.cspaces.append(csp)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
