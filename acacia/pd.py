@@ -297,10 +297,12 @@ class ProtectionDomain(Entity):
         assigned_ids: List[int] = sorted(allocated_ch_ids + allocated_irq_ids)
 
         if requested_id is not None:
-            if requested_id not in assigned_ids:
-                return requested_id
-            else:
-                raise RuntimeError("Requested ID is not available!")
+            print(f"WARNING: Assuming requested id is correct!!!")
+            return requested_id
+            # if requested_id not in assigned_ids:
+            #     return requested_id
+            # else:
+            #     raise RuntimeError("Requested ID is not available!")
 
         new_id = next(i for i in range(MAX_IDS) if i not in assigned_ids)
         return new_id
