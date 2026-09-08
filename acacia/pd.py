@@ -233,6 +233,7 @@ class ProtectionDomain(Entity):
         self.ioports: List[IOPort] = []
         self.sdf = sdf
         self.cspaces: List[CSpace] = []
+        self.replys: Set[int] = set()
 
         # Parental responsibilities
         self.children: List[ProtectionDomain] = []
@@ -280,6 +281,9 @@ class ProtectionDomain(Entity):
 
         for cspace in self.cspaces:
             cspace.render(pd)
+
+        for reply in self.replys:
+            et.SubElement(pd, "reply").set("reply_id", str(reply))
 
         return pd
 
@@ -365,6 +369,11 @@ class ProtectionDomain(Entity):
 
     def add_cspace(self, csp: CSpace):
         self.cspaces.append(csp)
+
+    def add_reply(self, id: Optional[int]=None):
+        if id is None:
+            id = next(i for i in range(MAX_IDS) if i not in self.replys)
+        self.replys.add(id)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
