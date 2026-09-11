@@ -5,8 +5,10 @@ from typing import Optional, Union, Set, List, Tuple
 from dataclasses import dataclass
 import xml.etree.ElementTree as et
 from .system import System
+from .arch import PageSizeID, Arch
 import pathlib
 from enum import Enum
+import os
 
 
 class MemoryRegion:
@@ -22,8 +24,8 @@ class MemoryRegion:
         self,
         sdf: System,
         name: str,
-        *, 
         size: Optional[int] = None,
+        *, 
         paddr: Optional[int] = None,
         cached: bool = True,
         physical: bool = False,
@@ -33,7 +35,17 @@ class MemoryRegion:
         self.name = name
         if size is not None and size <= 0:
             raise ValueError("Size must be positive and non-zero!")
+        if size is None and prefill_bootinfo is None and prefill_path is None:
+            raise ValueError("One of [size, prefill_bootinfo, prefill_path] must be set!")
+
         self.size = size
+
+        if size is None and prefill_path is not None:
+            # Find the size of the file in bytes.
+            assert pathlib.Path(prefill_path).resolve().exists()
+            page_size = sdf.arch.get_page_size(PageSizeID.small)
+            file_size = os.path.getsize(prefill_path)
+            self.size = (file_size//page_size + 1) * page_size
 
         if paddr is not None:
             physical = True
