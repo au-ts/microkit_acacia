@@ -772,7 +772,7 @@ class ConfigStructResolver:
                     except Exception as e:
                         raise Exception(
                             f"Exception occurred while filling field of array CType '{c_type}'`"
-                        )
+                        ) from e
 
                 type_size = c_type.array_count() * entry_type.attributes.byte_size
 
@@ -822,7 +822,7 @@ class ConfigStructResolver:
                     except Exception as e:
                         raise Exception(
                             f"Exception occurred while filling member of structure CType '{c_type}'`"
-                        )
+                        ) from e
 
                 assert len(out_blob) <= type_size
                 out_blob.extend(bytearray(type_size - len(out_blob)))
@@ -845,7 +845,7 @@ class ConfigStructResolver:
             except Exception as e:
                 raise Exception(
                     f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{c_type}'`"
-                )
+                ) from e
             blob_name = f"{config_struct.target_file.removesuffix('.elf')}_{config_struct.section_name}.data"
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
