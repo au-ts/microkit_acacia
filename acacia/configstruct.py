@@ -765,7 +765,14 @@ class ConfigStructResolver:
                     )
 
                 for entry_value in user_value:
-                    out_blob.extend(self._flatten_and_write(entry_value, entry_type))
+                    try:
+                        out_blob.extend(
+                            self._flatten_and_write(entry_value, entry_type)
+                        )
+                    except Exception as e:
+                        raise Exception(
+                            f"Exception occurred while filling field of array CType '{c_type}'`"
+                        ) from e
 
                 type_size = c_type.array_count() * entry_type.attributes.byte_size
 
@@ -808,9 +815,14 @@ class ConfigStructResolver:
                     out_blob.extend(bytearray(start_byte - len(out_blob)))
 
                     member_value = user_value.fields[member.attributes.name]
-                    out_blob.extend(
-                        self._flatten_and_write(member_value, member.base_type())
-                    )
+                    try:
+                        out_blob.extend(
+                            self._flatten_and_write(member_value, member.base_type())
+                        )
+                    except Exception as e:
+                        raise Exception(
+                            f"Exception occurred while filling member of structure CType '{c_type}'`"
+                        ) from e
 
                 assert len(out_blob) <= type_size
                 out_blob.extend(bytearray(type_size - len(out_blob)))
@@ -828,7 +840,12 @@ class ConfigStructResolver:
             c_type = CType.find_type_by_name(
                 self.files[config_struct.target_file], config_struct.type_name
             )
-            blob = self._flatten_and_write(config_struct, c_type)
+            try:
+                blob = self._flatten_and_write(config_struct, c_type)
+            except Exception as e:
+                raise Exception(
+                    f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{c_type}'`"
+                ) from e
             blob_name = f"{config_struct.target_file.removesuffix('.elf')}_{config_struct.section_name}.data"
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
