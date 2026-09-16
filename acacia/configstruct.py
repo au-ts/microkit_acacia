@@ -199,6 +199,26 @@ class Attributes:
 
         super().__setattr__(name, at_value)
 
+    def __eq__(self, attribute: Attributes):
+        if not isinstance(attribute, Attributes):
+            return False
+
+        for att in self.valid_attributes:
+            my_val = getattr(self, att)
+            other_val = getattr(attribute, att)
+            if att == "type":
+                # Ignore the base type ID value for the type attribute -
+                # differences in ID do not necessarily imply the underlying
+                # types with those IDs are different
+                if my_val[1] != other_val[1]:
+                    return False
+                continue
+
+            if my_val != other_val:
+                return False
+
+        return True
+
     def __repr__(self):
         return (
             "Attributes:\n    "
@@ -415,6 +435,39 @@ class CType:
             return subrange_type.attributes.count
         return 0
 
+    def __eq__(self, c_type: CType):
+        if not isinstance(c_type, CType):
+            return False
+
+        if self.tag_type != c_type.tag_type or \
+            self.attributes != c_type.attributes or \
+            len(self.members) != len(c_type.members):
+            return False
+
+        match self.tag_type:
+            case "base_tag" | "pointer_tag":
+                pass
+            case "typedef_tag" | "member_tag":
+                return self.base_type() == c_type.base_type()
+            case "array_tag":
+                if self.array_count() != c_type.array_count():
+                    return False
+                return self.base_type() == c_type.base_type()
+            case "union_tag" | "structure_tag":
+                members = sorted([self.collector[m] for m in self.members],
+                                 key=lambda m: m.attributes.data_member_location)
+
+                c_type_members = sorted([c_type.collector[m] for m in c_type.members],
+                                 key=lambda m: m.attributes.data_member_location)
+
+                for o in range(len(members)):
+                    if members[o] != c_type_members[o]:
+                        return False
+            case _:
+                return False
+
+        return True
+
     @staticmethod
     def extract_id(id_tree: Tree):
         """
@@ -450,18 +503,21 @@ class CType:
         """
         Given a type name, find the underlying base type.
         """
-        type_match = []
+        type_match = None
         for c_type in all_types.values():
             if c_type.attributes.name == type_name:
-                type_match.append(c_type)
+                if not type_match:
+                    type_match = c_type
+                    continue
 
-        if len(type_match) == 0:
+                if c_type != type_match:
+                    raise ValueError(
+                        f"Found multiple types with name '{type_name}': {type_match}"
+                    )
+        if not type_match:
             raise ValueError(f"Could not find a type with name '{type_name}'")
-        elif len(type_match) > 1:
-            raise ValueError(
-                f"Found multiple types with name '{type_name}': {type_match}"
-            )
-        return type_match[0].base_type()
+
+        return type_match.base_type()
 
     def __repr__(self):
         return f"CType:\n    ID: {self.id}\n    type: {self.tag_type}\n    members: {self.members}\n{self.attributes!r}"
