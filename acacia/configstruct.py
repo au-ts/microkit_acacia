@@ -445,7 +445,7 @@ class CType:
         return 0
 
     def __eq__(self, other: object):
-        if not isinstance(object, CType):
+        if not isinstance(other, CType):
             return False
 
         c_type: CType = other
