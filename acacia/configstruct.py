@@ -199,9 +199,10 @@ class Attributes:
 
         super().__setattr__(name, at_value)
 
-    def __eq__(self, attribute: Attributes):
-        if not isinstance(attribute, Attributes):
+    def __eq__(self, other: object):
+        if not isinstance(other, Attributes):
             return False
+        attribute: Attributes = other
 
         for att in self.valid_attributes:
             my_val = getattr(self, att)
@@ -443,13 +444,17 @@ class CType:
             return subrange_type.attributes.count
         return 0
 
-    def __eq__(self, c_type: CType):
-        if not isinstance(c_type, CType):
+    def __eq__(self, other: object):
+        if not isinstance(object, CType):
             return False
 
-        if self.tag_type != c_type.tag_type or \
-            self.attributes != c_type.attributes or \
-            len(self.members) != len(c_type.members):
+        c_type: CType = other
+
+        if (
+            self.tag_type != c_type.tag_type
+            or self.attributes != c_type.attributes
+            or len(self.members) != len(c_type.members)
+        ):
             return False
 
         match self.tag_type:
@@ -462,11 +467,15 @@ class CType:
                     return False
                 return self.base_type() == c_type.base_type()
             case "union_tag" | "structure_tag":
-                members = sorted([self.collector[m] for m in self.members],
-                                 key=lambda m: m.attributes.data_member_location)
+                members = sorted(
+                    [self.collector[m] for m in self.members],
+                    key=lambda m: m.attributes.data_member_location,
+                )
 
-                c_type_members = sorted([c_type.collector[m] for m in c_type.members],
-                                 key=lambda m: m.attributes.data_member_location)
+                c_type_members = sorted(
+                    [c_type.collector[m] for m in c_type.members],
+                    key=lambda m: m.attributes.data_member_location,
+                )
 
                 for o in range(len(members)):
                     if members[o] != c_type_members[o]:
