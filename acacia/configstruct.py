@@ -207,6 +207,14 @@ class Attributes:
             my_val = getattr(self, att)
             other_val = getattr(attribute, att)
             if att == "type":
+                # May be None for some objects.
+                if my_val == None and other_val == None:
+                    continue
+                elif None in [my_val, other_val]:
+                    # If one is None and the other isn't, these obviously aren't the same.
+                    # Handle this to guard indexing None below
+                    return False
+
                 # Ignore the base type ID value for the type attribute -
                 # differences in ID do not necessarily imply the underlying
                 # types with those IDs are different
