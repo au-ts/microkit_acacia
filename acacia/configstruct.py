@@ -199,6 +199,35 @@ class Attributes:
 
         super().__setattr__(name, at_value)
 
+    def __eq__(self, other: object):
+        if not isinstance(other, Attributes):
+            return False
+        attribute: Attributes = other
+
+        for att in self.valid_attributes:
+            my_val = getattr(self, att)
+            other_val = getattr(attribute, att)
+            if att == "type":
+                # May be None for some objects.
+                if my_val == None and other_val == None:
+                    continue
+                elif None in [my_val, other_val]:
+                    # If one is None and the other isn't, these obviously aren't the same.
+                    # Handle this to guard indexing None below
+                    return False
+
+                # Ignore the base type ID value for the type attribute -
+                # differences in ID do not necessarily imply the underlying
+                # types with those IDs are different
+                if my_val[1] != other_val[1]:
+                    return False
+                continue
+
+            if my_val != other_val:
+                return False
+
+        return True
+
     def __repr__(self):
         return (
             "Attributes:\n    "
@@ -415,6 +444,47 @@ class CType:
             return subrange_type.attributes.count
         return 0
 
+    def __eq__(self, other: object):
+        if not isinstance(other, CType):
+            return False
+
+        c_type: CType = other
+
+        if (
+            self.tag_type != c_type.tag_type
+            or self.attributes != c_type.attributes
+            or len(self.members) != len(c_type.members)
+        ):
+            return False
+
+        match self.tag_type:
+            case "base_tag" | "pointer_tag":
+                pass
+            case "typedef_tag" | "member_tag":
+                return self.base_type() == c_type.base_type()
+            case "array_tag":
+                if self.array_count() != c_type.array_count():
+                    return False
+                return self.base_type() == c_type.base_type()
+            case "union_tag" | "structure_tag":
+                members = sorted(
+                    [self.collector[m] for m in self.members],
+                    key=lambda m: m.attributes.data_member_location,
+                )
+
+                c_type_members = sorted(
+                    [c_type.collector[m] for m in c_type.members],
+                    key=lambda m: m.attributes.data_member_location,
+                )
+
+                for o in range(len(members)):
+                    if members[o] != c_type_members[o]:
+                        return False
+            case _:
+                return False
+
+        return True
+
     @staticmethod
     def extract_id(id_tree: Tree):
         """
@@ -450,18 +520,21 @@ class CType:
         """
         Given a type name, find the underlying base type.
         """
-        type_match = []
+        type_match = None
         for c_type in all_types.values():
             if c_type.attributes.name == type_name:
-                type_match.append(c_type)
+                if not type_match:
+                    type_match = c_type
+                    continue
 
-        if len(type_match) == 0:
+                if c_type != type_match:
+                    raise ValueError(
+                        f"Found multiple types with name '{type_name}': {type_match}"
+                    )
+        if not type_match:
             raise ValueError(f"Could not find a type with name '{type_name}'")
-        elif len(type_match) > 1:
-            raise ValueError(
-                f"Found multiple types with name '{type_name}': {type_match}"
-            )
-        return type_match[0].base_type()
+
+        return type_match.base_type()
 
     def __repr__(self):
         return f"CType:\n    ID: {self.id}\n    type: {self.tag_type}\n    members: {self.members}\n{self.attributes!r}"
@@ -765,7 +838,14 @@ class ConfigStructResolver:
                     )
 
                 for entry_value in user_value:
-                    out_blob.extend(self._flatten_and_write(entry_value, entry_type))
+                    try:
+                        out_blob.extend(
+                            self._flatten_and_write(entry_value, entry_type)
+                        )
+                    except Exception as e:
+                        raise Exception(
+                            f"Exception occurred while filling field of array CType '{c_type}'`"
+                        ) from e
 
                 type_size = c_type.array_count() * entry_type.attributes.byte_size
 
@@ -808,9 +888,14 @@ class ConfigStructResolver:
                     out_blob.extend(bytearray(start_byte - len(out_blob)))
 
                     member_value = user_value.fields[member.attributes.name]
-                    out_blob.extend(
-                        self._flatten_and_write(member_value, member.base_type())
-                    )
+                    try:
+                        out_blob.extend(
+                            self._flatten_and_write(member_value, member.base_type())
+                        )
+                    except Exception as e:
+                        raise Exception(
+                            f"Exception occurred while filling member of structure CType '{c_type}'`"
+                        ) from e
 
                 assert len(out_blob) <= type_size
                 out_blob.extend(bytearray(type_size - len(out_blob)))
@@ -828,7 +913,12 @@ class ConfigStructResolver:
             c_type = CType.find_type_by_name(
                 self.files[config_struct.target_file], config_struct.type_name
             )
-            blob = self._flatten_and_write(config_struct, c_type)
+            try:
+                blob = self._flatten_and_write(config_struct, c_type)
+            except Exception as e:
+                raise Exception(
+                    f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{c_type}'`"
+                ) from e
             blob_name = f"{config_struct.target_file.removesuffix('.elf')}_{config_struct.section_name}.data"
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
