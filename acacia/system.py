@@ -170,7 +170,9 @@ class System:
                 )
             mr._set_paddr(next_paddr)
 
-    def make_config_structs(self, build_dir: pathlib.Path = pathlib.Path("./")):
+    def make_config_structs(
+        self, build_dir: pathlib.Path = pathlib.Path("./"), dump: bool = False
+    ):
         # We can't get config structs without resolving subsystems first
         if not self.system_assembled:
             print("System::make_config_structs - auto-assembling")
@@ -181,7 +183,7 @@ class System:
         )
         for s in self.subsystems:
             resolver.add_structs(s.generate_config_structs())
-        resolver.resolve_and_create_all()
+        resolver.resolve_and_create_all(dump)
 
     def render(self) -> et.Element:
         if not self.system_assembled:

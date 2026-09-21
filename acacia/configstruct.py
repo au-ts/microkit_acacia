@@ -23,6 +23,7 @@ from ctypes import (
 )
 from collections.abc import Sized, Iterable
 from typing import List, Tuple, Dict, Optional, Any, Union
+import json
 
 
 class Attributes:
@@ -904,12 +905,23 @@ class ConfigStructResolver:
 
         return out_blob
 
-    def resolve_and_create_all(self):
+    def resolve_and_create_all(self, dump: bool = False):
         """
         Try generate data files for all currently known config structs. Output
         will be placed in `self.build_dir`.
         """
         for config_struct in self.config_structs:
+            # These error checks aren't actually needed, since this is prevented by now. Do it anyway
+            # to satisfy MyPy
+            if config_struct.target_file is None:
+                raise RuntimeError(
+                    f"Top level config struct {config_struct} has no target file!"
+                )
+            if config_struct.type_name is None:
+                raise RuntimeError(
+                    f"Top level config struct {config_struct} has no type name!"
+                )
+
             c_type = CType.find_type_by_name(
                 self.files[config_struct.target_file], config_struct.type_name
             )
@@ -919,7 +931,52 @@ class ConfigStructResolver:
                 raise Exception(
                     f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{c_type}'`"
                 ) from e
-            blob_name = f"{config_struct.target_file.removesuffix('.elf')}_{config_struct.section_name}.data"
+            blob_name = f"{str(config_struct.target_file).removesuffix('.elf')}_{config_struct.section_name}.data"
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
                 f.write(blob)
+
+            if dump:
+                json_path = f"{blob_path.removesuffix('.data')}.json"
+                with open(json_path, "w") as f:
+                    json.dump(
+                        {
+                            "type_name": config_struct.type_name,
+                            "section_name": str(config_struct.section_name),
+                            "target_file": str(config_struct.target_file),
+                            "empty": config_struct.empty,
+                            "fields": {
+                                name: _value_to_jsonable(value)
+                                for name, value in config_struct.fields.items()
+                            },
+                        },
+                        f,
+                        indent=2,
+                    )
+                    f.write("\n")
+
+
+def _value_to_jsonable(value: Any) -> Any:
+    """
+    Create JSON-friendly values for configstruct fields.
+    ConfigStruct            -> {"empty": <bool>, "fields": {...}}
+    bytes/bytearray/int     -> hex string
+    list/tuple              -> list
+    str/float/bool/None     -> unchanged
+    """
+    if isinstance(value, ConfigStruct):
+        return {
+            "empty": value.empty,
+            "fields": {name: _value_to_jsonable(v) for name, v in value.fields.items()},
+        }
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    if isinstance(value, int):
+        return hex(value)
+    if isinstance(value, (list, tuple)):
+        return [_value_to_jsonable(v) for v in value]
+    if value is None or isinstance(value, (str, float, bool)):
+        return value
+    raise TypeError(
+        f"Value '{value!r}' of type '{type(value).__name__}' is not JSON-serialisable"
+    )
