@@ -77,23 +77,23 @@ class Entity:
         self,
         mr: MemoryRegion,
         perms: Union[Map.Permissions, str],
-        page_size=0x1000,
     ) -> Map:
         """
         Given a memory region, automatically create a map and assign it a vaddr
-        that doesn't overlap with any existing maps.
+        that doesn't overlap with any existing maps. This function will automatically
+        try to align the vaddr to the largest suitable page size boundary.
 
         Args:
             mr: MemoryRegion to map
             perms: Map permissions - read, write, execute
             start_vaddr: lowest address to auto-allocate map. Default: 0x20_000_000
-            page_size: page size used. Defaults to 0x1000.
 
         Returns:
             Map: created map object.
 
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """
+        page_size = mr.find_best_page_size().size_bytes
         if len(self.maps) != 0:
             # python sorted() is adaptive, so this doesn't waste much time on repeats!
             self.maps = sorted(self.maps, key=lambda m: m.vaddr)
