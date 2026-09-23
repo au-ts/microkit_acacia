@@ -1,21 +1,26 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-import sys
 import struct
-from unittest.mock import MagicMock, patch, mock_open
+import sys
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
 sys.modules.setdefault("libfdt", MagicMock())
 
 import acacia.dtb as dtb_module
+
+# NOTE: we use real arches here instead of mocks in a few places to get around mocks cascading through MemoryRegions.
+# If we refactor MemoryRegion to decouple it further from Arch, we should get rid of the below and replace specific
+# arches with MagicMock
+from acacia.arch import aarch64, riscv64, x86_64
 from acacia.dtb import (
     Arm_GIC,
-    DTBNode,
     DeviceTreeBlob,
-    _arm_gic_irq_type,
+    DTBNode,
     _arm_gic_irq_number,
+    _arm_gic_irq_type,
     _arm_gic_trigger,
     _parse_irq,
 )
@@ -113,53 +118,40 @@ def test_arm_gic_trigger_invalid_raises(val):
 
 
 def test_parse_irq_arm():
-    arch = MagicMock()
-    arch.is_arm.return_value = True
-    arch.is_riscv.return_value = False
+    arch = aarch64
     with patch.object(dtb_module, "ConventionalIRQ") as ci:
         _parse_irq(arch, [0, 5, 1])
         ci.assert_called_once_with(37, IRQ.Trigger.EDGE)
 
 
 def test_parse_irq_arm_ppi_level():
-    arch = MagicMock()
-    arch.is_arm.return_value = True
-    arch.is_riscv.return_value = False
+    arch = aarch64
     with patch.object(dtb_module, "ConventionalIRQ") as ci:
         _parse_irq(arch, [1, 3, 4])
         ci.assert_called_once_with(19, IRQ.Trigger.LEVEL)
 
 
 def test_parse_irq_arm_insufficient_cells_raises():
-    arch = MagicMock()
-    arch.is_arm.return_value = True
-    arch.is_riscv.return_value = False
+    arch = aarch64
     with pytest.raises(RuntimeError, match="at least 3 interrupt cells"):
         _parse_irq(arch, [0, 5])
 
 
 def test_parse_irq_riscv():
-    arch = MagicMock()
-    arch.is_arm.return_value = False
-    arch.is_riscv.return_value = True
+    arch = riscv64
     with patch.object(dtb_module, "ConventionalIRQ") as ci:
         _parse_irq(arch, [9])
         ci.assert_called_once_with(9, IRQ.Trigger.LEVEL)
 
 
 def test_parse_irq_riscv_wrong_cell_count_raises():
-    arch = MagicMock()
-    arch.is_arm.return_value = False
-    arch.is_riscv.return_value = True
+    arch = riscv64
     with pytest.raises(RuntimeError, match="expected 1 interrupt cell"):
         _parse_irq(arch, [1, 2])
 
 
 def test_parse_irq_unsupported_arch_raises():
-    arch = MagicMock()
-    arch.is_arm.return_value = False
-    arch.is_riscv.return_value = False
-    arch.arch = "x86"
+    arch = x86_64
     with pytest.raises(RuntimeError, match="Unsupported architecture for IRQ parsing"):
         _parse_irq(arch, [1])
 
@@ -455,15 +447,13 @@ def test_get_parsed_irqs_unsupported_arch_raises(blob, fdt):
 
 
 def test_get_reg_paddr_alignment_only(blob):
-    arch = MagicMock()
-    arch.default_page_size.return_value = 0x1000
+    arch = aarch64
     blob.get_node_parent = MagicMock(side_effect=KeyError)
     assert blob.get_reg_paddr(arch, DTBNode(5, "/x"), 0x1234) == 0x1000
 
 
 def test_get_reg_paddr_empty_ranges_is_passthrough(blob, fdt):
-    arch = MagicMock()
-    arch.default_page_size.return_value = 0x1000
+    arch = aarch64
     node = DTBNode(10, "/soc/dev")
     parent = DTBNode(5, "/soc")
 
@@ -479,8 +469,7 @@ def test_get_reg_paddr_empty_ranges_is_passthrough(blob, fdt):
 
 
 def test_get_reg_paddr_translates_through_ranges(blob, fdt):
-    arch = MagicMock()
-    arch.default_page_size.return_value = 0x1000
+    arch = aarch64
     node = DTBNode(10, "/soc/bus/dev")
     parent = DTBNode(5, "/soc/bus")
     grandparent = DTBNode(2, "/soc")

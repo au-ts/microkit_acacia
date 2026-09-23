@@ -107,7 +107,7 @@ class System:
             key=lambda m: m.name,
             reverse=True,
         )
-        page_size = self.arch.default_page_size()
+        page_size = self.arch.default_page_size_bytes()
 
         while to_alloc:
             mr = to_alloc.pop()
@@ -178,9 +178,7 @@ class System:
             print("System::make_config_structs - auto-assembling")
             self.assemble()
         # TODO: support big endian?
-        resolver = ConfigStructResolver(
-            build_dir, endian="little", arch_64_bit=self.arch.is_64_bit()
-        )
+        resolver = ConfigStructResolver(build_dir, endian="little")
         for s in self.subsystems:
             resolver.add_structs(s.generate_config_structs())
         resolver.resolve_and_create_all(dump)
