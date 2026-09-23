@@ -1,17 +1,23 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-import pytest
 import xml.etree.ElementTree as et
 from unittest.mock import MagicMock
-from acacia.memory import MemoryRegion, Map, IOAddressSpace, IOMap
+
+import pytest
+
 from acacia.arch import aarch64
+from acacia.memory import IOAddressSpace, IOMap, Map, MemoryRegion
 
 
 @pytest.fixture
 def sdf():
     """A stand-in System for entity constructors."""
-    return MagicMock(name="sdf")
+    sdf = MagicMock(name="sdf")
+
+    # Overwrite arch to prevent x86-specific behaviour from triggering in all cases.
+    sdf.arch = aarch64  # is_x86() -> False, real page-size logic
+    return sdf
 
 
 class TestMemoryRegion:
