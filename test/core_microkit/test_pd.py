@@ -504,7 +504,9 @@ class TestCreateAutomap:
     def test_maps_are_page_aligned(self, sdf):
         pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
         # Odd-sized region still produces a page-aligned vaddr.
-        mr = MemoryRegion(sdf, "mr", 0xABC)
+        mr = MemoryRegion(sdf, "mr", 0x1000)
+        # Overwrite with odd addr to avoid mr __init__ error checking
+        mr.size = 0xABC
         m = pd.create_automap(mr, "rw")
         assert m.vaddr % 0x1000 == 0
 

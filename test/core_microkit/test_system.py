@@ -2,22 +2,20 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import xml.etree.ElementTree as et
-from unittest.mock import MagicMock, patch, call
-from typing import Optional
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-import acacia.system as system_module
-from acacia.system import System
+from acacia.arch import aarch64
 from acacia.memory import MemoryRegion
+from acacia.system import System
 
 
 @pytest.fixture
 def arch():
-    """A stand-in Arch with a deterministic page size."""
-    a = MagicMock(name="arch")
-    a.default_page_size.return_value = 0x1000
-    return a
+    # This theoretically should be mocked, but it garbles these tests if we do because of
+    # x86-specific behaviour on memory regions. MagicMock only goes so far...
+    return aarch64
 
 
 @pytest.fixture
@@ -377,9 +375,9 @@ class TestAutoAllocate:
 
     def test_size_align_enforced(self, sys_):
         """Test that MRs with non-aligned addresses are rejected"""
-        mr = MemoryRegion(
-            sys_, "unaligned_mr", 0x1234, physical=True
-        )  # Non-page-aligned size
+        mr = MemoryRegion(sys_, "unaligned_mr", 0x1000, physical=True)
+        # Overwrite MR with bad page size post-init to avoid error checking
+        mr.size = 0x1234
 
         with pytest.raises(RuntimeError, match="page-unaligned"):
             sys_.auto_allocate()

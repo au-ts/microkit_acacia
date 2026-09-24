@@ -71,29 +71,36 @@ class Entity:
         return self.scheduling.period if self.scheduling is not None else None
 
     def add_map(self, map: Map):
+        # Check that this map doesn't overlap any existing maps before adding.
+        for m in self.maps:
+            if m.vaddr_in_map(map.vaddr) or m.vaddr_in_map(map.end_vaddr):
+                raise RuntimeError(
+                    f"Map {map} cannot be added as it overlaps with {m}!"
+                )
         self.maps.append(map)
 
     def create_automap(
         self,
         mr: MemoryRegion,
         perms: Union[Map.Permissions, str],
-        page_size=0x1000,
     ) -> Map:
         """
         Given a memory region, automatically create a map and assign it a vaddr
-        that doesn't overlap with any existing maps.
+        that doesn't overlap with any existing maps. This function will automatically
+        try to align the vaddr to the largest suitable page size boundary.
 
         Args:
             mr: MemoryRegion to map
             perms: Map permissions - read, write, execute
             start_vaddr: lowest address to auto-allocate map. Default: 0x20_000_000
-            page_size: page size used. Defaults to 0x1000.
 
         Returns:
             Map: created map object.
 
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """
+        page_size = mr.find_best_page_size()
+        page_size_bytes = page_size.size_bytes
         if len(self.maps) != 0:
             # python sorted() is adaptive, so this doesn't waste much time on repeats!
             self.maps = sorted(self.maps, key=lambda m: m.vaddr)
@@ -102,21 +109,23 @@ class Entity:
             # a) we want to be as close to start_vaddr as possible
             # b) we want to preserve guard pages between mappings
             # NOTE: we could accelerate this by remembering continguously allocated ranges.
+            # We always keep an unallocated region between pages.
+            # INVARIANT: no maps overlap. This is enforced in Entity.add_map.
             prev_guard_page_end = self.map_start_vaddr
             for m in self.maps:
                 # If the space between the previous end and this start is big enough to fit
                 # our new map AND a guard page on either side, accept it.
-                if prev_guard_page_end + mr.size + page_size < m.vaddr:
+                if prev_guard_page_end + mr.size + page_size_bytes < m.vaddr:
                     # Fits!
                     break
-                prev_guard_page_end = m.end_vaddr + page_size
+                prev_guard_page_end = m.end_vaddr + page_size_bytes
 
             # Align address to page boundary
-            next_vaddr = (prev_guard_page_end + page_size - 1) & ~(page_size - 1)
+            next_vaddr = page_size.roundup_to_page(prev_guard_page_end)
 
             # Add space for a guard page, unless we are still at the start
             if next_vaddr != self.map_start_vaddr:
-                next_vaddr += page_size
+                next_vaddr = page_size.roundup_to_page(next_vaddr + page_size_bytes)
         else:
             next_vaddr = self.map_start_vaddr
 

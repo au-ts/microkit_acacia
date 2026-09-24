@@ -350,7 +350,7 @@ class DeviceTreeBlob:
         to find the CPU visible address rather than some address relative to the
         particular bus the address is on. We also align to the smallest page size.
         """
-        page_bits = ctz(arch.default_page_size())
+        page_bits = ctz(arch.default_page_size_bytes())
 
         # align page size
         device_paddr = paddr & ~((1 << page_bits) - 1)

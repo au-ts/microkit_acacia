@@ -1,9 +1,11 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Union, Set
-from dataclasses import dataclass
 import xml.etree.ElementTree as et
+from dataclasses import dataclass
+from typing import Optional, Set, Union
+
+from .arch import SmallPage, LargePage, PageSize
 from .system import System
 
 
@@ -29,6 +31,8 @@ class MemoryRegion:
         self.name = name
         if size <= 0:
             raise ValueError("Size must be positive and non-zero!")
+        if not sdf.arch.addr_is_page_aligned(size):
+            raise ValueError("MemoryRegion size must be a multiple of a page size!")
         self.size = size
         if paddr is not None:
             physical = True
@@ -38,8 +42,29 @@ class MemoryRegion:
         self.sdf = sdf
         self.prefill_bootinfo = prefill_bootinfo
 
+        # If a page is > 2Mebibyte, round up to 2Mebibyte. This allows Microkit to optimise by creating
+        # MRs and maps as large pages
+        if self.can_be_largepage_optimised():
+            # TODO: replace with logging module
+            print(
+                f"INFO: {self} of size {self.size} is being rounded up to a LargePage boundary"
+            )
+            self.size = sdf.arch.roundup_to_page(self.size, LargePage)
+            print(f"INFO: new size: {self.size}")
+
         # Allocate ourselves to SDF
         self.sdf._add_memory_region(self)
+
+    def can_be_largepage_optimised(self) -> bool:
+        """
+        Return True if Microkit could optimise this MR to a large page.
+        NOTE: Microkit will only actually do this if all mappings are large-page aligned.
+        """
+        if self.find_best_page_size() == SmallPage:
+            return False
+        # if paddr isn't set yet, it technically COULD still be optimised when set,
+        # as long as the paddr is eventually set to a page aligned address.
+        return self.paddr is None or LargePage.addr_is_aligned(self.paddr)
 
     def _set_paddr(self, paddr: int) -> Optional[int]:
         """
@@ -53,6 +78,13 @@ class MemoryRegion:
 
         self.paddr = paddr
         return self.paddr
+
+    def find_best_page_size(self) -> PageSize:
+        """
+        Return the PageSize this region fits in best, based on the system architecture.
+        This is a convenience wrap around Arch.determine_region_page_size.
+        """
+        return self.sdf.arch.determine_region_page_size(self.size)
 
     def render(self, system_root: et.Element):
         mr = et.SubElement(system_root, "memory_region")
@@ -94,6 +126,8 @@ class Map:
         setvar_vaddr: Optional[str] = None,
     ):
         self.mr = mr
+        if not mr.sdf.arch.addr_is_page_aligned(vaddr):
+            raise RuntimeError(f"{vaddr} of map is not page aligned, invalid!")
 
         # Handle instantiating permissions from string
         if type(permissions) is str:
@@ -107,6 +141,11 @@ class Map:
             permissions = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.perms = permissions
         self.setvar_vaddr = setvar_vaddr
+        if mr.can_be_largepage_optimised() and not LargePage.addr_is_aligned(vaddr):
+            # TODO: replace with logging module
+            print(
+                f"WARNING: Map of {mr} could be optimised to a large page if {vaddr} was aligned"
+            )
         self.vaddr = vaddr
 
     @property
@@ -127,6 +166,12 @@ class Map:
     @property
     def end_vaddr(self):
         return self.vaddr + self.size
+
+    def vaddr_in_map(self, vaddr: int) -> bool:
+        """
+        Return True if a given address is in the bounds of this Map.
+        """
+        return vaddr >= self.vaddr and vaddr < self.end_vaddr
 
 
 class IOMap:
