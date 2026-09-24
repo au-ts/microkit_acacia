@@ -71,6 +71,12 @@ class Entity:
         return self.scheduling.period if self.scheduling is not None else None
 
     def add_map(self, map: Map):
+        # Check that this map doesn't overlap any existing maps before adding.
+        for m in self.maps:
+            if m.vaddr_in_map(map.vaddr) or m.vaddr_in_map(map.end_vaddr):
+                raise RuntimeError(
+                    f"Map {map} cannot be added as it overlaps with {m}!"
+                )
         self.maps.append(map)
 
     def create_automap(
@@ -104,6 +110,7 @@ class Entity:
             # b) we want to preserve guard pages between mappings
             # NOTE: we could accelerate this by remembering continguously allocated ranges.
             # We always keep an unallocated region between pages.
+            # INVARIANT: no maps overlap. This is enforced in Entity.add_map.
             prev_guard_page_end = self.map_start_vaddr
             for m in self.maps:
                 # If the space between the previous end and this start is big enough to fit
@@ -114,13 +121,11 @@ class Entity:
                 prev_guard_page_end = m.end_vaddr + page_size_bytes
 
             # Align address to page boundary
-            next_vaddr = (prev_guard_page_end + page_size_bytes - 1) & ~(
-                page_size_bytes - 1
-            )
+            next_vaddr = page_size.roundup_to_page(prev_guard_page_end)
 
             # Add space for a guard page, unless we are still at the start
             if next_vaddr != self.map_start_vaddr:
-                next_vaddr += page_size_bytes
+                next_vaddr = page_size.roundup_to_page(next_vaddr + page_size_bytes)
         else:
             next_vaddr = self.map_start_vaddr
 

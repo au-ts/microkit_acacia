@@ -31,6 +31,8 @@ class MemoryRegion:
         self.name = name
         if size <= 0:
             raise ValueError("Size must be positive and non-zero!")
+        if not sdf.arch.addr_is_page_aligned(size):
+            raise ValueError("MemoryRegion size must be a multiple of a page size!")
         self.size = size
         if paddr is not None:
             physical = True
@@ -124,6 +126,8 @@ class Map:
         setvar_vaddr: Optional[str] = None,
     ):
         self.mr = mr
+        if not mr.sdf.arch.addr_is_page_aligned(vaddr):
+            raise RuntimeError(f"{vaddr} of map is not page aligned, invalid!")
 
         # Handle instantiating permissions from string
         if type(permissions) is str:
@@ -162,6 +166,12 @@ class Map:
     @property
     def end_vaddr(self):
         return self.vaddr + self.size
+
+    def vaddr_in_map(self, vaddr: int) -> bool:
+        """
+        Return True if a given address is in the bounds of this Map.
+        """
+        return vaddr >= self.vaddr and vaddr < self.end_vaddr
 
 
 class IOMap:

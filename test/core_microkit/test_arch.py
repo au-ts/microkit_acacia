@@ -4,10 +4,7 @@
 from enum import Enum
 from typing import Optional
 
-import pytest
-
-from acacia import MemoryRegion
-from acacia.arch import HugePage, LargePage, SmallPage, aarch64, x86_64
+from acacia.arch import LargePage, SmallPage, aarch64, x86_64
 
 
 class TestArch:
@@ -47,15 +44,16 @@ class TestArch:
         assert LargePage.addr_is_aligned(0x200000)
         assert not LargePage.addr_is_aligned(0x201000)
 
-        assert HugePage.addr_is_aligned(0x40000000)
-        assert not HugePage.addr_is_aligned(0x200000)
+        # Commented out while Microkit doesn't support huge pages.
+        # assert HugePage.addr_is_aligned(0x40000000)
+        # assert not HugePage.addr_is_aligned(0x200000)
 
     def test_addr_is_page_aligned_with_page_size(self):
         assert aarch64.addr_is_page_aligned(0x200000, LargePage)
         assert not aarch64.addr_is_page_aligned(0x201000, LargePage)
 
-        assert aarch64.addr_is_page_aligned(0x40000000, HugePage)
-        assert not aarch64.addr_is_page_aligned(0x40200000, HugePage)
+        # assert aarch64.addr_is_page_aligned(0x40000000, HugePage)
+        # assert not aarch64.addr_is_page_aligned(0x40200000, HugePage)
 
     def test_roundup_to_large_page(self):
         assert aarch64.roundup_to_page(0, LargePage) == 0
@@ -77,5 +75,5 @@ class TestArch:
         assert aarch64.determine_region_page_size(0x200000) == LargePage
         assert aarch64.determine_region_page_size(0x3FFFFFFF) == LargePage
 
-        assert aarch64.determine_region_page_size(0x40000000) == HugePage
-        assert aarch64.determine_region_page_size(0x80000000) == HugePage
+        # assert aarch64.determine_region_page_size(0x40000000) == HugePage
+        # assert aarch64.determine_region_page_size(0x80000000) == HugePage

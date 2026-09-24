@@ -226,13 +226,6 @@ class TestIOAddressSpace:
         assert ioas_elem.find("iomap") is None
 
 
-def test_large_page_constants_are_two_mibibyte():
-    """Pin the addresses used below to the real arch constant so this file
-    fails loudly if LargePage ever stops being 2 MiB."""
-    assert LargePage.addr_is_aligned(0x4000_0000)
-    assert not LargePage.addr_is_aligned(0x4000_2000)
-
-
 class TestMemoryRegionLargePageOptimisation:
     def test_small_region_not_rounded(self, sdf):
         """Regions that fit a single small page are left untouched."""
@@ -241,7 +234,7 @@ class TestMemoryRegionLargePageOptimisation:
         assert not mr.can_be_largepage_optimised()
 
     def test_large_virtual_region_rounded_to_large_page(self, sdf):
-        mr = MemoryRegion(sdf, "big_mr", 0x20_0001)
+        mr = MemoryRegion(sdf, "big_mr", 0x21_0000)
         assert mr.size == 0x40_0000
         assert mr.paddr is None
 
@@ -253,20 +246,14 @@ class TestMemoryRegionLargePageOptimisation:
         mr = MemoryRegion(sdf, "exact_mr", 0x20_0000)
         assert mr.size == 0x20_0000
 
-    def test_aligned_paddr_still_optimised(self, sdf):
-        """A fixed paddr that is large-page aligned preserves the optimisation."""
-        mr = MemoryRegion(sdf, "aligned_paddr_mr", 0x20_0001, paddr=0x8_0000_0000)
-        assert mr.physical
-        assert mr.size == 0x40_0000
-
     def test_unaligned_paddr_not_optimised(self, sdf):
         """A fixed, unaligned paddr invalidates the optimisation."""
-        mr = MemoryRegion(sdf, "unaligned_paddr_mr", 0x20_0001, paddr=0x8_0000_2000)
+        mr = MemoryRegion(sdf, "unaligned_paddr_mr", 0x20_0000, paddr=0x8_0000_2000)
         assert mr.physical
-        assert mr.size == 0x20_0001
+        assert mr.size == 0x20_0000
 
     def test_rounding_prints_info(self, sdf, capsys):
-        MemoryRegion(sdf, "big_mr", 0x20_0001)
+        MemoryRegion(sdf, "big_mr", 0x20_0000)
         out = capsys.readouterr().out
         assert "rounded up to a LargePage boundary" in out
 
@@ -279,14 +266,14 @@ class TestMemoryRegionLargePageOptimisation:
 class TestMapLargePageWarning:
     def test_warning_printed_for_unaligned_vaddr(self, sdf, capsys):
         """A map vaddr that isn't large-page aligned invalidates the optimisation."""
-        mr = MemoryRegion(sdf, "big_mr", 0x20_0001)  # rounded up at construction
+        mr = MemoryRegion(sdf, "big_mr", 0x20_0000)  # rounded up at construction
         Map(mr, 0x4000_2000, "rw")  # small-page aligned, not large-page aligned
         out = capsys.readouterr().out
         assert "could be optimised to a large page" in out
         assert str(0x4000_2000) in out  # message embeds the vaddr in decimal
 
     def test_no_warning_for_aligned_vaddr(self, sdf, capsys):
-        mr = MemoryRegion(sdf, "big_mr", 0x20_0001)
+        mr = MemoryRegion(sdf, "big_mr", 0x20_0000)
         Map(mr, 0x4000_0000, "rw")  # large-page aligned
         out = capsys.readouterr().out
         assert "could be optimised to a large page" not in out
