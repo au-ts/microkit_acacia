@@ -14,7 +14,7 @@ from acacia.system import System
 @pytest.fixture
 def arch():
     # This theoretically should be mocked, but it garbles these tests if we do because of
-    # x86-specific behaviour on memory regions. MagicMock only goes so far...
+    # arch-specific behaviour on memory regions. MagicMock only goes so far...
     return aarch64
 
 
@@ -375,9 +375,9 @@ class TestAutoAllocate:
 
     def test_size_align_enforced(self, sys_):
         """Test that MRs with non-aligned addresses are rejected"""
-        mr = MemoryRegion(
-            sys_, "unaligned_mr", 0x1234, physical=True
-        )  # Non-page-aligned size
+        mr = MemoryRegion(sys_, "unaligned_mr", 0x1000, physical=True)
+        # Overwrite MR with bad page size post-init to avoid error checking
+        mr.size = 0x1234
 
         with pytest.raises(RuntimeError, match="page-unaligned"):
             sys_.auto_allocate()

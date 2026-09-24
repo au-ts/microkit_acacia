@@ -1,23 +1,23 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
-from .pd import ProtectionDomain, VirtualMachine, SchedulingProperties
-from .memory import MemoryRegion, Map
-from .channel import Channel
-from .irq import IRQ, ConventionalIRQ, IrqIoapic, IrqMsi
-from .system import System
 from .arch import (
     Arch,
     ArchID,
-    aarch64,
-    x86_64,
-    riscv64,
+    LargePage,
+    # HugePage,
     PageSize,
     SmallPage,
-    LargePage,
-    HugePage,
+    aarch64,
+    riscv64,
+    x86_64,
 )
-from .subsystem import Subsystem, SubsystemBuildError
-from .dtb import DTBNode, DeviceTreeBlob
+from .channel import Channel
 from .configstruct import ConfigStruct, ConfigStructResolver
-from .x86 import IOPort
+from .dtb import DeviceTreeBlob, DTBNode
 from .dwarf_dump_grammar import grammar
+from .irq import IRQ, ConventionalIRQ, IrqIoapic, IrqMsi
+from .memory import Map, MemoryRegion
+from .pd import ProtectionDomain, SchedulingProperties, VirtualMachine
+from .subsystem import Subsystem, SubsystemBuildError
+from .system import System
+from .x86 import IOPort

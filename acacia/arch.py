@@ -45,11 +45,16 @@ class PageSize:
 
 SmallPage = PageSize(name="small", size_bytes=0x1000)
 
-LargePage = PageSize("large", size_bytes=0x200000)
+LargePage = PageSize(name="large", size_bytes=0x200000)
 
-HugePage = PageSize("huge", size_bytes=0x40000000)
+# Commented out while unsupported in Microkit. Add to page_sizes list when ready.
+# HugePage = PageSize(name="huge", size_bytes=0x40000000)
 
-page_sizes = [SmallPage, LargePage, HugePage]
+page_sizes = [
+    SmallPage,
+    LargePage,
+    # HugePage
+]
 
 
 @dataclass
