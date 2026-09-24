@@ -30,6 +30,18 @@ class PageSize:
         """
         return addr % self.size_bytes == 0
 
+    def roundup_to_page(self, addr: int) -> int:
+        """
+        Round an address up to the next page boundary.
+        """
+        return (addr + self.size_bytes - 1) & ~(self.size_bytes - 1)
+
+    def rounddown_to_page(self, addr: int) -> int:
+        """
+        Round an address down to the previous page boundary.
+        """
+        return addr - (addr % self.size_bytes)
+
 
 SmallPage = PageSize(name="small", size_bytes=0x1000)
 
@@ -73,19 +85,20 @@ class Arch:
         return page_size.addr_is_aligned(addr)
 
     def roundup_to_page(self, n: int, page_size: Optional[PageSize] = None) -> int:
-        if not page_size:
+        if page_size is None:
             page_size = self.default_page_size()
-        p_sz = page_size.size_bytes
-        return (n + p_sz - 1) & ~(p_sz - 1)
+        return page_size.roundup_to_page(n)
 
     def rounddown_to_page(self, n: int, page_size: Optional[PageSize] = None) -> int:
-        if not page_size:
+        if page_size is None:
             page_size = self.default_page_size()
-        p_sz = page_size.size_bytes
-        return n - (n % p_sz)
+        return page_size.rounddown_to_page(n)
 
     def determine_region_page_size(self, size: int) -> PageSize:
-        # Round up to next page size
+        """
+        Return the best page size for a region of a given size. I.e. the largest
+        page size this region fits into without creating fragmentation.
+        """
         for page_sz in sorted(page_sizes, key=lambda k: k.size_bytes, reverse=True):
             if size >= page_sz.size_bytes:
                 return page_sz

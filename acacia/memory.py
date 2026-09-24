@@ -41,7 +41,7 @@ class MemoryRegion:
         self.prefill_bootinfo = prefill_bootinfo
 
         # If a page is > 2Mebibyte, round up to 2Mebibyte. This allows Microkit to optimise by creating
-        # MRs and maps as large pages on x86_64
+        # MRs and maps as large pages
         if self.can_be_largepage_optimised():
             # TODO: replace with logging module
             print(
@@ -58,14 +58,11 @@ class MemoryRegion:
         Return True if Microkit could optimise this MR to a large page.
         NOTE: Microkit will only actually do this if all mappings are large-page aligned.
         """
-        # Only supported on x86 currently
-        if not self.sdf.arch.is_x86():
-            return False
         if self.find_best_page_size() == SmallPage:
             return False
         # if paddr isn't set yet, it technically COULD still be optimised when set,
         # as long as the paddr is eventually set to a page aligned address.
-        return self.paddr is None or not LargePage.addr_is_aligned(self.paddr)
+        return self.paddr is None or LargePage.addr_is_aligned(self.paddr)
 
     def _set_paddr(self, paddr: int) -> Optional[int]:
         """
@@ -140,14 +137,10 @@ class Map:
             permissions = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.perms = permissions
         self.setvar_vaddr = setvar_vaddr
-        if (
-            mr.sdf.arch.is_x86()
-            and mr.sdf.arch.determine_region_page_size(mr.size) != SmallPage
-            and not LargePage.addr_is_aligned(vaddr)
-        ):
+        if mr.can_be_largepage_optimised() and not LargePage.addr_is_aligned(vaddr):
             # TODO: replace with logging module
             print(
-                f"WARNING: Map of {mr} could be optimised to a huge page if {vaddr} was aligned"
+                f"WARNING: Map of {mr} could be optimised to a large page if {vaddr} was aligned"
             )
         self.vaddr = vaddr
 
