@@ -93,7 +93,8 @@ class Entity:
 
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """
-        page_size = mr.find_best_page_size().size_bytes
+        page_size = mr.find_best_page_size()
+        page_size_bytes = page_size.size_bytes
         if len(self.maps) != 0:
             # python sorted() is adaptive, so this doesn't waste much time on repeats!
             self.maps = sorted(self.maps, key=lambda m: m.vaddr)
@@ -102,21 +103,24 @@ class Entity:
             # a) we want to be as close to start_vaddr as possible
             # b) we want to preserve guard pages between mappings
             # NOTE: we could accelerate this by remembering continguously allocated ranges.
+            # We always keep an unallocated region between pages.
             prev_guard_page_end = self.map_start_vaddr
             for m in self.maps:
                 # If the space between the previous end and this start is big enough to fit
                 # our new map AND a guard page on either side, accept it.
-                if prev_guard_page_end + mr.size + page_size < m.vaddr:
+                if prev_guard_page_end + mr.size + page_size_bytes < m.vaddr:
                     # Fits!
                     break
-                prev_guard_page_end = m.end_vaddr + page_size
+                prev_guard_page_end = m.end_vaddr + page_size_bytes
 
             # Align address to page boundary
-            next_vaddr = (prev_guard_page_end + page_size - 1) & ~(page_size - 1)
+            next_vaddr = (prev_guard_page_end + page_size_bytes - 1) & ~(
+                page_size_bytes - 1
+            )
 
             # Add space for a guard page, unless we are still at the start
             if next_vaddr != self.map_start_vaddr:
-                next_vaddr += page_size
+                next_vaddr += page_size_bytes
         else:
             next_vaddr = self.map_start_vaddr
 
