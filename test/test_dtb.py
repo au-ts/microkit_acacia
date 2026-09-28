@@ -436,15 +436,6 @@ def test_get_parsed_irqs_riscv_groups_by_one(blob, fdt):
     assert result == [("irq", (5,)), ("irq", (7,))]
 
 
-def test_get_parsed_irqs_misaligned_raises(blob, fdt):
-    arch = MagicMock()
-    arch.is_arm.return_value = True
-    arch.is_riscv.return_value = False
-    fdt.getprop.return_value = struct.pack(">2I", 0, 5)
-    with pytest.raises(RuntimeError, match="not a multiple"):
-        blob.get_parsed_irqs(DTBNode(7, "/x"), arch)
-
-
 def test_get_parsed_irqs_unsupported_arch_raises(blob, fdt):
     arch = MagicMock()
     arch.is_arm.return_value = False

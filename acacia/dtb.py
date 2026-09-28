@@ -144,7 +144,6 @@ class DTBNode:
     path: str
 
 
-
 class DeviceTreeBlob:
     """
     Class encapsulating operations on a device tree.
@@ -307,11 +306,13 @@ class DeviceTreeBlob:
         if min_cells_per_irq == 0:
             raise RuntimeError("Unsupported architecture for IRQ parsing")
 
-        if (n:=len(raw_irqs)) % min_cells_per_irq != 0:
+        if (n := len(raw_irqs)) % min_cells_per_irq != 0:
             # TODO: replace with logging module
-            print(f"WARNING: IRQ for {node} has {n} interrupt cells when this arch expects multiples "
-                f"of {min_cells_per_irq}. Dropping remainder.")
-            raw_irqs = raw_irqs[:n - (n % min_cells_per_irq)]
+            print(
+                f"WARNING: IRQ for {node} has {n} interrupt cells when this arch expects multiples "
+                f"of {min_cells_per_irq}. Dropping remainder."
+            )
+            raw_irqs = raw_irqs[: n - (n % min_cells_per_irq)]
             assert len(raw_irqs) % min_cells_per_irq == 0
 
         for i in range(0, len(raw_irqs), min_cells_per_irq):
@@ -403,7 +404,6 @@ class DeviceTreeBlob:
         # TODO: make sure this works...
 
         return device_paddr
-
 
 
 def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
