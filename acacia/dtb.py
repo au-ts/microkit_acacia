@@ -269,7 +269,7 @@ class DeviceTreeBlob:
         ]
         return regs
 
-    def get_node_irqs(self, node: DTBNode) -> Tuple[int, int]:
+    def get_node_irqs(self, node: DTBNode) -> Tuple[int, ...]:
         """
         Return the list of words from the IRQ field on a node. We don't
         attempt to concetenate the u32s or anything here, since the meaning
