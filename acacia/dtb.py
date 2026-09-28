@@ -144,31 +144,6 @@ class DTBNode:
     path: str
 
 
-def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
-    """
-    Parses a list of u32s representing a single IRQ into an IRQ object.
-    """
-    if arch.is_arm():
-        if len(irq_cells) < 3:
-            raise RuntimeError(
-                f"Expected at least 3 interrupt cells for ARM, found {len(irq_cells)}"
-            )
-
-        i_type = _arm_gic_irq_type(irq_cells[0])
-        num = _arm_gic_irq_number(irq_cells[1], i_type)
-        trigger = _arm_gic_trigger(irq_cells[2])
-        return ConventionalIRQ(num, trigger)
-
-    if arch.is_riscv():
-        if len(irq_cells) != 1:
-            raise RuntimeError(
-                f"RISC-V expected 1 interrupt cell, found {len(irq_cells)}"
-            )
-        # RISC-V usually implies level triggered, defaults in spec often not strict
-        return ConventionalIRQ(irq_cells[0], IRQ.Trigger.LEVEL)
-
-    raise RuntimeError(f"Unsupported architecture for IRQ parsing: {arch.arch}")
-
 
 class DeviceTreeBlob:
     """
@@ -327,18 +302,20 @@ class DeviceTreeBlob:
 
         # Determine number of cells per interrupt based on architecture
         # Zig logic implies hardcoding expected cells
-        cells_per_irq = 3 if arch.is_arm() else 1 if arch.is_riscv() else 0
+        min_cells_per_irq = 3 if arch.is_arm() else 1 if arch.is_riscv() else 0
 
-        if cells_per_irq == 0:
+        if min_cells_per_irq == 0:
             raise RuntimeError("Unsupported architecture for IRQ parsing")
 
-        if len(raw_irqs) % cells_per_irq != 0:
-            raise RuntimeError(
-                f"Raw IRQ data length {len(raw_irqs)} is not a multiple of expected cell count {cells_per_irq}"
-            )
+        if (n:=len(raw_irqs)) % min_cells_per_irq != 0:
+            # TODO: replace with logging module
+            print(f"WARNING: IRQ for {node} has {n} interrupt cells when this arch expects multiples "
+                f"of {min_cells_per_irq}. Dropping remainder.")
+            raw_irqs = raw_irqs[:n - (n % min_cells_per_irq)]
+            assert len(raw_irqs) % min_cells_per_irq == 0
 
-        for i in range(0, len(raw_irqs), cells_per_irq):
-            irq_cells = list(raw_irqs[i : i + cells_per_irq])
+        for i in range(0, len(raw_irqs), min_cells_per_irq):
+            irq_cells = list(raw_irqs[i : i + min_cells_per_irq])
             parsed.append(_parse_irq(arch, irq_cells))
 
         return parsed
@@ -426,3 +403,30 @@ class DeviceTreeBlob:
         # TODO: make sure this works...
 
         return device_paddr
+
+
+
+def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
+    """
+    Parses a list of u32s representing a single IRQ into an IRQ object.
+    """
+    if arch.is_arm():
+        if len(irq_cells) < 3:
+            raise RuntimeError(
+                f"Expected at least 3 interrupt cells for ARM, found {len(irq_cells)}"
+            )
+
+        i_type = _arm_gic_irq_type(irq_cells[0])
+        num = _arm_gic_irq_number(irq_cells[1], i_type)
+        trigger = _arm_gic_trigger(irq_cells[2])
+        return ConventionalIRQ(num, trigger)
+
+    if arch.is_riscv():
+        if len(irq_cells) != 1:
+            raise RuntimeError(
+                f"RISC-V expected 1 interrupt cell, found {len(irq_cells)}"
+            )
+        # RISC-V usually implies level triggered, defaults in spec often not strict
+        return ConventionalIRQ(irq_cells[0], IRQ.Trigger.LEVEL)
+
+    raise RuntimeError(f"Unsupported architecture for IRQ parsing: {arch.arch}")
