@@ -2,7 +2,7 @@
 name = "acacia"
 requires-python = ">= 3.10"
 readme = "README.md"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 
 [build-system]
 requires = ["setuptools >= 77.0.3"]
@@ -10,6 +10,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
 version = {file = ["VERSION"]}
+dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.package-dir]
 acacia = "acacia"
