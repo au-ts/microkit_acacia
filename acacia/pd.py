@@ -38,6 +38,11 @@ class SchedulingProperties:
                     "Budget must be defined and cannot be greater than period!"
                 )
 
+    def __repr__(self) -> str:
+        if self.passive:
+            return f"<PassiveSchedulingProperties(prio={self.priority}, p={self.period}, b={self.budget})"
+        return f"<SchedulingProperties(prio={self.priority}, p={self.period}, b={self.budget})"
+
 
 class Entity:
     """
@@ -350,4 +355,4 @@ class ProtectionDomain(Entity):
         self.vms.append(vm)
 
     def __repr__(self):
-        return f"<ProtectionDomain {self.name} prio={self.priority} at {hex(id(self))}>"
+        return f"<ProtectionDomain {self.name} prio={self.priority} w/ image {self.prog_image}>"

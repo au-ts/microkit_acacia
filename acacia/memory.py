@@ -95,6 +95,19 @@ class MemoryRegion:
         if self.prefill_bootinfo is not None:
             mr.set("prefill_bootinfo", self.prefill_bootinfo)
 
+    def __repr__(self) -> str:
+        props: list[tuple[str, object]] = [
+            ("paddr", self.paddr if self.paddr is not None else "unassigned"),
+            ("phys", self.physical),
+            ("cached", self.cached),
+            ("prefill_bootinfo", self.prefill_bootinfo),
+        ]
+
+        # Flatten into list of [0] = [1]
+        props_flat = [f"{a}={b!s}" for a, b in props]
+
+        return f"<MemoryRegion '{self.name}' of size {hex(self.size)}: {', '.join(props_flat)}>"
+
 
 class Map:
     """
@@ -117,6 +130,9 @@ class Map:
             # Don't let users define write-only pages.
             if not self.r and not self.x and self.w:
                 raise ValueError("Cannot define write-only pages!")
+
+        def __repr__(self) -> str:
+            return str(self)
 
     def __init__(
         self,
@@ -173,6 +189,9 @@ class Map:
         """
         return vaddr >= self.vaddr and vaddr < self.end_vaddr
 
+    def __repr__(self) -> str:
+        return f"<Map @ {hex(self.vaddr)} ({self.perms}) of {self.mr}>"
+
 
 class IOMap:
     """
@@ -208,6 +227,18 @@ class IOMap:
         iomap.set("perms", perms_str)
         return iomap
 
+    @property
+    def perms(self) -> str:
+        base = ""
+        if self.allow_reads:
+            base += "r"
+        if self.allow_writes:
+            base += "w"
+        return base
+
+    def __repr__(self) -> str:
+        return f"<IOMap @ {hex(self.iovaddr)} ({self.perms}) of {self.mr}>"
+
 
 class IOAddressSpace:
     """
@@ -234,3 +265,9 @@ class IOAddressSpace:
         for iomap in self.iomaps:
             iomap.render(ioas)
         return ioas
+
+    def __repr__(self) -> str:
+        return (
+            f"<IOAddressSpace '{self.name}' @ domain={self.domain_id} for "
+            f"peripheral={self.peripheral_id}>"
+        )

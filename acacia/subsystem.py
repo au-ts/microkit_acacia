@@ -2,17 +2,15 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from __future__ import annotations
-from typing import List, ClassVar, Optional, Union, Type, Dict
-from abc import abstractmethod, abstractclassmethod, ABC
-from collections import defaultdict, deque
-from typing import TYPE_CHECKING
+
+from abc import ABC
+from typing import TYPE_CHECKING, List
 
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
-    from acacia.pd import ProtectionDomain
-    from acacia.memory import MemoryRegion, Map
-    from acacia.channel import Channel
     from acacia.configstruct import ConfigStruct
+    from acacia.pd import ProtectionDomain
+
     from .system import System
 
 
