@@ -145,6 +145,12 @@ class DTBNode:
     offset: int
     path: str
 
+    @property
+    def name(self) -> str:
+        if self.path == "/":
+            return ""
+        return self.path.rsplit("/", 1)[-1]
+
 
 class DeviceTreeBlob:
     """
