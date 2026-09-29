@@ -1,10 +1,9 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from abc import ABC, abstractproperty, abstractmethod
-from dataclasses import dataclass
-from enum import Enum
 import xml.etree.ElementTree as et
+from abc import ABC, abstractmethod, abstractproperty
+from enum import Enum
 from typing import Optional
 
 # Note: x86 IRQ types are in x86.py
@@ -61,6 +60,9 @@ class ConventionalIRQ(IRQ):
     def trigger(self):
         return self._trigger
 
+    def __repr__(self) -> str:
+        return f"<ConventionalIRQ #{self.number} {self.trigger} trigger>"
+
 
 class IrqIoapic(IRQ):
     class Polarity(Enum):
@@ -109,6 +111,12 @@ class IrqIoapic(IRQ):
     def trigger(self):
         return self._trigger
 
+    def __repr__(self) -> str:
+        return (
+            f"<IrqIOAPIC id={self.id}, pin={self.pin}, vector={self.vector}, "
+            f"trigger={self.trigger}|{self.polarity}>"
+        )
+
 
 class IrqMsi(IRQ):
     def __init__(
@@ -127,12 +135,16 @@ class IrqMsi(IRQ):
         self.pci_func = pci_func
         self.vector = vector
 
+    @property
+    def pci_dev_str(self) -> str:
+        return f"{self.pci_bus}:{self.pci_device}.{self.pci_func}"
+
     # TODO: test this is correct
     def render(self, parent: et.Element):
         if self.id is None:
             raise RuntimeError("ID must be set before rendering an IRQ!")
         irq = et.SubElement(parent, "irq")
-        irq.set("pcidev", f"{self.pci_bus}:{self.pci_device}.{self.pci_func}")
+        irq.set("pcidev", self.pci_dev_str)
         irq.set("handle", str(self.irq))
         irq.set("vector", str(self.vector))
         irq.set("id", str(self.id))
@@ -144,3 +156,9 @@ class IrqMsi(IRQ):
     @property
     def trigger(self):
         raise RuntimeError("Trigger called on MSI IRQ - invalid!")
+
+    def __repr__(self) -> str:
+        return (
+            f"<IrqIOAPIC id={self.id}, {self.pci_dev_str}, vector={self.vector},"
+            f"handle={self.irq}>"
+        )

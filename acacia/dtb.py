@@ -4,8 +4,10 @@
 import struct
 from abc import ABC, abstractstaticmethod
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
+
 import libfdt  # type: ignore
+
 from .arch import Arch
 from .irq import IRQ, ConventionalIRQ
 from .util import ctz

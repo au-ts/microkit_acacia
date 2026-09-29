@@ -2,23 +2,21 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from __future__ import annotations
+
 import pathlib
 import xml.etree.ElementTree as et
-from typing import List, Set, Optional
-from unittest.mock import MagicMock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Set
 
 from .arch import Arch, ArchID
-from .subsystem import Subsystem
+from .configstruct import ConfigStructResolver
 from .dtb import DeviceTreeBlob
-from .configstruct import ConfigStruct, ConfigStructResolver
+from .subsystem import Subsystem
 
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
-    from acacia.pd import ProtectionDomain
-    from acacia.memory import MemoryRegion, Map, IOAddressSpace, IOMap
     from acacia.channel import Channel
-    from acacia.configstruct import ConfigStruct
+    from acacia.memory import IOAddressSpace, MemoryRegion
+    from acacia.pd import ProtectionDomain
 
 
 class System:
@@ -212,3 +210,9 @@ class System:
         tree = et.ElementTree(xml)
         et.indent(tree, space="    ", level=0)
         tree.write(path, encoding="utf-8", xml_declaration=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<acacia.system.System({self.arch}, paddr_top={hex(self.paddr_top)})"
+            f" @ {hex(id(self))}>"
+        )

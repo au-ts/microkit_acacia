@@ -1,10 +1,10 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Tuple
-from dataclasses import dataclass
 import xml.etree.ElementTree as et  # type: ignore
-from abc import ABC, abstractproperty
+from dataclasses import dataclass
+from typing import Optional
+
 from .pd import ProtectionDomain
 from .system import System
 
@@ -13,13 +13,20 @@ class Channel:
     @dataclass
     class End:
         pd: ProtectionDomain
-        can_notify: bool
-        can_pp: bool
+        can_notify: bool = False
+        can_pp: bool = False
         ch_id: Optional[int] = None
 
         def __post_init__(self):
             if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
                 raise ValueError(f"Invalid channel id {self.ch_id}!")
+
+        def __repr__(self) -> str:
+            perms = (
+                f"pp={self.can_pp}, notify={self.can_notify}, "
+                f"id={'unassigned' if self.ch_id is None else self.ch_id}"
+            )
+            return f"<Channel.End for PD={self.pd.name} w/ {perms}>"
 
     def __init__(self, sdf: System, end_a: End, end_b: End):
         self.end_a = end_a
@@ -70,3 +77,6 @@ class Channel:
         if self.end_b.pd is end_pd:
             return self.end_b.ch_id
         raise RuntimeError(f"PD {end_pd} isn't in this channel!")
+
+    def __repr__(self) -> str:
+        return f"<Channel with ends a={self.end_a} b={self.end_b}>"

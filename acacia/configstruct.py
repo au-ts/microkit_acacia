@@ -1,29 +1,33 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 from __future__ import annotations
-import pathlib, os, subprocess
-from lark import Lark, Tree, Token
-from dataclasses import dataclass
-from .dwarf_dump_grammar import grammar
+
+import json
+import os
+import pathlib
+import subprocess
+from collections.abc import Iterable, Sized
 from ctypes import (
-    c_uint8,
-    c_uint16,
-    c_uint32,
-    c_uint64,
+    c_bool,
+    c_byte,
+    c_double,
+    c_float,
     c_int8,
     c_int16,
     c_int32,
     c_int64,
-    c_float,
-    c_double,
     c_longdouble,
     c_ubyte,
-    c_byte,
-    c_bool,
+    c_uint8,
+    c_uint16,
+    c_uint32,
+    c_uint64,
 )
-from collections.abc import Sized, Iterable
-from typing import List, Tuple, Dict, Optional, Any, Union
-import json
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from lark import Lark, Token, Tree
+
+from .dwarf_dump_grammar import grammar
 
 
 class Attributes:

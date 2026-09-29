@@ -109,6 +109,10 @@ class Arch:
                 return page_sz
         return page_sizes[0]
 
+    def __repr__(self) -> str:
+        # "Arch(aarch64)" or similar ... i.e. just lose 'ArchID.'
+        return f"Arch({str(self.arch).split('.')[1]})"
+
 
 aarch64 = Arch(ArchID.aarch64)
 riscv64 = Arch(ArchID.riscv64)

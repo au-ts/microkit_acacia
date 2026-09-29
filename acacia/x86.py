@@ -1,9 +1,6 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from abc import ABC, abstractproperty, abstractmethod
-from dataclasses import dataclass
-from enum import Enum
 import xml.etree.ElementTree as et
 from typing import Optional
 
@@ -26,3 +23,6 @@ class IOPort:
         ioport.set("id", str(self.id))
         ioport.set("addr", str(self.addr))
         ioport.set("size", str(self.size))
+
+    def __repr__(self) -> str:
+        return f"<IOPort#{self.id} @ {self.addr} of size {self.size}>"
