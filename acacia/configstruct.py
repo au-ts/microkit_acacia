@@ -713,7 +713,9 @@ class ConfigStructResolver:
                 maybe_placeholders=False,
             ).parse(raw_output)
         except Exception as e:
-            raise RuntimeError("Could not parse DWARF dump output!") from e
+            raise RuntimeError(
+                f"Could not parse DWARF dump output of {target_file}!"
+            ) from e
 
         type_collector: Dict[int, CType] = dict()
         for dwarf_entry in output_tree.children:
