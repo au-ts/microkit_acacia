@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, List, Optional, Set
 from .arch import Arch, ArchID
 from .configstruct import ConfigStructResolver
 from .dtb import DeviceTreeBlob
-from .subsystem import Subsystem
+from .subsystem import Subsystem, SubsystemBuildError
 
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
@@ -70,17 +70,15 @@ class System:
         Construct all subsystems and their client connections.
         """
         for s in self.subsystems:
-            if s.built:
-                continue
-            print(f"Installing {s}...")
-            # Build subsystem and record entities
-            s.build()
-            for client in s.get_clients():
-                if client in self.pds:
-                    print(f"\tSkipping client {client} which is already installed.")
-                else:
-                    print(f"\tadding client {client}...")
-                    self._add_pd(client)
+            try:
+                print(f"Installing {s}...")
+                if s.built:
+                    print("\t...is already installed, skipping")
+                    continue
+                # Build subsystem and record entities
+                s.build()
+            except Exception as e:
+                raise SubsystemBuildError(f"{s} failed to build!") from e
 
     def auto_allocate(self):
         """

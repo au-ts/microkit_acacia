@@ -160,24 +160,6 @@ class TestResolveSubsystems:
         # Only ss1 and ss3 should be tracked (ss2 is already built)
         assert order == ["ss1", "ss3"]
 
-    def test_resolve_skips_client_addition_for_built_subsystem(self, sys_):
-        """Test that clients from built subsystems are not added."""
-        client_built = MagicMock(name="client_built")
-        client_not_built = MagicMock(name="client_not_built")
-
-        ss_built = make_subsystem(clients=[client_built], built=True)
-        ss_not_built = make_subsystem(clients=[client_not_built], built=False)
-
-        sys_._add_subsystem(ss_built)
-        sys_._add_subsystem(ss_not_built)
-
-        sys_.resolve_subsystems()
-
-        # Client from built subsystem should NOT be added
-        assert client_built not in sys_.pds
-        # Client from not built subsystem should be added
-        assert client_not_built in sys_.pds
-
 
 class TestAssemble:
     def test_assemble_calls_resolve_and_auto_allocate(self, sys_):
@@ -218,41 +200,6 @@ class TestAssemble:
         sys_._add_subsystem(ss)
 
         sys_.assemble()
-
-    def test_assemble_adds_clients_as_pds(self, sys_):
-        client = MagicMock(name="client")
-        ss = make_subsystem(clients=[client])
-        sys_._add_subsystem(ss)
-
-        sys_.assemble()
-
-        assert client in sys_.pds
-
-    def test_assemble_skips_already_installed_client(self, sys_):
-        # A client shared between two subsystems must only be added once and
-        # must NOT trigger the duplicate-PD RuntimeError.
-        client = MagicMock(name="shared_client")
-        ss1 = make_subsystem(clients=[client])
-        ss2 = make_subsystem(clients=[client])
-        sys_._add_subsystem(ss1)
-        sys_._add_subsystem(ss2)
-
-        sys_.assemble()  # Must not raise
-
-        assert client in sys_.pds
-
-    def test_assemble_client_colliding_with_pd_skipped(self, sys_):
-        # If the same object is reported as a PD by one subsystem and a client
-        # by another, the client path must skip it rather than re-add.
-        shared = MagicMock(name="shared")
-        ss1 = make_subsystem(pds=[shared])
-        ss2 = make_subsystem(clients=[shared])
-        sys_._add_subsystem(ss1)
-        sys_._add_subsystem(ss2)
-
-        sys_.assemble()  # Must not raise
-
-        assert shared in sys_.pds
 
     def test_assemble_sets_constructed_flag(self, sys_):
         ss = make_subsystem()

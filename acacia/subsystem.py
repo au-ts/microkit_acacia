@@ -85,3 +85,6 @@ class Subsystem(ABC):
         if self.clients_allowed:
             self.connect_clients()
         self.built = True
+
+    def __repr__(self) -> str:
+        return f"<Subsystem({self.name} @ {id(self)}>"
