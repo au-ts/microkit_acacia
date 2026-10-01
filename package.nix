@@ -3,9 +3,22 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 {
+  stdenv,
   python3Packages,
   nix-gitignore,
 }:
+
+let
+  libfdt = if stdenv.hostPlatform.isDarwin then
+    (python3Packages.libfdt.overrideAttrs (final: prev: {
+      postFixup = (prev.postFixup or "") + ''
+        install_name_tool -change \
+          "@rpath/libfdt.1.dylib" "$out/lib/libfdt.1.dylib" \
+          $out/${python3Packages.python.sitePackages}/_libfdt.cpython-*-darwin.so
+      '';
+      }))
+    else python3Packages.libfdt;
+in
 
 python3Packages.buildPythonPackage {
   pname = "acacia";
@@ -19,7 +32,7 @@ python3Packages.buildPythonPackage {
   build-system = [ python3Packages.setuptools ];
   dependencies = [
     python3Packages.lark
-    python3Packages.libfdt
+    libfdt
   ];
   pythonRelaxDeps = true;
   pythonImportsCheck = [ "acacia" ];
