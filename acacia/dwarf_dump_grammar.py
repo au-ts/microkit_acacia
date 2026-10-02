@@ -10,28 +10,26 @@ grammar = r"""
                     | single
                     | group
 
-    id : "0x" HEX_ID
+    null : /0x[0-9a-fA-F]+:[ \t]*NULL\n/
 
-    null : id ":" "NULL\n"
+    compile_unit : [null] "0x" HEX_ID ": Compile Unit:" _IGNORE_UNTIL_NEWLINE "\n\n"
 
-    compile_unit : [null] id ": Compile Unit:" _IGNORE_UNTIL_NEWLINE "\n\n"
+    unknown_tag : /0x[0-9a-fA-F]+:[ \t]*DW_TAG_/ _IGNORE_UNTIL_NEWLINE ["\n" _IGNORE_UNTIL_NEWLINE]+ "\n\n"
 
-    unknown_tag : id ":" "DW_TAG_" _IGNORE_UNTIL_NEWLINE ["\n" _IGNORE_UNTIL_NEWLINE]+ "\n\n"
+    single :          /0x[0-9a-fA-F]+:[ \t]*DW_TAG_base_type\n/ attribute* "\n" -> base_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_typedef\n/ attribute* "\n" -> typedef_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_pointer_type\n/ attribute* "\n" -> pointer_tag
 
-    single :          id ":" "DW_TAG_base_type\n" attribute* "\n" -> base_tag
-                    | id ":" "DW_TAG_typedef\n" attribute* "\n" -> typedef_tag
-                    | id ":" "DW_TAG_pointer_type\n" attribute* "\n" -> pointer_tag
+    group_tag :       /0x[0-9a-fA-F]+:[ \t]*DW_TAG_array_type\n/ attribute* "\n" -> array_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_enumeration_type\n/ attribute* "\n" -> enumeration_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_union_type\n/ attribute* "\n" -> union_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_structure_type\n/ attribute* "\n" -> structure_tag
 
-    group_tag :       id ":" "DW_TAG_array_type\n" attribute* "\n" -> array_tag
-                    | id ":" "DW_TAG_enumeration_type\n" attribute* "\n" -> enumeration_tag
-                    | id ":" "DW_TAG_union_type\n" attribute* "\n" -> union_tag
-                    | id ":" "DW_TAG_structure_type\n" attribute* "\n" -> structure_tag
+    member_tag :      /0x[0-9a-fA-F]+:[ \t]*DW_TAG_member\n/ attribute* "\n" -> member_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_subrange_type\n/ attribute* "\n" -> subrange_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_enumerator\n/ attribute* "\n" -> enumerator_tag
 
-    member_tag :      id ":" "DW_TAG_member\n" attribute* "\n" -> member_tag
-                    | id ":" "DW_TAG_subrange_type\n" attribute* "\n" -> subrange_tag
-                    | id ":" "DW_TAG_enumerator\n" attribute* "\n" -> enumerator_tag
-
-    group : group_tag (member_tag | group)+ null "\n"
+    group : group_tag ((member_tag | group)+ null "\n")?
 
     attribute : "DW_AT_" at_name "(" at_value ")\n"
 
@@ -48,6 +46,9 @@ grammar = r"""
                     | "count"
                     | "alignment"
                     | "const_value"
+                    | "bit_size"
+                    | "data_bit_offset"
+                    | "declaration"
 
     at_value :        ESCAPED_STRING -> escaped_string
                     | NUMBER -> number
