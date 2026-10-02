@@ -62,6 +62,9 @@ class Attributes:
         "alignment",
         "type",
         "sibling",
+        "bit_size",
+        "data_bit_offset",
+        "declaration",
     )
 
     @staticmethod
@@ -171,12 +174,12 @@ class Attributes:
         match name:
             case at_name if at_name in ("name", "decl_file"):
                 at_value = self.escaped_string(value)
-            case "encoding":
+            case at_name if at_name in ("encoding", "declaration"):
                 encoding = self.string(value)
-                if not encoding.startswith("DW_ATE_"):
-                    raise ValueError(
-                        f"Found an encoding attribute '{encoding}' without the 'DW_ATE_' prefix"
-                    )
+                # if not encoding.startswith("DW_ATE_"):
+                #     raise ValueError(
+                #         f"Found an encoding attribute '{encoding}' without the 'DW_ATE_' prefix"
+                #     )
                 at_value = encoding[7:]
             case "byte_size":
                 at_value = self.number(value)
@@ -195,6 +198,8 @@ class Attributes:
                 "upper_bound",
                 "count",
                 "alignment",
+                "bit_size",
+                "data_bit_offset"
             ):
                 at_value = self.number(value)
                 if at_value < 0:
@@ -315,7 +320,7 @@ class CType:
     required_attributes = {
         "base_tag": ("encoding", "byte_size"),
         "typedef_tag": ("name", "type"),
-        "member_tag": ("data_member_location", "name", "type"),
+        "member_tag": (("data_member_location","data_bit_offset"), "name", "type"),
         "array_tag": ("type",),
     }
 
@@ -346,15 +351,16 @@ class CType:
                         f"Found a compile_unit tree with an invalid number of children '{len(tag_children)}' (expected 1 or 2), tree '{entry_tree.pretty()}'"
                     )
                 for child in tag_children:
-                    if child.data == "null":
-                        CType(child, type_collector)
-                    else:
+                    if isinstance(child, Token):
                         self.id = self.extract_id(child)
+                    elif child.data == "null":
+                        CType(child, type_collector)
             case "group":
-                if len(tag_children) < 2:
-                    raise ValueError(
-                        f"Found a group tree with an invalid number of children '{len(tag_children)}' (expected > 2), tree '{entry_tree.pretty()}'"
-                    )
+                # TODO: Check if declaration
+                # if len(tag_children) < 2:
+                #     raise ValueError(
+                #         f"Found a group tree with an invalid number of children '{len(tag_children)}' (expected > 2), tree '{entry_tree.pretty()}'"
+                #     )
                 leader = CType(tag_children[0], type_collector)
                 for member in tag_children[1:-1]:
                     member = CType(member, type_collector)
@@ -364,10 +370,11 @@ class CType:
                         )
                     if member.id:
                         leader.members.append(member.id)
-                if CType(tag_children[-1], type_collector).tag_type != "null":
-                    raise ValueError(
-                        f"Found a group tree with non-null final child, tree '{entry_tree.pretty()}'"
-                    )
+                if len(tag_children) > 1:
+                    if CType(tag_children[-1], type_collector).tag_type != "null":
+                        raise ValueError(
+                            f"Found a group tree with non-null final child, tree '{entry_tree.pretty()}'"
+                        )
             case tag if tag in (
                 *self.special_tags,
                 *self.single_tags,
@@ -388,10 +395,19 @@ class CType:
 
         if self.tag_type in self.required_attributes:
             for attribute in self.required_attributes[self.tag_type]:
-                if getattr(self.attributes, attribute) is None:
-                    raise AttributeError(
-                        f"CType of type '{self.tag_type}' is missing required attribute '{attribute}', CType '{self}'"
-                    )
+                if isinstance(attribute, Tuple):
+                    for option in attribute:
+                        if getattr(self.attributes, option) is not None:
+                            break
+                    else:
+                        raise AttributeError(
+                            f"CType of type '{self.tag_type}' is missing a required attribute, options are '{attribute}', CType '{self}'"
+                        )
+                else:
+                    if getattr(self.attributes, attribute) is None:
+                        raise AttributeError(
+                            f"CType of type '{self.tag_type}' is missing required attribute '{attribute}', CType '{self}'"
+                        )
 
     @property
     def id(self):
@@ -491,15 +507,12 @@ class CType:
         return True
 
     @staticmethod
-    def extract_id(id_tree: Tree):
+    def extract_id(id_token: Token):
         """
         Returns the numeric value from lark trees of the form:
             id 0000423e
         """
-        if id_tree.data != "id":
-            raise ValueError(f"Expected ID tree, found '{id_tree}'")
-        assert isinstance(id_tree.children[0], Token)
-        id_string = id_tree.children[0].value
+        id_string = id_token.value.split(":")[0]
         return int(id_string, base=16)
 
     @staticmethod
