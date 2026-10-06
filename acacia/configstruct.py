@@ -671,15 +671,20 @@ class ConfigStructResolver:
         """
         Add a configuration struct to the resolver.
         """
-        if s.section_name is None:
-            raise ValueError("Cannot emit a config struct without a section name!")
-        if s.target_file is None:
-            raise ValueError("Cannot patch in a config struct without a target file!")
-        if s.type_name is None:
-            raise ValueError("Cannot patch in a config struct without a type name!")
+        try:
+            if s.section_name is None:
+                raise ValueError("Cannot emit a config struct without a section name!")
+            if s.target_file is None:
+                raise ValueError(
+                    "Cannot patch in a config struct without a target file!"
+                )
+            if s.type_name is None:
+                raise ValueError("Cannot patch in a config struct without a type name!")
 
-        if s.target_file not in self.files:
-            self.files[s.target_file] = self.resolve_target_file(s.target_file)
+            if s.target_file not in self.files:
+                self.files[s.target_file] = self.resolve_target_file(s.target_file)
+        except Exception as e:
+            raise RuntimeError(f"Failed to add config struct {s}!") from e
 
         self.config_structs.append(s)
 
