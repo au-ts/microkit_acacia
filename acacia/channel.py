@@ -13,7 +13,7 @@ class Channel:
     @dataclass
     class End:
         pd: ProtectionDomain
-        can_notify: bool = False
+        can_notify: bool = True
         can_pp: bool = False
         ch_id: Optional[int] = None
 
@@ -42,6 +42,15 @@ class Channel:
                     f"PPC from {pp_caller} to {pp_receiver} cannot have "
                     f"descending priorities!"
                 )
+
+        # Make sure channel does something
+        if (
+            not end_a.can_notify
+            and not end_b.can_notify
+            and not end_a.can_pp
+            and not end_b.can_pp
+        ):
+            raise RuntimeWarning("Channel has no effect! Neither end can PP or notify!")
 
         # Allocate channel IDs
         for end in [end_a, end_b]:
