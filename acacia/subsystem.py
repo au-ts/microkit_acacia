@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Callable, List
 
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
@@ -37,6 +37,18 @@ class Subsystem(ABC):
         self.sdf = sdf
         # Register ourselves with SDF
         self.sdf._add_subsystem(self)
+        self.build_hooks: List[Callable] = []
+
+        # Sanity: throw an exception to warn users if they have used `connect_clients` when
+        # it would have no effect.
+        if "connect_clients" in type(self).__dict__ and not self.clients_allowed:
+            raise SubsystemBuildError(
+                f"{self.name} has defined connect_clients but has disabled "
+                "clients! Use post_build_actions instead if you need to do something post-build."
+            )
+        elif clients_allowed:
+            # Add connect clients.
+            self.add_build_hook(self.connect_clients)
 
     def add_client(self, client: "ProtectionDomain"):
         """
@@ -59,10 +71,31 @@ class Subsystem(ABC):
     def connect_clients(self):
         """
         Attempt to connect clients to the PDs that compose this subsystem.
+        If the subsystem has `clients_allowed=False`, this method will not be called.
 
         This method shouldn't need to be called directly, Subsystem.build() automates this.
+
+        NOTE: this is exposed as a convenience, it is just added as a build hook.
         """
         ...
+
+    def add_build_hook(self, func: Callable):
+        """
+        Add a function to call at build time for this subsystem. This can be used to perform
+        arbitrary work after the user is finished customising the system such as adding automatic
+        mapppings without risking conflict with manually specified items.
+
+        Functions are called with no arguments - i.e. `func()`. Use lambdas to enclose scope if needed.
+        NOTE: if you add a class method e.g. `add_build_hook(self.connect_clients())` it will still get
+        a handle to `self`, i.e. it is run as `self.connect_clients(self)`.
+        """
+        if not callable(func):
+            raise TypeError(f"{func} is not callable!")
+
+        if func in self.build_hooks:
+            raise RuntimeWarning(f"{func} is already a build hook!")
+
+        self.build_hooks.append(func)
 
     def generate_config_structs(self) -> List["ConfigStruct"]:
         """
@@ -81,9 +114,10 @@ class Subsystem(ABC):
         if self.built:
             raise RuntimeError("Cannot build a subsystem more than once!")
 
-        # Connect clients if needed
-        if self.clients_allowed:
-            self.connect_clients()
+        # Call post_build_hooks
+        for f in self.build_hooks:
+            f()
+
         self.built = True
 
     def __repr__(self) -> str:
