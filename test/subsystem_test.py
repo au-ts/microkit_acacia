@@ -9,12 +9,24 @@ from acacia.pd import ProtectionDomain
 from acacia.memory import MemoryRegion
 from acacia.system import System
 from acacia.arch import aarch64
+from acacia.subsystem import SubsystemBuildError
 
 
 @pytest.fixture
 def sdf():
     """A stand-in System for entity constructors."""
     return System(aarch64, paddr_top=0x10000000)
+
+
+def create_concrete_subsystem_noclients(name="Concrete", sdf=None, **kwargs):
+    """Factory producing a minimal concrete Subsystem instance."""
+    if sdf is None:
+        sdf = System(aarch64, paddr_top=0x10000000)
+
+    class ConcreteSubsystem(Subsystem):
+        pass
+
+    return ConcreteSubsystem(sdf, name, **kwargs)
 
 
 def create_concrete_subsystem(name="Concrete", sdf=None, **kwargs):
@@ -24,7 +36,7 @@ def create_concrete_subsystem(name="Concrete", sdf=None, **kwargs):
 
     class ConcreteSubsystem(Subsystem):
         def connect_clients(self):
-            pass
+            self.connected = True
 
     return ConcreteSubsystem(sdf, name, **kwargs)
 
@@ -42,7 +54,9 @@ class TestSubsystemInitialization:
         assert ss.clients_allowed is True
 
     def test_init_clients_disallowed(self, sdf):
-        ss = create_concrete_subsystem("noclients", sdf, clients_allowed=False)
+        ss = create_concrete_subsystem_noclients(
+            "noclients", sdf, clients_allowed=False
+        )
         assert ss.clients_allowed is False
 
 
@@ -54,7 +68,7 @@ class TestSubsystemClientManagement:
         assert pd in ss.clients
 
     def test_add_client_not_allowed_raises(self, sdf):
-        ss = create_concrete_subsystem("test", sdf, clients_allowed=False)
+        ss = create_concrete_subsystem_noclients("test", sdf, clients_allowed=False)
         pd = ProtectionDomain(sdf, "client", "client.elf", priority=100)
         with pytest.raises(RuntimeError, match="does not allow clients"):
             ss.add_client(pd)
@@ -109,23 +123,22 @@ class TestGenerateConfigStructs:
 
 class TestSubsystemBuild:
     def test_build_sets_built_flag(self, sdf):
-        ss = create_concrete_subsystem("test", sdf, clients_allowed=False)
+        ss = create_concrete_subsystem_noclients("test", sdf, clients_allowed=False)
         ss.build()
         assert ss.built is True
 
     def test_build_returns_none(self, sdf):
         # Declared `-> int` but the body has no return statement.
-        ss = create_concrete_subsystem("test", sdf, clients_allowed=False)
+        ss = create_concrete_subsystem_noclients("test", sdf, clients_allowed=False)
         assert ss.build() is None
 
     def test_build_connects_clients_when_allowed(self, sdf):
         ss = create_concrete_subsystem("test", sdf, clients_allowed=True)
-        with patch.object(ss, "connect_clients") as mock_connect:
-            ss.build()
-            mock_connect.assert_called_once()
+        ss.build()
+        assert ss.connected
 
     def test_build_skips_connect_when_not_allowed(self, sdf):
-        ss = create_concrete_subsystem("test", sdf, clients_allowed=False)
+        ss = create_concrete_subsystem_noclients("test", sdf, clients_allowed=False)
         with patch.object(ss, "connect_clients") as mock_connect:
             ss.build()
             mock_connect.assert_not_called()
@@ -134,12 +147,11 @@ class TestSubsystemBuild:
         ss = create_concrete_subsystem("test", sdf)
         pd = ProtectionDomain(sdf, "c", "c.elf", priority=10)
         ss.add_client(pd)
-        with patch.object(ss, "connect_clients") as mock_connect:
-            ss.build()
-            mock_connect.assert_called_once()
+        ss.build()
+        assert ss.connected
 
     def test_build_rebuild_raises(self, sdf):
-        ss = create_concrete_subsystem("test", sdf, clients_allowed=False)
+        ss = create_concrete_subsystem_noclients("test", sdf, clients_allowed=False)
         ss.build()
         with pytest.raises(
             RuntimeError, match="Cannot build a subsystem more than once"
@@ -169,3 +181,16 @@ class TestSubsystemAbstractMethods:
                 pass
 
         Minimal(sdf, "minimal")  # Must not raise
+
+
+class TestSubsystemSubclassSanity:
+    def test_connect_clients_warning_thrown(self, sdf):
+        class Minimal(Subsystem):
+            def __init__(self, sdf):
+                super().__init__(sdf, "minimal", clients_allowed=False)
+
+            def connect_clients(self):
+                print("Oh no!")
+
+        with pytest.raises(SubsystemBuildError):
+            Minimal(sdf)
