@@ -342,6 +342,7 @@ class ProtectionDomain(Entity):
         self.sdf.pds.remove(child)
         child.child_id = new_child_id
         self.children.append(child)
+        return new_child_id
 
     def add_vm(self, vm: VirtualMachine):
         assert isinstance(vm, VirtualMachine)
