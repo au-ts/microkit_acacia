@@ -388,6 +388,8 @@ class CType:
                 self.id = self.extract_id(tag_children[0])
                 for child in tag_children[1:]:
                     self.attributes.extract_attribute(child)
+            case "structure_decl":
+                pass
             case _:
                 raise ValueError(
                     f"Found an unknown tag type: '{self.tag_type}', tree '{entry_tree.pretty()}'"
