@@ -19,6 +19,7 @@ grammar = r"""
     single :          /0x[0-9a-fA-F]+:[ \t]*DW_TAG_base_type\n/ attribute* "\n" -> base_tag
                     | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_typedef\n/ attribute* "\n" -> typedef_tag
                     | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_pointer_type\n/ attribute* "\n" -> pointer_tag
+                    | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_structure_type\n/ attribute* decl_attribute attribute* "\n" -> structure_decl
 
     group_tag :       /0x[0-9a-fA-F]+:[ \t]*DW_TAG_array_type\n/ attribute* "\n" -> array_tag
                     | /0x[0-9a-fA-F]+:[ \t]*DW_TAG_enumeration_type\n/ attribute* "\n" -> enumeration_tag
@@ -32,6 +33,8 @@ grammar = r"""
     group : group_tag ((member_tag | group)+ null "\n")?
 
     attribute : "DW_AT_" at_name "(" at_value ")\n"
+
+    decl_attribute : "DW_AT_declaration" "(true)\n"
 
     !at_name :        "name"
                     | "encoding"
