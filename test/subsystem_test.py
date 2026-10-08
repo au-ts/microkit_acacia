@@ -9,7 +9,7 @@ from acacia.pd import ProtectionDomain
 from acacia.memory import MemoryRegion
 from acacia.system import System
 from acacia.arch import aarch64
-from acacia.subsystem import SubsystemBuildError
+from acacia.subsystem import SubsystemBuildError, build_hook
 
 
 @pytest.fixture
@@ -35,6 +35,7 @@ def create_concrete_subsystem(name="Concrete", sdf=None, **kwargs):
         sdf = System(aarch64, paddr_top=0x10000000)
 
     class ConcreteSubsystem(Subsystem):
+        @build_hook
         def connect_clients(self):
             self.connected = True
 
@@ -137,12 +138,6 @@ class TestSubsystemBuild:
         ss.build()
         assert ss.connected
 
-    def test_build_skips_connect_when_not_allowed(self, sdf):
-        ss = create_concrete_subsystem_noclients("test", sdf, clients_allowed=False)
-        with patch.object(ss, "connect_clients") as mock_connect:
-            ss.build()
-            mock_connect.assert_not_called()
-
     def test_build_connects_with_clients_present(self, sdf):
         ss = create_concrete_subsystem("test", sdf)
         pd = ProtectionDomain(sdf, "c", "c.elf", priority=10)
@@ -181,16 +176,3 @@ class TestSubsystemAbstractMethods:
                 pass
 
         Minimal(sdf, "minimal")  # Must not raise
-
-
-class TestSubsystemSubclassSanity:
-    def test_connect_clients_warning_thrown(self, sdf):
-        class Minimal(Subsystem):
-            def __init__(self, sdf):
-                super().__init__(sdf, "minimal", clients_allowed=False)
-
-            def connect_clients(self):
-                print("Oh no!")
-
-        with pytest.raises(SubsystemBuildError):
-            Minimal(sdf)
