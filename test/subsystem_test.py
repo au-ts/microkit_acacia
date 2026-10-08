@@ -176,3 +176,144 @@ class TestSubsystemAbstractMethods:
                 pass
 
         Minimal(sdf, "minimal")  # Must not raise
+
+
+class TestSubsystemBuildHooks:
+    def test_decorated_hooks_run_in_declaration_order(self, sdf):
+        calls = []
+
+        class OrderedHooks(Subsystem):
+            @build_hook
+            def first_hook(self):
+                calls.append("first")
+
+            def ordinary_method(self):
+                calls.append("ordinary")
+
+            @build_hook
+            def second_hook(self):
+                calls.append("second")
+
+        ss = OrderedHooks(sdf, "ordered")
+
+        assert ss.build_hooks == [ss.first_hook, ss.second_hook]
+        assert calls == []
+
+        ss.build()
+
+        assert calls == ["first", "second"]
+
+    def test_build_hooks_are_bound_to_each_instance(self, sdf):
+        class PerInstanceHooks(Subsystem):
+            @build_hook
+            def record_name(self):
+                self.calls.append(self.name)
+
+        first = PerInstanceHooks(sdf, "first")
+        second = PerInstanceHooks(sdf, "second")
+        first.calls = []
+        second.calls = []
+
+        assert first.build_hooks == [first.record_name]
+        assert second.build_hooks == [second.record_name]
+        assert first.build_hooks != second.build_hooks
+
+        first.build()
+
+        assert first.calls == ["first"]
+        assert second.calls == []
+
+        second.build()
+
+        assert second.calls == ["second"]
+
+    def test_inherited_hooks_run_before_subclass_hooks(self, sdf):
+        calls = []
+
+        class ParentSubsystem(Subsystem):
+            @build_hook
+            def parent_hook(self):
+                calls.append("parent")
+
+        class ChildSubsystem(ParentSubsystem):
+            @build_hook
+            def child_hook(self):
+                calls.append("child")
+
+        ss = ChildSubsystem(sdf, "child")
+
+        assert ss.build_hooks == [ss.parent_hook, ss.child_hook]
+
+        ss.build()
+
+        assert calls == ["parent", "child"]
+
+    def test_undecorated_override_removes_inherited_hook(self, sdf):
+        calls = []
+
+        class ParentSubsystem(Subsystem):
+            @build_hook
+            def inherited_hook(self):
+                calls.append("parent")
+
+        class ChildSubsystem(ParentSubsystem):
+            def inherited_hook(self):
+                calls.append("child")
+
+        ss = ChildSubsystem(sdf, "unmarked-override")
+
+        assert ss.build_hooks == []
+
+        ss.build()
+
+        assert calls == []
+
+    def test_decorated_override_replaces_inherited_hook(self, sdf):
+        calls = []
+
+        class ParentSubsystem(Subsystem):
+            @build_hook
+            def inherited_hook(self):
+                calls.append("parent")
+
+        class ChildSubsystem(ParentSubsystem):
+            @build_hook
+            def inherited_hook(self):
+                calls.append("child")
+
+        ss = ChildSubsystem(sdf, "decorated-override")
+
+        assert ss.build_hooks == [ss.inherited_hook]
+
+        ss.build()
+
+        assert calls == ["child"]
+
+    def test_mro_shadowing_does_not_register_unmarked_method(self, sdf):
+        calls = []
+
+        class UnhookedParent(Subsystem):
+            def shared_method(self):
+                calls.append("unhooked")
+
+        class HookedParent(Subsystem):
+            @build_hook
+            def shared_method(self):
+                calls.append("hooked")
+
+        class UnhookedFirst(UnhookedParent, HookedParent):
+            pass
+
+        class HookedFirst(HookedParent, UnhookedParent):
+            pass
+
+        unhooked_first = UnhookedFirst(sdf, "unhooked-first")
+        hooked_first = HookedFirst(sdf, "hooked-first")
+
+        assert unhooked_first.build_hooks == []
+        assert hooked_first.build_hooks == [hooked_first.shared_method]
+
+        unhooked_first.build()
+        hooked_first.build()
+
+        assert calls == ["hooked"]

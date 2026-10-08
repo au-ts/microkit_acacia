@@ -21,35 +21,6 @@ _BuildHookMethod = TypeVar(
 )
 
 
-def build_hook(method: _BuildHookMethod) -> _BuildHookMethod:
-    """
-    Mark a Subsystem instance method to be called during build().
-
-    The method is not wrapped. It is bound to its Subsystem instance when
-    that instance is constructed.
-    """
-    setattr(method, _BUILD_HOOK_MARKER, True)
-    return method
-
-
-def _is_build_hook(member: object) -> bool:
-    return bool(getattr(member, _BUILD_HOOK_MARKER, False))
-
-
-def _resolved_member_is_build_hook(cls: type, name: str) -> bool:
-    """
-    Return whether the attribute selected by the class's MRO (method resolution order)
-    is a build hook.
-
-    Inspecting class dictionaries directly avoids invoking descriptors.
-    """
-    for owner in cls.__mro__:
-        if name in owner.__dict__:
-            return _is_build_hook(owner.__dict__[name])
-
-    return False
-
-
 class SubsystemBuildError(RuntimeError): ...
 
 
@@ -62,56 +33,6 @@ class Subsystem(ABC):
 
     At init, the subsystem is just a container to add clients to.
     """
-
-    _decorated_build_hook_names: ClassVar[tuple[str, ...]] = ()
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-
-        # Enforce that the base class hooks run first - i.e. if
-        # Parent -> Child -> Grandchild are our inheriting classes, parent,
-        # child, then grandchild's hooks run. Run left->right for multiple inheritance.
-        hook_names: List[str] = []
-
-        for base in cls.__bases__:
-            for name in getattr(base, "_decorated_build_hook_names", ()):
-                if name not in hook_names:
-                    hook_names.append(name)
-
-        # (hooks are implicitly in the order they are declared in a class)
-        for name, member in cls.__dict__.items():
-            # Check if this is already in our hook names dir - i.e. this is an override
-            # of an inherited hook. If it's overridden, we implicitly lose the decorator,
-            # unless it's explicitly added back.
-            # Side effect: if a class re-decorates an already decorated hook, it will run later.
-
-            # Remove overridden hook
-            is_removed = False
-            if name in hook_names:
-                is_removed = True
-                hook_names.remove(name)
-
-            # ... add back if it was decorated again
-            if _is_build_hook(member):
-                hook_names.append(name)
-                if is_removed:
-                    # This will probably never be seen :)
-                    print(
-                        f"WARNING: build hook {member} of {cls} was overridden and re-marked as a build hook."
-                        " It will now run in the order it appears where overridden, not with parent class!"
-                    )
-
-        # Edge case: prevent multiple inheritance with different hook statuses on the same method from misbehaving.
-        # This only is needed for multiple inheritance where two parent classes both define some method
-        # but only one of them is a build hook, and it is not first in the MRO (the leftmost inheritance).
-        #
-        # E.g. class Child(UnhookedParent, HookedParent) -> UnhookedParent's method is inherited, but would
-        # also become falsely marked as a buildhook since we see it from HookedParent in the base hook loop.
-        # This filtering operation makes sure that the method that was actually inherited (not just any in
-        # the base) is kept as a hook.
-        cls._decorated_build_hook_names = tuple(
-            name for name in hook_names if _resolved_member_is_build_hook(cls, name)
-        )
 
     def __init__(
         self,
@@ -131,7 +52,7 @@ class Subsystem(ABC):
         # getattr() converts each class function into a method bound to this
         # particular instance.
         for hook_name in type(self)._decorated_build_hook_names:
-            self.add_build_hook(getattr(self, hook_name))
+            self._add_build_hook(getattr(self, hook_name))
 
         # Register ourselves with SDF after initialization.
         self.sdf._add_subsystem(self)
@@ -154,33 +75,6 @@ class Subsystem(ABC):
         """Get all client PDs."""
         return self.clients
 
-    def add_build_hook(self, func: Callable[[], None]) -> None:
-        """
-        Add a function to call at build time for this subsystem.
-
-        This can be used to perform arbitrary work after the user has finished
-        customising the system, such as adding automatic mappings without
-        risking conflicts with manually specified items.
-
-        Hooks are executed in the order they are added. Methods marked with
-        @build_hook run in inherited-class order and then top-to-bottom in
-        declaration order within each subclass.
-
-        Hooks are called without explicit arguments: ``func()``. To manually
-        register an instance method, pass the bound method without calling it:
-
-            self.add_build_hook(self.some_method)
-
-        The bound method retains its reference to ``self``.
-        """
-        if not callable(func):
-            raise TypeError(f"{func} is not callable!")
-
-        if func in self.build_hooks:
-            raise RuntimeWarning(f"{func} is already a build hook!")
-
-        self.build_hooks.append(func)
-
     def generate_config_structs(self) -> List["ConfigStruct"]:
         """
         Generate any config structs this subsystem requires and return
@@ -201,5 +95,101 @@ class Subsystem(ABC):
 
         self.built = True
 
+    def _add_build_hook(self, func: Callable[[], None]) -> None:
+        """
+        Add a function to call at build time for this subsystem. You probably
+        shouldn't call this directly and should rather use the decorator.
+
+        Hooks are executed in the order they are written. I.e.
+
+        @build_hook
+        def first_hook_to_run(self): ...
+
+        @build
+        def second_hook_to_run(self): ...
+
+        Hooks should have no arguments except `self`.
+        """
+        if not callable(func):
+            raise TypeError(f"{func} is not callable!")
+
+        if func in self.build_hooks:
+            raise RuntimeWarning(f"{func} is already a build hook!")
+
+        self.build_hooks.append(func)
+
+    _decorated_build_hook_names: ClassVar[tuple[str, ...]] = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """
+        Set up build hooks, handling the possibility of a parent class defining some.
+        """
+        super().__init_subclass__(**kwargs)
+        hook_names: List[str] = []
+
+        # Add all parent class hooks first, if they exist. Ensures that they
+        # run in inheritance order.
+        for base in cls.__bases__:
+            for name in getattr(base, "_decorated_build_hook_names", ()):
+                if name not in hook_names:
+                    hook_names.append(name)
+
+        for name, member in cls.__dict__.items():
+            # Check if this is already in our hook names dir - i.e. this is an override
+            # of an inherited hook. If it's overridden, we implicitly lose the decorator,
+            # unless it's explicitly added back.
+
+            is_removed = False
+            if name in hook_names:
+                is_removed = True
+                hook_names.remove(name)
+
+            # ... add back if it was decorated again
+            if _is_build_hook(member):
+                hook_names.append(name)
+                if is_removed:
+                    # This will probably never be seen :)
+                    print(
+                        f"WARNING: build hook {member} of {cls} was overridden and re-marked as a build hook."
+                        " It will now run in the order it appears where overridden, not with parent class!"
+                    )
+
+        # Edge case: multiple inheritance. If a method appears in multiple parents we want only the left-most
+        #
+        # E.g. class Child(UnhookedParent, HookedParent) -> UnhookedParent's method is inherited, but would
+        # also become falsely marked as a buildhook since we see it from HookedParent in the base hook loop.
+        # This filtering operation makes sure that the method that was actually inherited (not just any in
+        # the base) is kept as a hook, since we will see the tag from the right class.
+        cls._decorated_build_hook_names = tuple(
+            name for name in hook_names if _resolved_member_is_build_hook(cls, name)
+        )
+
     def __repr__(self) -> str:
         return f"<Subsystem({self.name} @ {id(self)})>"
+
+
+def build_hook(method: _BuildHookMethod) -> _BuildHookMethod:
+    """
+    Mark a Subsystem instance method to be called during build().
+    Hooks are run top-to-bottom in their class and should have no arguments except possibly `self`.
+
+    If inheriting, all parent hooks run before the child's hooks.
+    """
+    setattr(method, _BUILD_HOOK_MARKER, True)
+    return method
+
+
+def _is_build_hook(member: object) -> bool:
+    return bool(getattr(member, _BUILD_HOOK_MARKER, False))
+
+
+def _resolved_member_is_build_hook(cls: type, name: str) -> bool:
+    """
+    Return whether the attribute selected by the class's MRO (method resolution order)
+    is a build hook.
+    """
+    for owner in cls.__mro__:
+        if name in owner.__dict__:
+            return _is_build_hook(owner.__dict__[name])
+
+    return False
