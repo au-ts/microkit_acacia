@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Callable, List
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, List, TypeVar
 
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
@@ -12,6 +12,42 @@ if TYPE_CHECKING:
     from acacia.pd import ProtectionDomain
 
     from .system import System
+
+
+_BUILD_HOOK_MARKER = "__acacia_build_hook__"
+_BuildHookMethod = TypeVar(
+    "_BuildHookMethod",
+    bound=Callable[..., None],
+)
+
+
+def build_hook(method: _BuildHookMethod) -> _BuildHookMethod:
+    """
+    Mark a Subsystem instance method to be called during build().
+
+    The method is not wrapped. It is bound to its Subsystem instance when
+    that instance is constructed.
+    """
+    setattr(method, _BUILD_HOOK_MARKER, True)
+    return method
+
+
+def _is_build_hook(member: object) -> bool:
+    return bool(getattr(member, _BUILD_HOOK_MARKER, False))
+
+
+def _resolved_member_is_build_hook(cls: type, name: str) -> bool:
+    """
+    Return whether the attribute selected by the class's MRO (method resolution order)
+    is a build hook.
+
+    Inspecting class dictionaries directly avoids invoking descriptors.
+    """
+    for owner in cls.__mro__:
+        if name in owner.__dict__:
+            return _is_build_hook(owner.__dict__[name])
+
+    return False
 
 
 class SubsystemBuildError(RuntimeError): ...
@@ -27,67 +63,115 @@ class Subsystem(ABC):
     At init, the subsystem is just a container to add clients to.
     """
 
-    def __init__(self, sdf: System, name: str, clients_allowed: bool = True):
-        if type(self) == Subsystem:
+    _decorated_build_hook_names: ClassVar[tuple[str, ...]] = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        # Enforce that the base class hooks run first - i.e. if
+        # Parent -> Child -> Grandchild are our inheriting classes, parent,
+        # child, then grandchild's hooks run. Run left->right for multiple inheritance.
+        hook_names: List[str] = []
+
+        for base in cls.__bases__:
+            for name in getattr(base, "_decorated_build_hook_names", ()):
+                if name not in hook_names:
+                    hook_names.append(name)
+
+        # (hooks are implicitly in the order they are declared in a class)
+        for name, member in cls.__dict__.items():
+            # Check if this is already in our hook names dir - i.e. this is an override
+            # of an inherited hook. If it's overridden, we implicitly lose the decorator,
+            # unless it's explicitly added back.
+            # Side effect: if a class re-decorates an already decorated hook, it will run later.
+
+            # Remove overridden hook
+            is_removed = False
+            if name in hook_names:
+                is_removed = True
+                hook_names.remove(name)
+
+            # ... add back if it was decorated again
+            if _is_build_hook(member):
+                hook_names.append(name)
+                if is_removed:
+                    # This will probably never be seen :)
+                    print(
+                        f"WARNING: build hook {member} of {cls} was overridden and re-marked as a build hook."
+                        " It will now run in the order it appears where overridden, not with parent class!"
+                    )
+
+        # Edge case: prevent multiple inheritance with different hook statuses on the same method from misbehaving.
+        # This only is needed for multiple inheritance where two parent classes both define some method
+        # but only one of them is a build hook, and it is not first in the MRO (the leftmost inheritance).
+        #
+        # E.g. class Child(UnhookedParent, HookedParent) -> UnhookedParent's method is inherited, but would
+        # also become falsely marked as a buildhook since we see it from HookedParent in the base hook loop.
+        # This filtering operation makes sure that the method that was actually inherited (not just any in
+        # the base) is kept as a hook.
+        cls._decorated_build_hook_names = tuple(
+            name for name in hook_names if _resolved_member_is_build_hook(cls, name)
+        )
+
+    def __init__(
+        self,
+        sdf: System,
+        name: str,
+        clients_allowed: bool = True,
+    ) -> None:
+        if type(self) is Subsystem:
             raise TypeError("Cannot instantiate abstract base class!")
         self.name = name
-        self.built = False  # "have we added all clients and connected them?"
+        self.built = False
         self.clients: List["ProtectionDomain"] = []
         self.clients_allowed = clients_allowed
         self.sdf = sdf
-        # Register ourselves with SDF
+        self.build_hooks: List[Callable[[], None]] = []
+
+        # getattr() converts each class function into a method bound to this
+        # particular instance.
+        for hook_name in type(self)._decorated_build_hook_names:
+            self.add_build_hook(getattr(self, hook_name))
+
+        # Register ourselves with SDF after initialization.
         self.sdf._add_subsystem(self)
-        self.build_hooks: List[Callable] = []
 
-        # Sanity: throw an exception to warn users if they have used `connect_clients` when
-        # it would have no effect.
-        if "connect_clients" in type(self).__dict__ and not self.clients_allowed:
-            raise SubsystemBuildError(
-                f"{self.name} has defined connect_clients but has disabled "
-                "clients! Use post_build_actions instead if you need to do something post-build."
-            )
-        elif clients_allowed:
-            # Add connect clients.
-            self.add_build_hook(self.connect_clients)
-
-    def add_client(self, client: "ProtectionDomain"):
+    def add_client(self, client: "ProtectionDomain") -> None:
         """
         Add a client to the subsystem list, but do nothing else just yet.
 
-        This method may be overloaded by some classes to add extra parameters to clients,
-        e.g. assigning MAC addresses for networking or I2C addresses for I2C.
+        This method may be overloaded by some classes to add extra parameters
+        to clients, e.g. assigning MAC addresses for networking or I2C
+        addresses for I2C.
         """
         if not self.clients_allowed:
             raise RuntimeError(f"{self} does not allow clients!")
+
         if client not in self.clients:
             self.clients.append(client)
 
-    def get_clients(self):
-        """
-        Get all non-client PDs.
-        """
+    def get_clients(self) -> List["ProtectionDomain"]:
+        """Get all client PDs."""
         return self.clients
 
-    def connect_clients(self):
+    def add_build_hook(self, func: Callable[[], None]) -> None:
         """
-        Attempt to connect clients to the PDs that compose this subsystem.
-        If the subsystem has `clients_allowed=False`, this method will not be called.
+        Add a function to call at build time for this subsystem.
 
-        This method shouldn't need to be called directly, Subsystem.build() automates this.
+        This can be used to perform arbitrary work after the user has finished
+        customising the system, such as adding automatic mappings without
+        risking conflicts with manually specified items.
 
-        NOTE: this is exposed as a convenience, it is just added as a build hook.
-        """
-        ...
+        Hooks are executed in the order they are added. Methods marked with
+        @build_hook run in inherited-class order and then top-to-bottom in
+        declaration order within each subclass.
 
-    def add_build_hook(self, func: Callable):
-        """
-        Add a function to call at build time for this subsystem. This can be used to perform
-        arbitrary work after the user is finished customising the system such as adding automatic
-        mapppings without risking conflict with manually specified items.
+        Hooks are called without explicit arguments: ``func()``. To manually
+        register an instance method, pass the bound method without calling it:
 
-        Functions are called with no arguments - i.e. `func()`. Use lambdas to enclose scope if needed.
-        NOTE: if you add a class method e.g. `add_build_hook(self.connect_clients())` it will still get
-        a handle to `self`, i.e. it is run as `self.connect_clients(self)`.
+            self.add_build_hook(self.some_method)
+
+        The bound method retains its reference to ``self``.
         """
         if not callable(func):
             raise TypeError(f"{func} is not callable!")
@@ -100,25 +184,22 @@ class Subsystem(ABC):
     def generate_config_structs(self) -> List["ConfigStruct"]:
         """
         Generate any config structs this subsystem requires and return
-        them as a list. Subsystems that utilise them should override
-        this parent method. This method is not abstract to allow classes
-        with no config structs to ignore this.
+        them as a list.
+
+        Subsystems that use config structs should override this method. It is
+        not abstract so subclasses without config structs can ignore it.
         """
         return []
 
-    def build(self):
-        """
-        Construct subsystem, initialising all PDs and connecting clients
-        if possible.
-        """
+    def build(self) -> None:
+        """Run the subsystem's build hooks."""
         if self.built:
             raise RuntimeError("Cannot build a subsystem more than once!")
 
-        # Call post_build_hooks
-        for f in self.build_hooks:
-            f()
+        for hook in self.build_hooks:
+            hook()
 
         self.built = True
 
     def __repr__(self) -> str:
-        return f"<Subsystem({self.name} @ {id(self)}>"
+        return f"<Subsystem({self.name} @ {id(self)})>"

@@ -9,23 +9,24 @@ from acacia import (
     MemoryRegion,
     System,
     SchedulingProperties,
+    build_hook,
 )
 from acacia.arch import aarch64
 
 
 class DummyClock(Subsystem):
     def __init__(self, sdf: System, prio: int):
-        super().__init__("clk")
+        super().__init__(sdf, "clk")
         self.sdf = sdf
         # Make driver
         self.driver = ProtectionDomain(
+            sdf,
             "clk_driver",
             "clk_driver.elf",
-            sdf,
             scheduling=SchedulingProperties(prio, passive=True),
         )
-        self.pds.append(self.driver)
 
+    @build_hook
     def connect_clients(self):
         assert self.driver is not None
         # Clients are connected with a channel allowing PPs and nothing else
@@ -37,20 +38,20 @@ class DummyClock(Subsystem):
                 )
             # Make channel
             ch = Channel(
+                self.sdf,
                 Channel.End(c, can_notify=False, can_pp=True),
                 Channel.End(self.driver, can_notify=False, can_pp=False),
-                self.sdf,
             )
-            self.channels.append(ch)
 
 
 class DummyTimer(Subsystem):
     def __init__(self, sdf: System):
-        super().__init__("timer")
+        super().__init__(sdf, "timer")
         self.sdf = sdf
         self.driver = None
         self.construct_infrastructure(199)
 
+    @build_hook
     def connect_clients(self):
         assert self.driver is not None
         # Clients are connected with a channel allowing PPs and nothing else
@@ -62,31 +63,30 @@ class DummyTimer(Subsystem):
                 )
             # Make channel
             ch = Channel(
+                self.sdf,
                 Channel.End(c, can_notify=False, can_pp=True),
                 Channel.End(self.driver, can_notify=True, can_pp=False),
-                self.sdf,
             )
-            self.channels.append(ch)
 
     def construct_infrastructure(self, prio):
         # Make driver
         self.driver = ProtectionDomain(
+            self.sdf,
             "timer_driver",
             "timer_driver.elf",
-            self.sdf,
             scheduling=SchedulingProperties(prio, passive=True),
         )
-        self.pds.append(self.driver)
 
 
 class DummyI2C(Subsystem):
     def __init__(self, sdf: System):
-        super().__init__("i2c", sdf)
+        super().__init__(sdf, "i2c")
         self.driver = None
         self.virt = None
         self.sdf = sdf
         self.construct_infrastructure(198)
 
+    @build_hook
     def connect_clients(self):
         assert self.driver is not None and self.virt is not None
         # Clients are connected with a channel allowing PPs and nothing else
@@ -98,33 +98,30 @@ class DummyI2C(Subsystem):
                 )
             # Make channel
             ch = Channel(
+                self.sdf,
                 Channel.End(c, can_notify=False, can_pp=True),
                 Channel.End(self.virt, can_notify=True, can_pp=False),
-                self.sdf,
             )
-            self.channels.append(ch)
 
     def construct_infrastructure(self, prio):
         # Make driver
         self.driver = ProtectionDomain(
+            self.sdf,
             "i2c_driver",
             "i2c_driver.elf",
-            self.sdf,
             scheduling=SchedulingProperties(prio),
         )
         self.virt = ProtectionDomain(
+            self.sdf,
             "i2c_virt",
             "i2c_virt.elf",
-            self.sdf,
             scheduling=SchedulingProperties(prio - 1),
         )
         d_v_ch = Channel(
+            self.sdf,
             Channel.End(self.virt, can_notify=True, can_pp=False),
             Channel.End(self.driver, can_notify=True, can_pp=False),
-            self.sdf,
         )
-        self.channels.append(d_v_ch)
-        self.pds.extend([self.driver, self.virt])
 
 
 # Make system and subsystems
@@ -135,16 +132,8 @@ timer = DummyTimer(sdf)
 clk = DummyClock(sdf, 201)
 
 # Client
-client = ProtectionDomain("client", "client.elf", sdf, priority=1)
+client = ProtectionDomain(sdf, "client", "client.elf", priority=1)
 i2c.add_client(client)
 timer.add_client(client)
-
-# Build!
-for s in [i2c, timer, clk]:
-    sdf.add_subsystem(s)
-
-sdf.assemble()
-for p in sdf.pds:
-    print(p)
 
 sdf.write_xml_file("dummysubsystems.system")

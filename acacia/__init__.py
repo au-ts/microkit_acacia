@@ -18,6 +18,6 @@ from .dwarf_dump_grammar import grammar
 from .irq import IRQ, ConventionalIRQ, IrqIoapic, IrqMsi
 from .memory import Map, MemoryRegion
 from .pd import ProtectionDomain, SchedulingProperties, VirtualMachine
-from .subsystem import Subsystem, SubsystemBuildError
+from .subsystem import Subsystem, SubsystemBuildError, build_hook
 from .system import System
 from .x86 import IOPort

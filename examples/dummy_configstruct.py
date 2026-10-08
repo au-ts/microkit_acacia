@@ -15,6 +15,7 @@ from acacia import (
 )
 from acacia.arch import aarch64
 from acacia.irq import IRQ, ConventionalIRQ
+from acacia.subsystem import build_hook
 
 DEVICE_MAGIC_LEN = 5
 DEVICE_MAX_REGIONS = 64
@@ -78,6 +79,7 @@ class DummyI2C(Subsystem):
         self.irq_type = irq_type
         self.construct_infrastructure(200)
 
+    @build_hook
     def connect_clients(self):
         assert self.driver is not None
         # Clients are connected with a channel allowing PPs and nothing else
@@ -93,7 +95,6 @@ class DummyI2C(Subsystem):
                 Channel.End(c, can_notify=False, can_pp=True),
                 Channel.End(self.driver, can_notify=False, can_pp=False),
             )
-            self.channels.append(ch)
 
     def construct_infrastructure(self, driver_prio: int):
         # Make driver
@@ -103,10 +104,8 @@ class DummyI2C(Subsystem):
             "i2c_driver.elf",
             scheduling=SchedulingProperties(driver_prio, passive=True),
         )
-        self.pds.append(self.driver)
 
         dev_mem = MemoryRegion(self.sdf, "i2c_ctrl", 0x1000, paddr=0x37370000)
-        self.mrs.append(dev_mem)
         dev_mem_map = Map(dev_mem, 0x10000000, Map.Permissions(r=True, w=True))
         self.dev_mem = dev_mem_map
         self.driver.add_map(dev_mem_map)
@@ -154,7 +153,6 @@ ch12 = Channel(
     Channel.End(client1, can_notify=True, can_pp=False),
     Channel.End(client2, can_notify=True, can_pp=False),
 )
-sdf.add_channel(ch12)
 
 for c in [client1, client2, client3]:
     i2c.add_client(c)
@@ -162,7 +160,7 @@ for c in [client1, client2, client3]:
 sdf.assemble()
 
 structs = i2c.generate_config_structs()
-r = ConfigStructResolver("./dummy_configstruct_build", arch_64_bit=sdf.arch.is_64_bit())
+r = ConfigStructResolver("./dummy_configstruct_build")
 for s in structs:
     print(s)
     r.add_struct(s)
