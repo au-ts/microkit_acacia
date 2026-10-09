@@ -364,7 +364,7 @@ class DeviceTreeBlob:
                 # parent-bus-addr (grandparent addr cells)
                 # length (parent size cells)
 
-                p_addr_cells, p_size_cells = self.get_size_and_addr_cells(parent)
+                p_size_cells, p_addr_cells = self.get_size_and_addr_cells(parent)
 
                 try:
                     grandparent = self.get_node_parent(parent)
