@@ -105,7 +105,7 @@ class Subsystem(ABC):
         @build_hook
         def first_hook_to_run(self): ...
 
-        @build
+        @build_hook
         def second_hook_to_run(self): ...
 
         Hooks should have no arguments except `self`.
