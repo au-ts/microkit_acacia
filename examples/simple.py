@@ -32,37 +32,31 @@ client_pn532 = ProtectionDomain(sdf, "client_pn532", "client_pn532.elf", priorit
 client_ds3231 = ProtectionDomain(sdf, "client_ds3231", "client_ds3231.elf", priority=1)
 
 ch_pn532 = Channel(
+    sdf,
     Channel.End(pd=client_pn532, can_notify=True, can_pp=True),
     Channel.End(pd=i2c_virt, can_notify=True, can_pp=False),
-    sdf,
 )
 
 ch_ds3231 = Channel(
+    sdf,
     Channel.End(pd=client_ds3231, can_notify=True, can_pp=True),
     Channel.End(pd=i2c_virt, can_notify=True, can_pp=False),
-    sdf,
 )
 
 ch_timer_ds3231 = Channel(
+    sdf,
     Channel.End(pd=client_ds3231, can_notify=False, can_pp=True),
     Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
-    sdf,
 )
 
 ch_timer_pn532 = Channel(
+    sdf,
     Channel.End(pd=client_pn532, can_notify=False, can_pp=True),
     Channel.End(pd=timer_driver, can_notify=True, can_pp=False),
-    sdf,
 )
-sdf.add_channel(ch_ds3231)
-sdf.add_channel(ch_pn532)
-sdf.add_channel(ch_timer_ds3231)
-sdf.add_channel(ch_timer_pn532)
 
 clk_ccm_mr = MemoryRegion(sdf, "clk_ccm", 0xD000, paddr=0x30380000)
 clk_ccm_analog_mr = MemoryRegion(sdf, "clk_ccm_analog", 0x1000, paddr=0x30360000)
-sdf.add_memory_region(clk_ccm_mr)
-sdf.add_memory_region(clk_ccm_analog_mr)
 clk_ccm_map = Map(clk_ccm_mr, 0x3200000, "rw")
 clk_ccm_analog_map = Map(clk_ccm_analog_mr, 0x3300000, "rw")
 clk_driver.add_map(clk_ccm_map)
