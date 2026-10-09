@@ -311,7 +311,7 @@ class CType:
     )
 
     group_tags = {
-        "array_tag": ("subrange_tag"),
+        "array_tag": ("subrange_tag",),
         "enumeration_tag": ("enumerator_tag"),
         "union_tag": ("member_tag", "group"),
         "structure_tag": ("member_tag", "group"),
@@ -453,19 +453,43 @@ class CType:
             )
         return base_type
 
-    def array_count(self) -> int:
+    def array_dimensions(self) -> Tuple[int, ...]:
         """
-        Find the number of entries in an "array_tag" CType. Returns 0 if the
-        subrange type does not have a count attribute.
+        Return the array's dimensions in DWARF/source order.
+
+        A dimension is 0 when its subrange does not have a known
+        bound. C arrays have an implicit lower bound of zero, so a
+        DW_AT_upper_bound of N describes N + 1 entries.
         """
         if self.tag_type != "array_tag":
             raise TypeError(
                 f"Provided CType tag '{self.tag_type}' is not an 'array_tag'"
             )
-        subrange_type = self.collector[self.members[0]]
-        if subrange_type.attributes.count is not None:
-            return subrange_type.attributes.count
-        return 0
+
+        dimensions: List[int] = []
+        for member_id in self.members:
+            subrange_type = self.collector[member_id]
+            if subrange_type.attributes.count is not None:
+                dimensions.append(subrange_type.attributes.count)
+            elif subrange_type.attributes.upper_bound is not None:
+                dimensions.append(subrange_type.attributes.upper_bound + 1)
+            else:
+                dimensions.append(0)
+        return tuple(dimensions)
+
+    def array_count(self) -> int:
+        """
+        Find the number of entries in an "array_tag" CType. Returns 0 if the
+        subrange type does not have a count attribute.
+        """
+        dimensions = self.array_dimensions()
+        if not dimensions:
+            return 0
+
+        count = 1
+        for dimension in dimensions:
+            count *= dimension
+        return count
 
     def __eq__(self, other: object):
         if not isinstance(other, CType):
@@ -486,7 +510,7 @@ class CType:
             case "typedef_tag" | "member_tag":
                 return self.base_type() == c_type.base_type()
             case "array_tag":
-                if self.array_count() != c_type.array_count():
+                if self.array_dimensions() != c_type.array_dimensions():
                     return False
                 return self.base_type() == c_type.base_type()
             case "union_tag" | "structure_tag":
@@ -529,11 +553,10 @@ class CType:
                     raise ValueError(
                         f"Base type ID {new_type.attributes.type[0]} is not a valid type, CType '{new_type}'"
                     )
-            if new_type.tag_type == "array_tag":
-                if len(new_type.members) != 1:
-                    raise ValueError(
-                        f"Array type has the wrong number of members '{len(new_type.members)}', expected 1 (subrange type), CType '{new_type}'"
-                    )
+            if new_type.tag_type == "array_tag" and not new_type.members:
+                raise ValueError(
+                    f"Array type has no members, expected at least 1 subrange type, CType '{new_type}'"
+                )
 
     @staticmethod
     def find_type_by_name(all_types: Dict[int, CType], type_name: str) -> CType:
@@ -840,9 +863,10 @@ class ConfigStructResolver:
                 assert len(out_blob) == type_size
             case "array_tag":
                 entry_type = c_type.base_type()
-                if not c_type.array_count() or not entry_type.attributes.byte_size:
+                array_count = c_type.array_count()
+                if not array_count or not entry_type.attributes.byte_size:
                     raise ValueError(
-                        f"Can't fill an array with size = count '{c_type.array_count()}' * entry_size '{entry_type.attributes.byte_size}' == 0, CType '{c_type}'"
+                        f"Can't fill an array with size = count '{array_count}' * entry_size '{entry_type.attributes.byte_size}' == 0, CType '{c_type}'"
                     )
 
                 if (
@@ -853,7 +877,7 @@ class ConfigStructResolver:
                         or isinstance(user_value, bytes)
                         or isinstance(user_value, bytearray)
                     )
-                    or len(user_value) > c_type.array_count()
+                    or len(user_value) > array_count
                 ):
                     raise ValueError(
                         f"Can't fill an array with a non-iterable or too-large an iterable '{user_value}', CType '{c_type}'"
@@ -869,7 +893,7 @@ class ConfigStructResolver:
                             f"Exception occurred while filling field of array CType '{c_type}'`"
                         ) from e
 
-                type_size = c_type.array_count() * entry_type.attributes.byte_size
+                type_size = array_count * entry_type.attributes.byte_size
 
                 # Strings must be null-terminated
                 if entry_type.attributes.name == "char":
