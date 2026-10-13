@@ -11,11 +11,23 @@ from .system import System
 
 class MemoryRegion:
     """
-    A concrete instance of a memory region. Given that these
-    are always absolutely defined, we don't need to support
-    and constraint solving ... just need to make sure all defined MRs fit when building the system.
+    A Microkit MemoryRegion (MR) as represented in Acacia.
 
-    Microkit will assign paddrs etc. itself, so we don't need to worry about this too much.
+    https://docs.sel4.systems/projects/microkit/manual/latest/#mr
+
+    Instantiating this class immediately adds it to the `System`, meaning that it
+    will be in the XML when generated.
+
+    Unlike in the raw Microkit, MemoryRegions in Acacia have some additional features
+    for convenience and preventing programming errors.
+    * `cached` flag: rather than needing to hope all `Maps` are have a matching `cached` state,
+                Acacia sets it at MR granularity. If true, all Maps of this MR are cached.
+    * Large-page optimisation: if a MR is large enough to fit in large pages, it will have
+      its size rounded up to a large page boundary to let Microkit create it as a large page
+      mapping.
+    * Automatic physical address allocation: an Acacia MR can be marked as physical without
+      a defined paddr. If this is the case, a paddr will be allocated as the final step before
+      creating ConfigStructs or generating XML (terminal steps).
     """
 
     def __init__(
@@ -111,7 +123,15 @@ class MemoryRegion:
 
 class Map:
     """
-    A mapping of a MemoryRegion into a PD or VM.
+    A mapping of a MemoryRegion into a PD or VM. This places the MR into the virtual address
+    space of the target with a given set of permissions.
+
+    If the underlying MR could be optimised to a large page by Microkit but the virtual address
+    given isn't large-page aligned, a warning will be printed.
+
+    You do not need to manually allocate Maps if you do not care about the virtual address, use
+    `Entity.create_automap()` (on PDs or VMs) to automatically assign one. This will automatically
+    align the assigned virtual address to a large or huge page boundary to enable optimisations.
     """
 
     @dataclass(frozen=True)
@@ -169,6 +189,10 @@ class Map:
         return self.mr.size
 
     def render(self, parent: et.Element) -> et.Element:
+        """
+        Render the Map to XML elements. This is called automatically by Acacia and shouldn't
+        need to be used directly under normal circumstances.
+        """
         map = et.SubElement(parent, "map")
         map.set("mr", self.mr.name)
         map.set("vaddr", hex(self.vaddr))
@@ -180,7 +204,10 @@ class Map:
         return map
 
     @property
-    def end_vaddr(self):
+    def end_vaddr(self) -> int:
+        """
+        Return the address where this map ends.
+        """
         return self.vaddr + self.size
 
     def vaddr_in_map(self, vaddr: int) -> bool:
@@ -196,8 +223,12 @@ class Map:
 class IOMap:
     """
     Representation of a Microkit io map: a mapping of a MemoryRegion to an IOAddressSpace.
-    """
 
+    This works very similarly to a Map, but is for IOMMU mappings.
+
+    NOTE: this currently lacks some of the features of `Map`.
+    https://github.com/au-ts/microkit_acacia/issues/34
+    """
     def __init__(
         self,
         mr: MemoryRegion,

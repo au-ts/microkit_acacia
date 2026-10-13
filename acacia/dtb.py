@@ -142,11 +142,17 @@ def _arm_gic_trigger(trigger: int) -> IRQ.Trigger:
 
 @dataclass
 class DTBNode:
+    """
+    A representation of a Device Tree node as discovered at runtime.
+    """
     offset: int
     path: str
 
     @property
     def name(self) -> str:
+        """
+        Return the name of this node ... i.e. the final term in the path.
+        """
         if self.path == "/":
             return ""
         return self.path.rsplit("/", 1)[-1]
@@ -154,7 +160,11 @@ class DTBNode:
 
 class DeviceTreeBlob:
     """
-    Class encapsulating operations on a device tree.
+    Class encapsulating operations on a device tree. This class parses the DTB using
+    pylibfdt and offers a friendly interface for using it for drivers and other OS
+    functionality.
+
+    The DTB is immediately parsed on `__init__`.
     """
 
     def __init__(self, dtb_file_path: str):
@@ -193,7 +203,7 @@ class DeviceTreeBlob:
             ]
         return []
 
-    def get_nodes_by_compatible(self, compatible_str) -> List[DTBNode]:
+    def get_nodes_by_compatible(self, compatible_str: str) -> List[DTBNode]:
         """
         Try find a node with a matching compatible string.
         """
@@ -202,15 +212,18 @@ class DeviceTreeBlob:
         ]
 
     def get_node_by_path(self, path_str: str) -> DTBNode:
+        """
+        Given a path string (e.g. /soc/serial@3002000), attempt to find a matching node.
+        """
         # defensive: enforce that path starts with /
         if path_str[0] != "/":
             path_str = "/" + path_str
         return DTBNode(self.fdt.path_offset(path_str), path_str)
 
-    def get_node_prop(self, node: DTBNode, prop_name: str):
+    def get_node_prop(self, node: DTBNode, prop_name: str) -> bytearray | None:
         """
-        Get a property from a DTB node. This will return the
-        raw contents of the property as a bytearray.
+        Get a property from a DTB node given a property name. This will
+        return the raw contents of the property as a bytearray.
 
         Returns None if property doesn't exist
         """
@@ -219,6 +232,9 @@ class DeviceTreeBlob:
         return None
 
     def get_node_parent(self, node: DTBNode) -> DTBNode:
+        """
+        Get the parent of a node if it exists.
+        """
         return self.nodes[self.fdt.parent_offset(node.offset)]
 
     def get_size_and_addr_cells(self, node: DTBNode) -> Tuple[int, int]:
@@ -240,7 +256,7 @@ class DeviceTreeBlob:
 
         return (out_size, out_addr)
 
-    def get_node_regs(self, node: DTBNode) -> List[Tuple]:
+    def get_node_regs(self, node: DTBNode) -> List[Tuple[int, int]]:
         """
         Given a node, read its regs array and return a list of tuples.
         Tuples are (addr, len) pairs. This method automatically parses
