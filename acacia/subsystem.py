@@ -91,7 +91,12 @@ class Subsystem(ABC):
             raise RuntimeError("Cannot build a subsystem more than once!")
 
         for hook in self.build_hooks:
-            hook()
+            try:
+                hook()
+            except Exception as e:
+                raise SubsystemBuildError(
+                    f"{self} failed to run build hook '{hook.__name__}'!"
+                ) from e
 
         self.built = True
 
