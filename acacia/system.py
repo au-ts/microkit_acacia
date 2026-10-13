@@ -21,7 +21,30 @@ if TYPE_CHECKING:
 
 class System:
     """
-    A Microkit system.
+    An Acacia Microkit system. This is the top-level container for any single Acacia invocation,
+    encapsulating all Microkit primitives and instantiated subsystems for a single build.
+
+    For end-users, the System is an object that is used to create most Microkit primitives and
+    all Acacia subsystems.
+
+    `System` exposes the two terminal actions in Acacia:
+    * `make_config_structs` -> For all subsystems, create data blobs for their `ConfigStruct`s.
+    * `write_xml_file` -> Create a Microkit XML file containing all elements in the `System`.
+
+    Calling either of these actions will cause the `System` to "assemble" ... this involves
+    several internal steps, after which no further Microkit elements or subsystems can be
+    instantiated.
+
+    Assembly performs the following steps in the following order:
+    1. Subsystem resolution. For each `Subsystem`, invoke their `build` method to finalise them.
+    2. Auto-allocation. For Microkit objects like MRs, some work like assigning physical addresses
+       can only happen after all subsystems are built. Currently, this only involves physical
+       address allocation for physical MRs without a paddr.
+
+    Both of these steps are completed strictly BEFORE generating config structs. This ensures that
+    all addresses, IDs, etc. are evaluated before we try save configuration data.
+
+    Note: Calling `write_xml_file` will NOT automatically generate config structs.
     """
 
     def __init__(
@@ -169,6 +192,22 @@ class System:
     def make_config_structs(
         self, build_dir: pathlib.Path = pathlib.Path("./"), dump: bool = False
     ):
+        """
+        Generate config struct data blobs for all Subsystems and patch them into
+        ELFs if flagged (currently WIP, manual objcopies in Makefile needed for now
+        https://github.com/au-ts/microkit_acacia/issues/47
+        https://github.com/au-ts/microkit_acacia/issues/48
+        )
+
+        All data blobs are placed in the provided `build_dir`.
+
+        For debugging purposes, set `dump=True` to generate a human-readable JSON file
+        named identically to each data blob. This is a helpful way to check if your
+        config serialisation works correctly.
+
+        This is a TERMINAL ACTION - it will cause this System to assemble itself and
+        prevent any additional elements from being added to the system.
+        """
         # We can't get config structs without resolving subsystems first
         if not self.system_assembled:
             print("System::make_config_structs - auto-assembling")
@@ -180,6 +219,15 @@ class System:
         resolver.resolve_and_create_all(dump)
 
     def render(self) -> et.Element:
+        """
+        Render the XML hierarchically for all Microkit elements in the system. All
+        elements render themselves and their child elements. This is called automatically
+        by `write_xml_file` and shouldn't be called manually unless you need the `ElementTree`
+        for some unusual usage.
+
+        This is a TERMINAL ACTION - it will cause this System to assemble itself and
+        prevent any additional elements from being added to the system.
+        """
         if not self.system_assembled:
             print("System::render - auto-assembling")
             self.assemble()
@@ -202,6 +250,12 @@ class System:
         return system
 
     def write_xml_file(self, path: pathlib.Path):
+        """
+        Write a Microkit XML file to `path`.
+
+        This is a TERMINAL ACTION - it will cause this System to assemble itself and
+        prevent any additional elements from being added to the system.
+        """
         xml = self.render()
         et.indent(xml, level=0)
 

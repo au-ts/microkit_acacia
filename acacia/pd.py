@@ -16,7 +16,8 @@ MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel
 @dataclass
 class SchedulingProperties:
     """
-    Properties of an entity for the seL4 scheduler
+    Properties of an entity (PD or VM) for the seL4 scheduler.
+    https://docs.sel4.systems/projects/microkit/manual/latest/#scheduling
     """
 
     # priority: Union[int, FieldSpec[int]]
@@ -50,6 +51,9 @@ class Entity:
     in future which:
         a. has scheduling paramters
         b. can be targeted by maps
+
+    This is a base class that `ProtectionDomain` and `VirtualMachine` inherit from for
+    shared logic.
     """
 
     def __init__(
@@ -76,6 +80,9 @@ class Entity:
         return self.scheduling.period if self.scheduling is not None else None
 
     def add_map(self, map: Map):
+        """
+        Add a `Map` to this entity; i.e. put this mapping into the virtual address space.
+        """
         # Check that this map doesn't overlap any existing maps before adding.
         for m in self.maps:
             if m.vaddr_in_map(map.vaddr) or m.vaddr_in_map(map.end_vaddr):
@@ -139,6 +146,9 @@ class Entity:
         return m
 
     def render(self, parent: et.Element, elem_name: str):
+        """
+        Render the XML elements for this entity. This is called by super() from PDs and VMs.
+        """
         entity = et.SubElement(parent, elem_name)
         entity.set("name", str(self.name))
         if self.scheduling is None:
@@ -164,12 +174,18 @@ class Entity:
 
 class VirtualMachine(Entity):
     """
-    An instance of a VM belonging to a PD. This inherits from entity as
-    VMs can be targeted with maps and has scheduling parameters.
+    A Microkit Virtual Machine. VMs always belong to a `ProtectionDomain` and cannot exist
+    independently.
+    This inherits from entity as VMs can be targeted with maps and has scheduling parameters.
+
+    https://docs.sel4.systems/projects/microkit/manual/latest/#vm
     """
 
     @dataclass
     class VCPU:
+        """
+        A representation of a Microkit virtual CPU (VCPU) used by a virtual machine.
+        """
         id: int
         cpu: Optional[int] = None
 
@@ -178,6 +194,10 @@ class VirtualMachine(Entity):
                 raise RuntimeError(f"VCPU ID={self.id} is invalid!")
 
         def render(self, parent: et.Element):
+            """
+            Return the XML defining this element. This is called internally by Acacia and
+            shouldn't be called directly in normal circumstances.
+            """
             entity = et.SubElement(parent, "vcpu")
             entity.set("id", str(self.id))
             if self.cpu is not None:
@@ -210,7 +230,20 @@ class VirtualMachine(Entity):
 
 class ProtectionDomain(Entity):
     """
-    A PD running native code
+    A Microkit Protection Domain (PD) as seen by Acacia.
+
+    https://docs.sel4.systems/projects/microkit/manual/latest/#pd
+
+    As soon as a PD is instantiated, it is added to the `System` and will be in the XML when
+    Acacia generates it.
+
+    Acacia PDs have a few convenience features:
+    * Scheduling can be defined via either a simple `priority` or a full `SchedulingProperties`.
+      The `priority` API is a legacy feature inherited from sdf_gen.
+    * Acacia keeps a pool of available channel, IRQ and IOPort IDs to allow automatic assignment
+      of these IDs. They are automatically assigned when added to the PD if they aren't specified
+      explicitly. NOTE: automatic assignments may clash with manual assignments, we may prevent
+      this in the future.
     """
 
     def __init__(
@@ -257,6 +290,10 @@ class ProtectionDomain(Entity):
         self.sdf._add_pd(self)
 
     def render(self, parent: et.Element, elem_name: str = "protection_domain"):
+        """
+        Render the XML elements describing this PD in the Microkit XML format. This
+        is automatically called by Acacia and shouldn't be required under normal usage.
+        """
         pd = super().render(parent, elem_name)
         prog_image = et.SubElement(pd, "program_image")
         prog_image.set("path", self.prog_image)
@@ -287,6 +324,9 @@ class ProtectionDomain(Entity):
     def allocate_id(self, requested_id: Optional[int] = None):
         """
         Allocate an ID (or test a requested id) for a channel or IRQ.
+
+        NOTE: IOPort assignment occurs from a separate pool and thus doesn't
+              involve this method.
         """
         allocated_irq_ids = [irq.id for irq in self.irqs if irq.id is not None]
         allocated_ch_ids = [
@@ -307,6 +347,9 @@ class ProtectionDomain(Entity):
         return new_id
 
     def add_irq(self, irq: IRQ):
+        """
+        Add an interrupt to this PD. This will automatically assign an ID if needed.
+        """
         if irq in self.irqs:
             raise RuntimeError("Cannot add the same IRQ to a PD twice!")
 
@@ -315,6 +358,9 @@ class ProtectionDomain(Entity):
         return irq.id
 
     def add_ioport(self, ioport: IOPort):
+        """
+        Add an IOPort to this PD. This will automatically assign an ID if needed.
+        """
         desired_id = ioport.id
         assigned_ids = [iop.id for iop in self.ioports]
         if desired_id is None:
@@ -328,6 +374,10 @@ class ProtectionDomain(Entity):
         self.ioports.append(ioport)
 
     def add_child_pd(self, child, child_id: Optional[int] = None):
+        """
+        Mark a PD as a child of this PD. This will remove the PD from the top-level system and
+        make it render as a child element of this PD's XML instead.
+        """
         if child in self.children:
             raise RuntimeError("Cannot make the same PD a child multiple times!")
         assigned_ids = [child.child_id for child in self.children]
@@ -345,6 +395,14 @@ class ProtectionDomain(Entity):
         return new_child_id
 
     def add_vm(self, vm: VirtualMachine):
+        """
+        Add a virtual machine to be managed by this PD.
+
+        NOTE:
+        * On x86, VMs do not have scheduling properties.
+        * On x86, a PD may only host a single VM. On other architectures they may host
+          multiple.
+        """
         assert isinstance(vm, VirtualMachine)
         # If we are targeting x86, scheduling properties are not allowed. We also can only have one
         # VM on x86, but other platforms allow more.

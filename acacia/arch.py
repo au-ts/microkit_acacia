@@ -13,6 +13,10 @@ class ArchID(Enum):
 
 @dataclass
 class PageSize:
+    """
+    A representation a page size in a Microkit system. This is a simple dataclass
+    that keeps a size, name, and a set of utility methods in one place.
+    """
     name: str
     size_bytes: int
 
@@ -60,7 +64,8 @@ page_sizes = [
 @dataclass
 class Arch:
     """
-    Representation of a system architecture.
+    Representation of a system architecture. Most of this API is provided for legacy use
+    from sdf_gen.
     """
 
     arch: ArchID
@@ -85,16 +90,28 @@ class Arch:
     def addr_is_page_aligned(
         self, addr: int, page_size: Optional[PageSize] = None
     ) -> bool:
+        """
+        Check if an address or size is aligned to a page boundary.
+        Selects the default arch page size if none is provided.
+        """
         if page_size is None:
             page_size = self.default_page_size()
         return page_size.addr_is_aligned(addr)
 
     def roundup_to_page(self, n: int, page_size: Optional[PageSize] = None) -> int:
+        """
+        Given a size or address, round up to the nearest page boundary.
+        Selects the default arch page size if none is provided.
+        """
         if page_size is None:
             page_size = self.default_page_size()
         return page_size.roundup_to_page(n)
 
     def rounddown_to_page(self, n: int, page_size: Optional[PageSize] = None) -> int:
+        """
+        Given a size or address, round down to the nearest page boundary.
+        Selects the default arch page size if none is provided.
+        """
         if page_size is None:
             page_size = self.default_page_size()
         return page_size.rounddown_to_page(n)
