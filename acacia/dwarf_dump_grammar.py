@@ -1,6 +1,11 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+"""
+This is the `lark` grammar used by `configstruct.py` to parse the DWARF content of ELF files
+using llvm-objdump.
+"""
+
 grammar = r"""
     start : entry+
 
