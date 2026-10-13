@@ -33,7 +33,9 @@ from .dwarf_dump_grammar import grammar
 class Attributes:
     """
     Class encapsulating tag attributes in the parsed output of llvm-dwarfdump on
-    a file. Examples:
+    a file. This is used internally by Acacia when discovering the layout of ConfigStructs
+    in compiled code.
+    Examples:
 
         attribute
             at_name	name
@@ -254,7 +256,9 @@ class Attributes:
 class CType:
     """
     Class encapsulating a tag entry or C type found in the parsed output of
-    llvm-dwarfdump on a file. Examples:
+    llvm-dwarfdump on a file. This is used internally by Acacia to represent types
+    found in a compiled file when determining how to pack ConfigStructs.
+    Examples:
 
         unknown_tag
             id	0000000c
@@ -586,9 +590,35 @@ class CType:
 
 class ConfigStruct:
     """
-    Python representation of a C configuration struct. This class provides a
-    template for creating a configuration struct which will be serialised into a
-    matching C struct found in a component's ELF file.
+    A representation of a structure in a compiled program that we will pack with
+    configuration data.
+
+    This class provides a template for creating a configuration struct which will
+    be serialised into a matching C struct found in a component's ELF file.
+
+    All `ConfigStruct`s must have:
+    * A `type_name` denoting the C type of this, e.g. `sddf_timer_client_config_t`.
+    * A list of `fields` - name-value pairs matching the layout of a struct. E.g.
+      "queue_vaddr" : 0x20000000. Names must exactly match the name of the field in
+      C and the value should be an appropriate Python type. All fields in the real
+      struct should be present, otherwise an error will be thrown.
+
+    E.g.
+    * a string -> character array
+    * list of `int` -> list of integers of some C type (automatically checks if signed!)
+    * a bytearray -> list of integers of some C type
+    * Another `ConfigStruct` -> a struct.
+
+    If this `ConfigStruct` is at the top level, i.e. it is corresponding to a symbol to patch
+    as opposed to being a `ConfigStruct` nested inside another `ConfigStruct`, it must define:
+    * `target_file`: the name of the ELF file this will be patched into.
+    * `section_name`: The name of the ELF section this belongs to.
+       NOTE: this currently is unused! https://github.com/au-ts/microkit_acacia/issues/48
+
+    In the event that a ConfigStruct is unused, or we want to zero-fill a struct inside of another
+    `ConfigStruct`, you may set the `empty` field to True. This will cause Acacia to skip trying
+    to populate it while suppressing the "missing field" error that would normally appear if you
+    ignore fields of a struct.
     """
 
     def __init__(
@@ -663,6 +693,8 @@ class ConfigStructResolver:
     based on the memory layout of their types derived from the DWARF symbols in
     the ELF file. Each serialised struct is then written to a file in the build
     directory.
+
+    This is an internal class for Acacia and is not used by end users.
     """
 
     def __init__(

@@ -10,8 +10,39 @@ from .system import AcaciaSystemError, System
 
 
 class Channel:
+    """
+    Acacia representation of a Microkit Channel object.
+    https://docs.sel4.systems/projects/microkit/manual/latest/#channels
+
+    Initialising an instance of this class will register a channel with Acacia, causing
+    it to be created when rendering the XML.
+
+    Channels have two `Ends` representing the `ProtectionDomain`s on either side.
+
+    Acacia will prevent you from creating channels that either have no effect or are invalid
+    (e.g. if PPCs go from a high priority -> low priority, not allowed in Microkit).
+
+    Channel ends will automatically be assigned channel IDs from the pool of IRQ/Channel IDs
+    available for each PD at `__init__()`.
+    * In almost all cases, you should allow these to be automatically assigned.
+    * **WARNING**: manual assignment currently will conflict with automatic assignment.
+                   E.g. an automatically created channel can take ID=0, preventing a manual
+                   assignment of ID=0. We may defer automatic assignment to Acacia build time
+                   (as is the case with MR paddrs) in the future.
+    """
     @dataclass
     class End:
+        """
+        One of the two ends of a channel where a ProtectionDomain interacts with it.
+        By default:
+        * `Ends` allow notifications
+        * `Ends` prohibit protected procedure calls.
+
+        You may optionally specify the channel ID of the end, although it will be automatically
+        assigned when handed to a `Channel` if you do not.
+
+        If using this class in a subsystem build hook, you should NEVER manually assign IDs.
+        """
         pd: ProtectionDomain
         can_notify: bool = True
         can_pp: bool = False
@@ -66,6 +97,10 @@ class Channel:
         self.sdf._add_channel(self)
 
     def render(self, system_root: et.Element):
+        """
+        Return the Microkit XML representing this element. This is called automatically
+        by Acacia and should not need to be manually called under normal circumstances.
+        """
         channel = et.SubElement(system_root, "channel")
         for e in [self.end_a, self.end_b]:
             end = et.SubElement(channel, "end")
@@ -83,6 +118,9 @@ class Channel:
     def id_for_pd(self, end_pd) -> Optional[int]:
         """
         Return the channel ID for this channel for the given PD.
+        I.e. the channel number `ch` which `end_pd` can `microkit_notify()"-ed to send
+        a notification to the other end of the channel.
+
         This is a convenience function to make config serialisation less ambiguous.
         We can also avoid programming errors related to remembering end_a vs. end_b
         this way.

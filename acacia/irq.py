@@ -10,6 +10,22 @@ from typing import Optional
 
 
 class IRQ:
+    """
+    A base type representing all interrupts in Microkit systems. This type should
+    not be used directly, all "real" interrupts are subclasses of it.
+
+    IRQs must be `added` to a ProtectionDomain in order to have any effect.
+
+
+    Similarly to channel end IDs, an explicit ID may be optionally
+    given when constructing this class. If it is not given, it will be automatically
+    assigned when adding it to a ProtectionDomain.
+
+    If using this class in a subsystem build hook, you should NEVER manually assign IDs.
+
+    Note: it is possible for explicitly assigned IDs to clash (possibly with automatically
+          -generated ones!). In almost all cases, you should use automatic allocation.
+    """
     class Trigger(Enum):
         EDGE = 1
         LEVEL = 2
@@ -36,7 +52,15 @@ class IRQ:
 
 class ConventionalIRQ(IRQ):
     """
-    IRQs on ARM and RISC-V machines.
+    IRQs on ARM and RISC-V machines. These have a trigger mode and an ID which may be specified.
+    If the ID is not explicitly specified, it will be automatically allocated from the pool of
+    available IDs in the PD upon calling `add_irq()`.
+
+    Similarly to `Channel` IDs, manually assigned IDs may conflict with automatically assigned
+    ones. In the future we may change automatic assignment to only happen after all manual
+    assignment is complete.
+
+    If using this class in a subsystem build hook, you should NEVER manually assign IDs.
     """
 
     def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int] = None):
@@ -65,6 +89,15 @@ class ConventionalIRQ(IRQ):
 
 
 class IrqIoapic(IRQ):
+    """
+    An x86 IOAPIC IRQ. Unlike Conventional IRQs, these do not have an IRQ number.
+
+    Similarly to `Channel` IDs, manually assigned IDs may conflict with automatically assigned
+    ones. In the future we may change automatic assignment to only happen after all manual
+    assignment is complete.
+
+    If using this class in a subsystem build hook, you should NEVER manually assign IDs.
+    """
     class Polarity(Enum):
         ACTIVEHIGH = 1
         ACTIVELOW = 2
@@ -119,6 +152,16 @@ class IrqIoapic(IRQ):
 
 
 class IrqMsi(IRQ):
+    """
+    An x86 MSI IRQ. Unlike ConventionalIRQs, these do not have a number or trigger,
+    but rather have bespoke PCI-related fields.
+
+    Similarly to `Channel` IDs, manually assigned IDs may conflict with automatically assigned
+    ones. In the future we may change automatic assignment to only happen after all manual
+    assignment is complete.
+
+    If using this class in a subsystem build hook, you should NEVER manually assign IDs.
+    """
     def __init__(
         self,
         pci_bus: int,
