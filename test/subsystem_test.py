@@ -162,6 +162,16 @@ class TestSubsystemBuild:
                 ss.build()
             mock_connect.assert_not_called()
 
+    def test_add_client_fails_after_built(self, sdf):
+        ss = create_concrete_subsystem("test", sdf)
+        pd = ProtectionDomain(sdf, "client", "client.elf", priority=100)
+        ss.build()
+        with pytest.raises(
+            SubsystemBuildError,
+            match="Cannot add clients to a subsystem after it has been built!",
+        ):
+            ss.add_client(pd)
+
 
 class TestSubsystemAbstractMethods:
     def test_cannot_instantiate_abstract(self, sdf):

@@ -8,7 +8,8 @@ import pytest
 
 from acacia.arch import aarch64
 from acacia.memory import MemoryRegion
-from acacia.system import System
+from acacia.subsystem import Subsystem
+from acacia.system import AcaciaSystemError, System, SystemState
 
 
 @pytest.fixture
@@ -505,7 +506,7 @@ class TestRender:
     def test_render_renders_pds(self, sys_):
         pd = MagicMock(name="pd")
         sys_._add_pd(pd)
-        sys_.system_assembled = True
+        sys_.state = SystemState.FINAL
 
         root = sys_.render()
 
@@ -514,7 +515,7 @@ class TestRender:
     def test_render_renders_channels(self, sys_):
         ch = MagicMock(name="ch")
         sys_._add_channel(ch)
-        sys_.system_assembled = True
+        sys_.state = SystemState.FINAL
 
         root = sys_.render()
 
@@ -525,7 +526,7 @@ class TestRender:
         sys_._add_pd(pd)
         sys_._add_memory_region(mr)
         sys_._add_channel(ch)
-        sys_.system_assembled = True
+        sys_.state = SystemState.FINAL
 
         root = sys_.render()
 
@@ -545,7 +546,7 @@ class TestWriteXmlFile:
 
     def test_write_xml_file_produces_valid_xml(self, sys_, tmp_path):
         # End-to-end on an empty (but constructed) system: file must parse back.
-        sys_.system_assembled = True
+        sys_.state = SystemState.FINAL
         out = tmp_path / "sys.xml"
 
         sys_.write_xml_file(str(out))
@@ -555,10 +556,104 @@ class TestWriteXmlFile:
         assert tree.getroot().tag == "system"
 
     def test_write_xml_file_writes_declaration(self, sys_, tmp_path):
-        sys_.system_assembled = True
+        sys_.state = SystemState.FINAL
         out = tmp_path / "sys.xml"
 
         sys_.write_xml_file(str(out))
 
         content = out.read_text(encoding="utf-8")
         assert content.startswith("<?xml")
+
+
+class TestSystemStateProperties:
+    # This is a bit silly, but at least it will catch gremlins
+    def test_state_progression_properties(self, sys_):
+        # Initially in SPECIFICATION
+        assert sys_.state == SystemState.SPECIFICATION
+        assert sys_.manual_alloc_allowed is True
+        assert sys_.microkit_alloc_allowed is True
+        assert sys_.system_assembled is False
+
+        # Transition to ASSEMBLY
+        sys_.state = SystemState.ASSEMBLY
+        assert sys_.manual_alloc_allowed is False
+        assert sys_.microkit_alloc_allowed is True
+        assert sys_.system_assembled is False
+
+        # Transition to ALLOCATION
+        sys_.state = SystemState.ALLOCATION
+        assert sys_.manual_alloc_allowed is False
+        assert sys_.microkit_alloc_allowed is True
+        assert sys_.system_assembled is True
+
+        # Transition to FINAL
+        sys_.state = SystemState.FINAL
+        assert sys_.manual_alloc_allowed is False
+        assert sys_.microkit_alloc_allowed is False
+        assert sys_.system_assembled is True
+
+    def test_manual_alloc_allowed_only_in_specification(self, sys_):
+        sys_.state = SystemState.SPECIFICATION
+        assert sys_.manual_alloc_allowed is True
+
+        sys_.state = SystemState.ASSEMBLY
+        assert sys_.manual_alloc_allowed is False
+
+        sys_.state = SystemState.ALLOCATION
+        assert sys_.manual_alloc_allowed is False
+
+        sys_.state = SystemState.FINAL
+        assert sys_.manual_alloc_allowed is False
+
+    def test_microkit_alloc_allowed_until_final(self, sys_):
+        sys_.state = SystemState.SPECIFICATION
+        assert sys_.microkit_alloc_allowed is True
+
+        sys_.state = SystemState.ASSEMBLY
+        assert sys_.microkit_alloc_allowed is True
+
+        sys_.state = SystemState.ALLOCATION
+        assert sys_.microkit_alloc_allowed is True
+
+        sys_.state = SystemState.FINAL
+        assert sys_.microkit_alloc_allowed is False
+
+    def test_system_assembled_after_assembly_stage(self, sys_):
+        sys_.state = SystemState.SPECIFICATION
+        assert sys_.system_assembled is False
+
+        sys_.state = SystemState.ASSEMBLY
+        assert sys_.system_assembled is False
+
+        sys_.state = SystemState.ALLOCATION
+        assert sys_.system_assembled is True
+
+        sys_.state = SystemState.FINAL
+        assert sys_.system_assembled is True
+
+
+class TestStateBehaviour:
+    # We test that PDs, maps, MRs, etc. fail in their respective files.
+    def test_add_subsystem_fails_after_specification(self, sys_):
+        subsystem = MagicMock(spec=Subsystem)
+
+        # In SPECIFICATION, it should work
+        sys_.state = SystemState.SPECIFICATION
+        sys_._add_subsystem(subsystem)
+        assert subsystem in sys_.subsystems
+
+        # Move to ASSEMBLY (the next stage)
+        sys_.state = SystemState.ASSEMBLY
+        with pytest.raises(
+            AcaciaSystemError,
+            match="Cannot add subsystems to System after the specification stage ends!",
+        ):
+            sys_._add_subsystem(subsystem)
+
+        # Move to FINAL
+        sys_.state = SystemState.FINAL
+        with pytest.raises(
+            AcaciaSystemError,
+            match="Cannot add subsystems to System after the specification stage ends!",
+        ):
+            sys_._add_subsystem(subsystem)

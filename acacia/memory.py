@@ -5,8 +5,8 @@ import xml.etree.ElementTree as et
 from dataclasses import dataclass
 from typing import Optional, Set, Union
 
-from .arch import SmallPage, LargePage, PageSize
-from .system import System
+from .arch import LargePage, PageSize, SmallPage
+from .system import AcaciaSystemError, System
 
 
 class MemoryRegion:
@@ -28,6 +28,12 @@ class MemoryRegion:
         physical: bool = False,
         prefill_bootinfo: Optional[str] = None,
     ):
+        # Sanity: check that system is not final. We don't allow allocation of any type
+        #         once the system is assembled, or we risk failing to include things in
+        #         the XML!
+        if not sdf.microkit_alloc_allowed:
+            raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
+
         self.name = name
         if size <= 0:
             raise ValueError("Size must be positive and non-zero!")
@@ -142,6 +148,13 @@ class Map:
         setvar_vaddr: Optional[str] = None,
     ):
         self.mr = mr
+
+        # Sanity: check that system is not final. We don't allow allocation of any type
+        #         once the system is assembled, or we risk failing to include things in
+        #         the XML!
+        if not mr.sdf.microkit_alloc_allowed:
+            raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
+
         if not mr.sdf.arch.addr_is_page_aligned(vaddr):
             raise RuntimeError(f"{vaddr} of map is not page aligned, invalid!")
 
@@ -205,6 +218,12 @@ class IOMap:
         allow_reads: bool = True,
         allow_writes: bool = True,
     ):
+        # Sanity: check that system is not final. We don't allow allocation of any type
+        #         once the system is assembled, or we risk failing to include things in
+        #         the XML!
+        if not mr.sdf.microkit_alloc_allowed:
+            raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
+
         self.mr = mr
         self.iovaddr = iovaddr
         self.allow_reads = allow_reads
@@ -247,6 +266,12 @@ class IOAddressSpace:
     """
 
     def __init__(self, sdf: System, name: str, peripheral_id: str, domain_id: str):
+        # Sanity: check that system is not final. We don't allow allocation of any type
+        #         once the system is assembled, or we risk failing to include things in
+        #         the XML!
+        if not sdf.microkit_alloc_allowed:
+            raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
+
         self.sdf = sdf
         self.name = name
         self.peripheral_id = peripheral_id
