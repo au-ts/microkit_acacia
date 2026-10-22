@@ -1,6 +1,7 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+from __future__ import annotations
 from typing import Optional, Set, Union, List, Sequence
 from dataclasses import dataclass
 from abc import ABC
@@ -208,6 +209,62 @@ class VirtualMachine(Entity):
         return vm
 
 
+class CapMap(ABC):
+    """Grant capabilities of objects to a PD using Microkit's CapMap feature."""
+
+    tag: str
+    attr: str
+
+    def __init__(self, slot: int, obj):
+        if slot < 1:
+            raise ValueError("Slot must be greater than 0")
+        self.slot = slot
+        self.obj = obj
+
+    def render(self, parent: et.Element):
+        entity = et.SubElement(parent, self.tag)
+        entity.set("slot", str(self.slot))
+        entity.set(self.attr, str(self.obj.name))
+
+
+class PDCapMap(CapMap):
+    attr = "pd"
+
+    def __init__(self, slot: int, pd: "ProtectionDomain"):
+        super().__init__(slot, pd)
+
+
+class TCBCapMap(PDCapMap):
+    tag = "cap_tcb"
+
+
+class SchedCxtCapMap(PDCapMap):
+    tag = "cap_sc"
+
+
+class VSpaceCapMap(PDCapMap):
+    tag = "cap_vspace"
+
+
+class MicrokitCSpace:
+    """Representation of the Microkit CSpace"""
+
+    def __init__(self):
+        self.slot_to_cap_map = {}
+
+    def add_cap_map(self, cap_map: CapMap):
+        if cap_map.slot in self.slot_to_cap_map.keys():
+            raise ValueError(f"Slot {cap_map.slot} already occupied")
+
+        self.slot_to_cap_map[cap_map.slot] = cap_map
+
+    def render(self, parent: et.Element):
+        if len(self.slot_to_cap_map.keys()) > 0:
+            microkit_cspace = et.SubElement(parent, "cspace")
+            for slot in sorted(self.slot_to_cap_map.keys()):
+                self.slot_to_cap_map[slot].render(microkit_cspace)
+
+
 class ProtectionDomain(Entity):
     """
     A PD running native code
@@ -253,6 +310,9 @@ class ProtectionDomain(Entity):
         # VM
         self.vms: List[VirtualMachine] = []
 
+        # Microkit cap map
+        self.cap_maps: MicrokitCSpace = MicrokitCSpace()
+
         # Allocate ourselves to SDF
         self.sdf._add_pd(self)
 
@@ -281,6 +341,7 @@ class ProtectionDomain(Entity):
             c.render(pd)
         for vm in self.vms:
             vm.render(pd)
+        self.cap_maps.render(pd)
 
         return pd
 
@@ -354,6 +415,9 @@ class ProtectionDomain(Entity):
             if len(self.vms) > 0:
                 raise ValueError("x86 systems do not support multiple VMs per PD!")
         self.vms.append(vm)
+
+    def add_cap_map(self, cap_map: CapMap):
+        self.cap_maps.add_cap_map(cap_map)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} w/ image {self.prog_image}>"
