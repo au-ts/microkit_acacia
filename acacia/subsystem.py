@@ -68,6 +68,11 @@ class Subsystem(ABC):
         if not self.clients_allowed:
             raise RuntimeError(f"{self} does not allow clients!")
 
+        if self.built:
+            raise SubsystemBuildError(
+                "Cannot add clients to a subsystem after it has been built!"
+            )
+
         if client not in self.clients:
             self.clients.append(client)
 

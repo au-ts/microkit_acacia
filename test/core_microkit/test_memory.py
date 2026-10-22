@@ -8,15 +8,13 @@ import pytest
 
 from acacia.arch import LargePage, aarch64, x86_64
 from acacia.memory import IOAddressSpace, IOMap, Map, MemoryRegion
+from acacia.system import AcaciaSystemError, System, SystemState
 
 
 @pytest.fixture
 def sdf():
     """A stand-in System for entity constructors."""
-    sdf = MagicMock(name="sdf")
-
-    sdf.arch = aarch64
-    return sdf
+    return System(aarch64, paddr_top=0x10000000)
 
 
 class TestMemoryRegion:
@@ -279,3 +277,41 @@ class TestMapLargePageWarning:
         Map(mr, 0x4000_2000, "rw")
         out = capsys.readouterr().out
         assert "could be optimised to a large page" not in out
+
+
+class TestMemoryStateConstraints:
+    def test_memory_region_creation_fails_after_final(self, sdf):
+        sdf.state = SystemState.FINAL
+        with pytest.raises(
+            AcaciaSystemError, match="System is finalised, cannot add Microkit objects!"
+        ):
+            MemoryRegion(sdf, "test", 0x1000)
+
+    def test_map_creation_fails_after_final(self, sdf):
+        # Setup: Create a region while allowed
+        mr = MemoryRegion(sdf, "test", 0x1000)
+
+        # Transition to FINAL
+        sdf.state = SystemState.FINAL
+        with pytest.raises(
+            AcaciaSystemError, match="System is finalised, cannot add Microkit objects!"
+        ):
+            Map(mr, 0x40000000, "rw")
+
+    def test_iomap_creation_fails_after_final(self, sdf):
+        # Setup: Create a region while allowed
+        mr = MemoryRegion(sdf, "test", 0x1000)
+
+        # Transition to FINAL
+        sdf.state = SystemState.FINAL
+        with pytest.raises(
+            AcaciaSystemError, match="System is finalised, cannot add Microkit objects!"
+        ):
+            IOMap(mr, 0x40000000)
+
+    def test_io_address_space_creation_fails_after_final(self, sdf):
+        sdf.state = SystemState.FINAL
+        with pytest.raises(
+            AcaciaSystemError, match="System is finalised, cannot add Microkit objects!"
+        ):
+            IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")

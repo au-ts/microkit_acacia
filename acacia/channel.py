@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .pd import ProtectionDomain
-from .system import System
+from .system import AcaciaSystemError, System
 
 
 class Channel:
@@ -29,6 +29,12 @@ class Channel:
             return f"<Channel.End for PD={self.pd.name} w/ {perms}>"
 
     def __init__(self, sdf: System, end_a: End, end_b: End):
+        # Sanity: check that system is not final. We don't allow allocation of any type
+        #         once the system is assembled, or we risk failing to include things in
+        #         the XML!
+        if not sdf.microkit_alloc_allowed:
+            raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
+
         self.end_a = end_a
         self.end_b = end_b
         self.sdf = sdf
