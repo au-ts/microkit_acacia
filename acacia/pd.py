@@ -1,13 +1,14 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-from typing import Optional, Set, Union, List, Sequence
-from dataclasses import dataclass
-from abc import ABC
 import xml.etree.ElementTree as et
-from .system import System
-from .memory import MemoryRegion, Map
+from abc import ABC
+from dataclasses import dataclass
+from typing import List, Optional, Sequence, Set, Union
+
 from .irq import IRQ
+from .memory import Map, MemoryRegion
+from .system import AcaciaSystemError, System, SystemState
 from .x86 import IOPort
 
 MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel IDs
@@ -287,7 +288,15 @@ class ProtectionDomain(Entity):
     def allocate_id(self, requested_id: Optional[int] = None):
         """
         Allocate an ID (or test a requested id) for a channel or IRQ.
+
+        An ID may be requested while the system is in the "specification" stage ... i.e. before
+        a terminal action has been called and Acacia begins to assemble subsystems.
         """
+        if not self.sdf.manual_alloc_allowed:
+            raise AcaciaSystemError(
+                "Manual allocation of IDs is not allowed after assembly begins!"
+            )
+
         allocated_irq_ids = [irq.id for irq in self.irqs if irq.id is not None]
         allocated_ch_ids = [
             end.ch_id
@@ -320,6 +329,11 @@ class ProtectionDomain(Entity):
         if desired_id is None:
             new_id = next(i for i in range(MAX_IDS) if i not in assigned_ids)
         else:
+            if not self.sdf.manual_alloc_allowed:
+                raise AcaciaSystemError(
+                    "Manual allocation of IDs is not allowed after assembly begins!"
+                )
+
             if desired_id not in assigned_ids:
                 new_id = desired_id
             else:
@@ -334,6 +348,11 @@ class ProtectionDomain(Entity):
         if child_id is None:
             new_child_id = next(i for i in range(MAX_IDS) if i not in assigned_ids)
         else:
+            if not self.sdf.manual_alloc_allowed:
+                raise AcaciaSystemError(
+                    "Manual allocation of IDs is not allowed after assembly begins!"
+                )
+
             if child_id not in assigned_ids:
                 new_child_id = child_id
             else:

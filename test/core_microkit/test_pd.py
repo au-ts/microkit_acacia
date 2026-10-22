@@ -1,15 +1,17 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-import pytest
 import xml.etree.ElementTree as et
-from unittest.mock import MagicMock, patch
-from acacia.pd import ProtectionDomain, SchedulingProperties, MAX_IDS, VirtualMachine
-from acacia.memory import MemoryRegion, Map
+from unittest.mock import MagicMock
+
+import pytest
+
+from acacia.arch import aarch64, x86_64
 from acacia.channel import Channel
 from acacia.irq import ConventionalIRQ
-from acacia.system import System
-from acacia.arch import aarch64, x86_64
+from acacia.memory import Map, MemoryRegion
+from acacia.pd import MAX_IDS, ProtectionDomain, SchedulingProperties, VirtualMachine
+from acacia.system import AcaciaSystemError, System, SystemState
 
 
 @pytest.fixture
@@ -555,3 +557,51 @@ class TestCreateAutomap:
         m = pd.create_automap(gap_mr, "rw")
         assert m.vaddr >= m1.end_vaddr + 0x1000
         assert m.end_vaddr + 0x1000 <= m2.vaddr
+
+
+class TestProtectionDomainStateConstraints:
+    def test_allocate_id_fails_after_specification(self, sdf):
+        pd = ProtectionDomain(sdf, "pd", "test.elf")
+
+        # Move to ASSEMBLY stage
+        sdf.state = SystemState.ASSEMBLY
+
+        # Test manual allocation (specific ID)
+        with pytest.raises(
+            AcaciaSystemError,
+            match="Manual allocation of IDs is not allowed after assembly begins!",
+        ):
+            pd.allocate_id(requested_id=5)
+
+        # Test auto allocation (None)
+        with pytest.raises(
+            AcaciaSystemError,
+            match="Manual allocation of IDs is not allowed after assembly begins!",
+        ):
+            pd.allocate_id()
+
+    def test_add_ioport_specific_id_fails_after_specification(self, sdf):
+        pd = ProtectionDomain(sdf, "pd", "test.elf")
+        sdf.state = SystemState.ASSEMBLY
+
+        # Create an IOPort with a desired ID
+        from acacia.x86 import IOPort  # Assuming IOPort is available
+
+        ioport = IOPort(0x1000, 0x1000, id=1)
+
+        with pytest.raises(
+            AcaciaSystemError,
+            match="Manual allocation of IDs is not allowed after assembly begins!",
+        ):
+            pd.add_ioport(ioport)
+
+    def test_add_child_pd_specific_id_fails_after_specification(self, sdf):
+        pd = ProtectionDomain(sdf, "pd", "test.elf")
+        child = ProtectionDomain(sdf, "child", "child.elf")
+        sdf.state = SystemState.ASSEMBLY
+
+        with pytest.raises(
+            AcaciaSystemError,
+            match="Manual allocation of IDs is not allowed after assembly begins!",
+        ):
+            pd.add_child_pd(child, child_id=10)

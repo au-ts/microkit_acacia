@@ -1,17 +1,21 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
-import pytest
 import xml.etree.ElementTree as et
 from unittest.mock import MagicMock
+
+import pytest
+
+from acacia.arch import aarch64
 from acacia.channel import Channel
 from acacia.pd import ProtectionDomain
+from acacia.system import AcaciaSystemError, System, SystemState
 
 
 @pytest.fixture
 def sdf():
     """A stand-in System for entity constructors."""
-    return MagicMock(name="sdf")
+    return System(aarch64, paddr_top=0x10000000)
 
 
 class TestChannelEnd:
@@ -122,3 +126,20 @@ class TestChannel:
         ends = root.find("channel").findall("end")
         pd1_end = next(e for e in ends if e.get("pd") == "pd1")
         assert pd1_end.get("notify") == "false"
+
+
+class TestChannelStateConstraints:
+    def test_channel_creation_fails_after_final(self, sdf):
+        # Setup: System is in SPECIFICATION (default)
+        pd1 = MagicMock(spec=ProtectionDomain)
+        pd2 = MagicMock(spec=ProtectionDomain)
+        end_a = Channel.End(pd=pd1, can_notify=True, can_pp=False)
+        end_b = Channel.End(pd=pd2, can_notify=True, can_pp=False)
+
+        # Transition to FINAL
+        sdf.state = SystemState.FINAL
+
+        with pytest.raises(
+            AcaciaSystemError, match="System is finalised, cannot add Microkit objects!"
+        ):
+            Channel(sdf, end_a, end_b)
