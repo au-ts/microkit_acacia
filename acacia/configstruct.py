@@ -57,6 +57,8 @@ class Attributes:
         "decl_line",
         "decl_column",
         "data_member_location",
+        "bit_size",
+        "data_bit_offset",
         "upper_bound",
         "count",
         "alignment",
@@ -192,6 +194,8 @@ class Attributes:
                 "decl_line",
                 "decl_column",
                 "data_member_location",
+                "bit_size",
+                "data_bit_offset",
                 "upper_bound",
                 "count",
                 "alignment",
@@ -315,7 +319,7 @@ class CType:
     required_attributes = {
         "base_tag": ("encoding", "byte_size"),
         "typedef_tag": ("name", "type"),
-        "member_tag": ("data_member_location", "name", "type"),
+        "member_tag": ("name", "type"),
         "array_tag": ("type",),
     }
 
@@ -880,7 +884,11 @@ class ConfigStructResolver:
                     )
 
                 # Every structure tag member must have a specified data member location
-                if None in set(m.attributes.data_member_location for m in member_types):
+                if any(
+                    m.attributes.bit_size is not None
+                    or m.attributes.data_member_location is None
+                    for m in member_types
+                ):
                     raise ValueError(
                         f"Structure type '{c_type}' has member without offset location, struct bit fields are not supported."
                     )
