@@ -9,6 +9,7 @@ grammar = r"""
                     | null "\n"
                     | single
                     | group
+                    | forward_declaration
 
     id : "0x" HEX_ID
 
@@ -18,20 +19,22 @@ grammar = r"""
 
     unknown_tag : id ":" "DW_TAG_" _IGNORE_UNTIL_NEWLINE ["\n" _IGNORE_UNTIL_NEWLINE]+ "\n\n"
 
+    ?forward_declaration: group_tag "DW_AT_declaration" "(true)\n\n"
+
     single :          id ":" "DW_TAG_base_type\n" attribute* "\n" -> base_tag
                     | id ":" "DW_TAG_typedef\n" attribute* "\n" -> typedef_tag
                     | id ":" "DW_TAG_pointer_type\n" attribute* "\n" -> pointer_tag
 
-    group_tag :       id ":" "DW_TAG_array_type\n" attribute* "\n" -> array_tag
-                    | id ":" "DW_TAG_enumeration_type\n" attribute* "\n" -> enumeration_tag
-                    | id ":" "DW_TAG_union_type\n" attribute* "\n" -> union_tag
-                    | id ":" "DW_TAG_structure_type\n" attribute* "\n" -> structure_tag
+    group_tag :       id ":" "DW_TAG_array_type\n" attribute* -> array_tag
+                    | id ":" "DW_TAG_enumeration_type\n" attribute* -> enumeration_tag
+                    | id ":" "DW_TAG_union_type\n" attribute* -> union_tag
+                    | id ":" "DW_TAG_structure_type\n" attribute* -> structure_tag
 
     member_tag :      id ":" "DW_TAG_member\n" attribute* "\n" -> member_tag
                     | id ":" "DW_TAG_subrange_type\n" attribute* "\n" -> subrange_tag
                     | id ":" "DW_TAG_enumerator\n" attribute* "\n" -> enumerator_tag
 
-    group : group_tag (member_tag | group)+ null "\n"
+    group : group_tag "\n" (member_tag | group)+ null "\n"
 
     attribute : "DW_AT_" at_name "(" at_value ")\n"
 
@@ -44,6 +47,8 @@ grammar = r"""
                     | "decl_column"
                     | "sibling"
                     | "data_member_location"
+                    | "bit_size"
+                    | "data_bit_offset"
                     | "upper_bound"
                     | "count"
                     | "alignment"
