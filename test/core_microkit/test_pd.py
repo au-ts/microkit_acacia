@@ -10,7 +10,12 @@ from acacia.arch import aarch64, x86_64
 from acacia.channel import Channel
 from acacia.irq import ConventionalIRQ
 from acacia.memory import Map, MemoryRegion
-from acacia.pd import MAX_IDS, ProtectionDomain, SchedulingProperties, VirtualMachine
+from acacia.pd import (
+    ProtectionDomain,
+    SchedulingProperties,
+    MAX_IDS,
+    VirtualMachine,
+)
 from acacia.system import AcaciaSystemError, System, SystemState
 
 

@@ -1,14 +1,15 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+from __future__ import annotations
 import xml.etree.ElementTree as et
-from abc import ABC
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Set, Union
 
 from .irq import IRQ
 from .memory import Map, MemoryRegion
 from .system import AcaciaSystemError, System, SystemState
+from .cspace import CapMap, MicrokitCSpace
 from .x86 import IOPort
 
 MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel IDs
@@ -254,6 +255,9 @@ class ProtectionDomain(Entity):
         # VM
         self.vms: List[VirtualMachine] = []
 
+        # Microkit cap map
+        self.cspace: "MicrokitCSpace" = MicrokitCSpace()
+
         # Allocate ourselves to SDF
         self.sdf._add_pd(self)
 
@@ -282,6 +286,7 @@ class ProtectionDomain(Entity):
             c.render(pd)
         for vm in self.vms:
             vm.render(pd)
+        self.cspace.render(pd)
 
         return pd
 
@@ -373,6 +378,9 @@ class ProtectionDomain(Entity):
             if len(self.vms) > 0:
                 raise ValueError("x86 systems do not support multiple VMs per PD!")
         self.vms.append(vm)
+
+    def add_cap_map(self, cap_map: "CapMap"):
+        self.cspace.add_cap_map(cap_map)
 
     def __repr__(self):
         return f"<ProtectionDomain {self.name} prio={self.priority} w/ image {self.prog_image}>"
