@@ -188,6 +188,7 @@ class VirtualMachine(Entity):
         """
         A representation of a Microkit virtual CPU (VCPU) used by a virtual machine.
         """
+
         id: int
         cpu: Optional[int] = None
 

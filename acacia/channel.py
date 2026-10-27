@@ -30,6 +30,7 @@ class Channel:
                    assignment of ID=0. We may defer automatic assignment to Acacia build time
                    (as is the case with MR paddrs) in the future.
     """
+
     @dataclass
     class End:
         """
@@ -43,6 +44,7 @@ class Channel:
 
         If using this class in a subsystem build hook, you should NEVER manually assign IDs.
         """
+
         pd: ProtectionDomain
         can_notify: bool = True
         can_pp: bool = False

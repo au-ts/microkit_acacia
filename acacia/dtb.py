@@ -145,6 +145,7 @@ class DTBNode:
     """
     A representation of a Device Tree node as discovered at runtime.
     """
+
     offset: int
     path: str
 

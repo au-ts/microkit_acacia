@@ -242,6 +242,7 @@ class IOMap:
     NOTE: this currently lacks some of the features of `Map`.
     https://github.com/au-ts/microkit_acacia/issues/34
     """
+
     def __init__(
         self,
         mr: MemoryRegion,

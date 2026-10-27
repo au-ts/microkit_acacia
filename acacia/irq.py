@@ -26,6 +26,7 @@ class IRQ:
     Note: it is possible for explicitly assigned IDs to clash (possibly with automatically
           -generated ones!). In almost all cases, you should use automatic allocation.
     """
+
     class Trigger(Enum):
         EDGE = 1
         LEVEL = 2
@@ -98,6 +99,7 @@ class IrqIoapic(IRQ):
 
     If using this class in a subsystem build hook, you should NEVER manually assign IDs.
     """
+
     class Polarity(Enum):
         ACTIVEHIGH = 1
         ACTIVELOW = 2
@@ -162,6 +164,7 @@ class IrqMsi(IRQ):
 
     If using this class in a subsystem build hook, you should NEVER manually assign IDs.
     """
+
     def __init__(
         self,
         pci_bus: int,

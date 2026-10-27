@@ -7,18 +7,18 @@ from typing import Optional
 
 class IOPort:
     """
-    A representation of an x86 IOPort.
+        A representation of an x86 IOPort.
 
-    This object is a thin wrapper around the Microkit object.
+        This object is a thin wrapper around the Microkit object.
 
-Similarly to IRQs and channel end IDs, an explicit ID may be optionally
-    given when constructing this class. If it is not given, it will be automatically
-    assigned when adding it to a ProtectionDomain.
+    Similarly to IRQs and channel end IDs, an explicit ID may be optionally
+        given when constructing this class. If it is not given, it will be automatically
+        assigned when adding it to a ProtectionDomain.
 
-    If using this class in a subsystem build hook, you should NEVER manually assign IDs.
+        If using this class in a subsystem build hook, you should NEVER manually assign IDs.
 
-    Note: it is possible for explicitly assigned IDs to clash (possibly with automatically
-          -generated ones!). In almost all cases, you should use automatic allocation.
+        Note: it is possible for explicitly assigned IDs to clash (possibly with automatically
+              -generated ones!). In almost all cases, you should use automatic allocation.
     """
 
     def __init__(self, addr: int, size: int, id: Optional[int] = None):
