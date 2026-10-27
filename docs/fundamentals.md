@@ -1,3 +1,9 @@
+<!--
+    Copyright 2026, UNSW
+
+    SPDX-License-Identifier: BSD-2-Clause
+-->
+
 # Fundamentals of Acacia
 
 This page describes the fundamental ideas behind Acacia and how to use it.
@@ -34,6 +40,10 @@ Modules consist of:
 * (possibly) other system-specific configuration such as sDDF driver configurations or device tree info.
 
 Acacia offers a *Subsystem* abstraction that supports all of the above except for compilation of source code (currently).
+
+Every metaprogram must contain at least one *System*, a representation of the entire OS image we are building. This contains
+all [Microkit Primitives](#microkit-primitives) and all *Subsystem*s we will use. **You can think of
+the `System` as a high-level representation of the Microkit XML file.**
 
 **To learn how to write subsystems, please start by reading [the Subsystem Programming model guide](./subsystem_model.md).** This is very important, as there are some potential foot-guns in this process. We have made an effort to minimise them and keep the process as simple as possible however.
 

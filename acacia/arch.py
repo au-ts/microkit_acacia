@@ -17,6 +17,7 @@ class PageSize:
     A representation a page size in a Microkit system. This is a simple dataclass
     that keeps a size, name, and a set of utility methods in one place.
     """
+
     name: str
     size_bytes: int
 
