@@ -54,7 +54,8 @@ class Subsystem(ABC):
 
     Subsystems may have no clients if the superclass is instantiated with `allow_clients=False`.
     This allows representing arbitrary modules, or possibly modules that instrument some other
-    subsystem, or maybe only a single client (see `sddf.acacia_sddf.ipstacks.py`).
+    subsystem, or maybe only a single client
+    (see `https://github.com/au-ts/sddf/blob/main/acacia_sddf/ipstacks.py`).
 
     When a subsystem is built by Acacia:
         1. All build hooks are executed in top-to-bottom order within the class, or MRO for
@@ -81,7 +82,8 @@ class Subsystem(ABC):
         c. Add the driver as a client to the timer subsystem in `__init__`.
 
     You should never add clients to other subsystems in a build hook as this may lead to undefined
-    behaviour!
+    behaviour! E.g. you could add yourself as a client to a subsystem that has already assembled,
+    meaning connections never get made.
 
     ## Why create infrastructure in `__init__`?
 
