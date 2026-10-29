@@ -91,7 +91,9 @@ class ConventionalIRQ(IRQ):
 
 class IrqIoapic(IRQ):
     """
-    An x86 IOAPIC IRQ. Unlike Conventional IRQs, these do not have an IRQ number.
+    An x86 I/O APIC IRQ. Like conventional IRQs, these have a unique identifier, which here
+    is the CPU vector the interrupt is delivered to. They also carry the interrupt’s source:
+    which I/O APIC chip and pin it comes from.
 
     Similarly to `Channel` IDs, manually assigned IDs may conflict with automatically assigned
     ones. In the future we may change automatic assignment to only happen after all manual
@@ -155,8 +157,9 @@ class IrqIoapic(IRQ):
 
 class IrqMsi(IRQ):
     """
-    An x86 MSI IRQ. Unlike ConventionalIRQs, these do not have a number or trigger,
-    but rather have bespoke PCI-related fields.
+    An x86 Message Signaled Interrupt (MSI). Like conventional IRQs, these have a unique
+    identifier, which here is the CPU vector the interrupt is delivered to. They also
+    carry the interrupt’s source: which PCI device it comes from.
 
     Similarly to `Channel` IDs, manually assigned IDs may conflict with automatically assigned
     ones. In the future we may change automatic assignment to only happen after all manual

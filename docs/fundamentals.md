@@ -52,7 +52,6 @@ the `System` as a high-level representation of the Microkit XML file.**
 Acacia has several distinct stages, starting with system specification (executing metaprogram) and ending with a terminal action (generating Microkit XML
 or config structs).
 
-0. Declarative file (YAML) executed if present (NOT YET IMPLEMENTED).
 1. Metaprogram begins to execute. (If a declarative file was executed, the metaprogram receives a handle to the `System` and `DeviceTreeBlob` created so far).
   1. Device tree blob is loaded
   2. `System` created, defining board-specific details such as the top of physical memory.
@@ -79,11 +78,6 @@ Terminal actions refer to calls to Acacia's Python interface (in metaprograms or
 Acacia is invoked using a `metaprogram` - a Python script that imports any needed Acacia modules, interacts with your build system
 and specifies the system architecture. In order to make a useful system, you likely will need to use the [seL4 Device Driver Framework (sDDF)](https://github.com/au-ts/sddf)
 to access key drivers like serial and networking. The sDDF examples directory shows many metaprograms of varying complexity and are a good reference.
-
-We are working on two things to improve the ergonomics of Acacia currently:
-1. An Acacia executable `python -m acacia`. This will allow you to invoke metaprograms without boilerplate like passing in device tree blobs.
-2. An Acacia declarative YAML interface, enabling structural descriptions of projects without needing a metaprogram. These will be loaded using the Acacia executable.
-3. Mixed usage of metaprograms and declarative files, where the declarative file runs first and hands off the current system architecture to the metaprogram for further changes.
 
 Irrespective of your method to use Acacia, the fundamental tools are the same.
 
@@ -123,3 +117,10 @@ This is principally useful for writing drivers and configuring the system based 
 
 In most cases, you will not need to directly interact with the device tree parser. If you are using the sDDF, it is able
 to handle all device tree interactions for you for all included drivers.
+
+## Future work
+
+We are working on two things to improve the ergonomics of Acacia currently:
+1. An Acacia executable `python -m acacia`. This will allow you to invoke metaprograms without boilerplate like passing in device tree blobs.
+2. An Acacia declarative YAML interface, enabling structural descriptions of projects without needing a metaprogram. These will be loaded using the Acacia executable.
+3. Mixed usage of metaprograms and declarative files, where the declarative file runs first and hands off the current system architecture to the metaprogram for further changes.

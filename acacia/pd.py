@@ -18,7 +18,7 @@ MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel
 @dataclass
 class SchedulingProperties:
     """
-    Properties of an entity (PD or VM) for the seL4 scheduler.
+    Properties of an entity (PD or VM) for the seL4 MCS scheduler.
     https://docs.sel4.systems/projects/microkit/manual/latest/#scheduling
     """
 
@@ -421,8 +421,8 @@ class ProtectionDomain(Entity):
 
         NOTE:
         * On x86, VMs do not have scheduling properties.
-        * On x86, a PD may only host a single VM. On other architectures they may host
-          multiple.
+        * On x86, a PD may only host a VM with a single VCPU. On other architectures they may host
+          a VM with multiple VCPUs.
         """
         assert isinstance(vm, VirtualMachine)
         # If we are targeting x86, scheduling properties are not allowed. We also can only have one
