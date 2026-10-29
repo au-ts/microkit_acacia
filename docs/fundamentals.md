@@ -118,7 +118,7 @@ I.e.
 
 ### Device tree parsing
 
-Acacia has a [Device Tree Parser](./devicetree.md) to help you extract pertinent information from the device tree for your work.
+Acacia has a Device Tree Parser to help you extract pertinent information from the device tree for your work.
 This is principally useful for writing drivers and configuring the system based on the target board on RISCV and ARM platforms.
 
 In most cases, you will not need to directly interact with the device tree parser. If you are using the sDDF, it is able
