@@ -32,6 +32,13 @@ If your OS has a non-system-managed Python3 installation, you can skip the virtu
 
 Acacia is not yet on PyPi, but we will upload it once we reach our first stable release.
 
+# Docs
+
+Acacia has a Sphinx site with API documentation and the contents of `./docs`. It is
+automatically deployed on main as a GitHub Pages page for your convenience.
+
+You can build it using the `build_once.sh` and `autobuild.sh` in `./docs`.
+
 ## Examples
 
 The `examples/` subdirectory contains several simple scripts demonstrating the basic functionality of Acacia.
