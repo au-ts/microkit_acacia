@@ -102,14 +102,11 @@ class Entity:
         Given a memory region, automatically create a map and assign it a vaddr
         that doesn't overlap with any existing maps. This function will automatically
         try to align the vaddr to the largest suitable page size boundary.
+        Maps are allocated upwards from this PD's `map_start_vaddr`.
 
-        Args:
-            mr: MemoryRegion to map
-            perms: Map permissions - read, write, execute
-            start_vaddr: lowest address to auto-allocate map. Default: 0x20_000_000
-
-        Returns:
-            Map: created map object.
+        :param mr: MemoryRegion to map
+        :param perms: Map permissions - read, write, execute
+        :returns: created map object.
 
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
         """

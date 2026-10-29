@@ -136,9 +136,11 @@ class Attributes:
     def extract_attribute(self, tree: Tree):
         """
         Given an attribute tree of the form:
-            attribute
-                at_name	name
-                escaped_string	"i2c_cmd_t"
+        ```text
+        attribute
+            at_name	name
+            escaped_string	"i2c_cmd_t"
+        ```
         extract the value of the attribute.
         """
         if tree.data != "attribute":
@@ -265,17 +267,17 @@ class CType:
 
     or
 
-      base_tag
-        id	0000002b
-        attribute
-          at_name	name
-          escaped_string	"DW_ATE_unsigned_32"
-        attribute
-          at_name	encoding
-          string	DW_ATE_unsigned
-        attribute
-          at_name	byte_size
-          number	0x04
+        base_tag
+          id	0000002b
+          attribute
+            at_name	name
+            escaped_string	"DW_ATE_unsigned_32"
+          attribute
+            at_name	encoding
+            string	DW_ATE_unsigned
+          attribute
+            at_name	byte_size
+            number	0x04
 
     or
 
@@ -330,15 +332,13 @@ class CType:
 
     def __init__(self, entry_tree: Tree, type_collector: Dict[int, CType]):
         """
-        Properties:
-            tag_type: type of tag entry, must be a member of special_tags,
-                single_tags, member_tags or group_tags
-            id: numeric identifier
-            attributes: tag entry attribute values
-            members: IDs of member tags, non-empty only for group_tag types
-        Args:
-            entry_tree: The lark tree corresponding to the tag
-            type_collector: A dictionary of ID to CType mappings of all the CTypes found in the parsed tree from
+        :ivar tag_type: type of tag entry, must be a member of special_tags,
+            single_tags, member_tags or group_tags
+        :ivar id: numeric identifier
+        :ivar attributes: tag entry attribute values
+        :ivar members: IDs of member tags, non-empty only for group_tag types
+        :param entry_tree: The lark tree corresponding to the tag
+        :param type_collector: A dictionary of ID to CType mappings of all the CTypes found in the parsed tree from
         """
 
         self.collector: Dict[int, CType] = type_collector
@@ -630,15 +630,14 @@ class ConfigStruct:
         empty: bool = False,
     ):
         """
-        Args:
-            fields: dictionary of field names -> values. Can be:
-                a. Another ConfigStruct
-                b. Any int-like value
-                c. Any string or bytes
-                d. A list of values
-            type_name: type of struct in C
-            section_name: name of section to patch config struct into
-            target_file: ELF file this will be patched into
+        :param fields: dictionary of field names -> values. Can be:
+            * Another ConfigStruct
+            * Any int-like value
+            * Any string or bytes
+            * A list of values
+        :param type_name: type of struct in C
+        :param section_name: name of section to patch config struct into
+        :param target_file: ELF file this will be patched into
         """
         self.empty = empty
         if self.empty and len(fields):
@@ -704,11 +703,10 @@ class ConfigStructResolver:
         dwarfdump_name: str = "llvm-dwarfdump",
     ):
         """
-        Args:
-            build_dir: name of the build directory, used for emitting serialised
-                structs
-            endian: endianness of encoding
-            dwarfdump_name: name of dwarf dump command
+        :param build_dir: name of the build directory, used for emitting serialised
+            structs
+        :param endian: endianness of encoding
+        :param dwarfdump_name: name of dwarf dump command
         """
         if endian != "little":
             raise NotImplementedError("Big endian is not currently supported!")
