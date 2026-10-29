@@ -142,7 +142,7 @@ You should always create as many of your infrastructure Microkit elements  as po
 * It allows more flexibility - anything you create at `__init__()` can be directly manipulated in the metaprogram. This is handy for experimentation, e.g. changing priorities.
 * It makes it easy to add parts of your infrastructure as clients to other servers (more in server-server dependencies section below).
 
-In some cases, it is not possible to make everything right away. The infrastructure might depend on your clients somehow, and you cannot know these at `__init__`. 
+In some cases, it is not possible to make everything right away. The infrastructure might depend on your clients somehow, and you cannot know these at `__init__`.
 You should use a *build hook* to manage such cases. We will discuss this once we introduce clients in [Adding Clients](#adding-clients).
 
 
@@ -176,7 +176,7 @@ All you need to do in Acacia is to specify the mapping between **names of fields
             ConfigStruct(
             # Define struct field name -> python val map
             {
-                "secret_number" : self.secret 
+                "secret_number" : self.secret
             },
             # Which compiled ELF file do we patch?
             target_file = self.server_pd.prog_image,
@@ -219,7 +219,7 @@ This method is defined by `Subsystem()` and will simply add the PD to a list in 
 
 (Note: if the subsystem is initialised with `allow_clients=False` this method will be disabled.)
 
-Instead, we must use a **build hook** ... a method that is run at the [assembly phase](#assembly-phase). 
+Instead, we must use a **build hook** ... a method that is run at the [assembly phase](#assembly-phase).
 
 #### Build hooks
 
@@ -299,7 +299,7 @@ def connect_clients(self):
         # Check config here
         if self.client_configs[c]:
             ...
-    
+
 ```
 
 **In most cases...** you should do nothing other than keep a reference to the client config in the initialisation phase. Create all Microkit objects etc. in a build hook, not in `add_client()`. This is because...
@@ -347,7 +347,7 @@ class YourSubsystem(Subsystem):
         ...
 ```
 
-Acacia will [always run the build hooks of 
+Acacia will [always run the build hooks of
 Subsystems in the order they are declared](#assembly-phase). We have a tension here...
 * We want to take a reference to the other subsystem right away, to ensure the we have our dependency, but,
 * Our dependent subsystem will build before us, so we cannot safely add ourselves as a client in the assembly phase.

@@ -45,7 +45,7 @@ Every metaprogram must contain at least one *System*, a representation of the en
 all [Microkit Primitives](#microkit-primitives) and all *Subsystem*s we will use. **You can think of
 the `System` as a high-level representation of the Microkit XML file.**
 
-**To learn how to write subsystems, please start by reading [the Subsystem Programming model guide](./subsystem_model.md).** This is very important, as there are some potential foot-guns in this process. We have made an effort to minimise them and keep the process as simple as possible however.
+**To learn how to write subsystems, please start by reading [the Subsystem Programming model guide](./subsystems.md).** This is very important, as there are some potential foot-guns in this process. We have made an effort to minimise them and keep the process as simple as possible however.
 
 ## Acacia's build process
 
@@ -63,8 +63,8 @@ or config structs).
     1. All subsystems are constructed - i.e. their `build` method is invoked. All of their build-time methods (annotated with `@build_hook`) are executed.
     2. Acacia allocates all undefined fields in Microkit primitives. Currently, this only includes physical addresses of MRs that are not assigned yet. In the future we may add support to do this for channel IDs and virtual addresses, but these are not strictly required to express modules.
 
-    **Note**: the order in which subsystems are constructed is important. Acacia's imperative Python interface encourages expressing dependencies in an 
-  
+    **Note**: the order in which subsystems are constructed is important. Acacia's imperative Python interface encourages expressing dependencies in an
+
 4. If requested, all config structs are generated automatically by calling `Subsystem.generate_config_structs()` for each subsystem. In the metaprogram, this happens when calling `create_config_struct`.
 
 ### Terminal actions
@@ -72,7 +72,7 @@ or config structs).
 Terminal actions refer to calls to Acacia's Python interface (in metaprograms or other tooling) which cause Acacia to assemble the system.
  calling EITHER `create_config_structs` or `generate_xml` has the same effect, and calling both
       will never cause a repeated build of the system. You can use both, or just one.
-  
+
 
 ## Using Acacia
 

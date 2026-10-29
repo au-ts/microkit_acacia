@@ -24,11 +24,10 @@ class DTB_IRQ_Controller(ABC):
     def create(arch: Arch, dtb: "DeviceTreeBlob"):
         """
         Create an instance of the interrupt controller based upon the Device Tree Blob.
-        Args:
-            arch: Arch - Target system architecture, e.g. aarch64
-            dtb: DeviceTreeBlob - DTB for target system
-        Returns:
-            DTB_IRQ_Controller instance.
+
+        :param arch: Target system architecture, e.g. aarch64
+        :param dtb: DTB for target system
+        :returns: `DTB_IRQ_Controller` instance.
         """
         ...
 
@@ -204,7 +203,7 @@ class DeviceTreeBlob:
             ]
         return []
 
-    def get_nodes_by_compatible(self, compatible_str: str) -> List[DTBNode]:
+    def get_nodes_by_compatible(self, compatible_str) -> List[DTBNode]:
         """
         Try find a node with a matching compatible string.
         """
@@ -221,7 +220,7 @@ class DeviceTreeBlob:
             path_str = "/" + path_str
         return DTBNode(self.fdt.path_offset(path_str), path_str)
 
-    def get_node_prop(self, node: DTBNode, prop_name: str) -> bytearray | None:
+    def get_node_prop(self, node: DTBNode, prop_name: str):
         """
         Get a property from a DTB node given a property name. This will
         return the raw contents of the property as a bytearray.
@@ -241,8 +240,8 @@ class DeviceTreeBlob:
     def get_size_and_addr_cells(self, node: DTBNode) -> Tuple[int, int]:
         """
         Get the size and addr cells values of a node (node its parent).
-        Returns:
-            Tuple[int,int]: (size cells, addr cells)
+
+        :returns: `(size cells, addr cells)`
         """
         if self.fdt.hasprop(node.offset, "#size-cells"):
             out_size = self.get_node_prop(node, "#size-cells").as_uint32()
@@ -257,7 +256,7 @@ class DeviceTreeBlob:
 
         return (out_size, out_addr)
 
-    def get_node_regs(self, node: DTBNode) -> List[Tuple[int, int]]:
+    def get_node_regs(self, node: DTBNode) -> List[Tuple]:
         """
         Given a node, read its regs array and return a list of tuples.
         Tuples are (addr, len) pairs. This method automatically parses
