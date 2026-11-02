@@ -1,10 +1,13 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+import os
+import pathlib
 from typing import Optional, List
 from acacia import (
     ProtectionDomain,
     Subsystem,
+    SubsystemBuildError,
     Channel,
     Map,
     MemoryRegion,
@@ -44,7 +47,7 @@ def DeviceResourcesFactory(
     magic_str: str,
     maps: List["Map"],
     irq_ids: List[int],
-    target_file: str,
+    pd: ProtectionDomain,
     section_name="device_resources",
 ):
     region_structs = []
@@ -66,7 +69,7 @@ def DeviceResourcesFactory(
         fields,
         "device_resources_t",
         section_name=section_name,
-        target_file=target_file,
+        pd=pd,
     )
 
 
@@ -75,7 +78,7 @@ class DummyI2C(Subsystem):
         super().__init__(sdf, "i2c")
         self.driver = None
         self.sdf = sdf
-        self.magic = "dmi2c"
+        self.magic = "dmi2"
         self.irq_type = irq_type
         self.construct_infrastructure(200)
 
@@ -118,7 +121,7 @@ class DummyI2C(Subsystem):
         # 1. driver just needs resources, ignore real config structs
         # 2. clients just get their config struct
         devresource = DeviceResourcesFactory(
-            self.magic, [self.dev_mem], [self.irq_id], self.driver.prog_image
+            self.magic, [self.dev_mem], [self.irq_id], self.driver
         )
         print(f"dev = {devresource}")
 
@@ -131,13 +134,15 @@ class DummyI2C(Subsystem):
                 fields,
                 "i2c_client_config_t",
                 "i2c_client_config",
-                client_pd.prog_image,
+                client_pd,
             )
 
         # client_structs = [client_struct_factory(c,n) for n,c in enumerate(self.clients)]
         client_structs = []
         return [devresource] + client_structs
 
+
+os.chdir(pathlib.Path(__file__).parent / "dummy_configstruct_build")
 
 sdf = System(aarch64, paddr_top=0x100000000)
 
@@ -160,20 +165,14 @@ for c in [client1, client2, client3]:
 sdf.assemble()
 
 structs = i2c.generate_config_structs()
-r = ConfigStructResolver("./dummy_configstruct_build")
+r = ConfigStructResolver("./")
 for s in structs:
     print(s)
     r.add_struct(s)
 
-# Test struct dumper
-dumper = r.dwarfdump
-
 # Try resolve our config structs
-print("Dwarf structs matching config of dummy i2c driver:")
-driver_dwarf_structs = dumper.find_struct_and_children(
-    i2c.driver.prog_image, structs[0].typedef_name
-)
-print(driver_dwarf_structs)
+print("Dwarf types parsed from dummy i2c driver:")
+print(f"{len(r.files[i2c.driver.prog_image])} types")
 
 # try find i2c configs structs
-sdf.make_config_structs("./dummy_configstruct_build/")
+sdf.make_config_structs("./")

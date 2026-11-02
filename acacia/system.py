@@ -76,10 +76,17 @@ class System:
     all addresses, IDs, etc. are evaluated before we try save configuration data.
 
     Note: Calling `write_xml_file` will NOT automatically generate config structs.
+
+    `dwarfdump_name` and `objcopy_name` select the LLVM tools used for config structs.
     """
 
     def __init__(
-        self, sys_arch: Arch, paddr_top: int, dtb: Optional[DeviceTreeBlob] = None
+        self,
+        sys_arch: Arch,
+        paddr_top: int,
+        dtb: Optional[DeviceTreeBlob] = None,
+        dwarfdump_name: str = "llvm-dwarfdump",
+        objcopy_name: str = "llvm-objcopy",
     ):
         self.arch = sys_arch
         self.paddr_top = paddr_top
@@ -92,6 +99,13 @@ class System:
         self.subsystems: List[Subsystem] = []
         self.state = SystemState.SPECIFICATION
         self.dtb = dtb
+        self.dwarfdump_name = dwarfdump_name
+        self.objcopy_name = objcopy_name
+        # "are we done patching ELFs?" ... prevent patching/copying twice.
+        self.prog_images_final = False
+        # "did we write XML already?" ... prevent trying to patch/copy ELFs after writing XML.
+        # This is simply because the XML will be invalid if we copy the ELFs after.
+        self.xml_written = True
 
     def _add_pd(self, pd: "ProtectionDomain"):
         self.pds.add(pd)
@@ -234,14 +248,14 @@ class System:
             mr._set_paddr(next_paddr)
 
     def make_config_structs(
-        self, build_dir: pathlib.Path = pathlib.Path("./"), dump: bool = False
+        self,
+        build_dir: pathlib.Path = pathlib.Path("./"),
+        dump: bool = False,
+        patch_elfs: bool = False,
     ):
         """
-        Generate config struct data blobs for all Subsystems and patch them into
-        ELFs if flagged (currently WIP, manual objcopies in Makefile needed for now
-        https://github.com/au-ts/microkit_acacia/issues/47
-        https://github.com/au-ts/microkit_acacia/issues/48
-        )
+        Generate config struct data blobs for all Subsystems and optionally patch them
+        into ELFs.
 
         All data blobs are placed in the provided `build_dir`.
 
@@ -249,17 +263,37 @@ class System:
         named identically to each data blob. This is a helpful way to check if your
         config serialisation works correctly.
 
+        If `patch_elfs=True`, the ELF of each PD with config structs is copied into
+        `build_dir` as `<elf name>_<id(pd)>.elf`, the PD's `prog_image` is updated to the
+        copy and the config struct blobs are objcopied into it. The original ELFs, and any other
+        ELF already in `build_dir`, are never modified. PDs without config structs keep
+        their original `prog_image`. This must be called before `write_xml_file` so the
+        XML refers to the patched copies.
+
+        If you use patching, you must patch BEFORE making XML.
+
         This is a TERMINAL ACTION - it will cause this System to assemble itself and
         prevent any additional elements from being added to the system.
         """
+        if patch_elfs and (self.prog_images_final or self.xml_written):
+            raise AcaciaSystemError(
+                "Cannot patch ELFs after rendering XML or patching ELFs already!"
+            )
         # We can't get config structs until assembled
         if self.state != SystemState.FINAL:
             self.assemble()
         # TODO: support big endian?
-        resolver = ConfigStructResolver(build_dir, endian="little")
+        resolver = ConfigStructResolver(
+            build_dir,
+            endian="little",
+            dwarfdump_name=self.dwarfdump_name,
+            objcopy_name=self.objcopy_name,
+        )
         for s in self.subsystems:
             resolver.add_structs(s.generate_config_structs())
-        resolver.resolve_and_create_all(dump)
+        resolver.resolve_and_create_all(dump, patch_elfs)
+        if patch_elfs:
+            self.prog_images_final = True
 
     def render(self) -> et.Element:
         """
@@ -273,6 +307,7 @@ class System:
         """
         if self.state != SystemState.FINAL:
             self.assemble()
+        self.prog_images_final = True
         system = et.Element("system")
 
         # QoL: sort memory everything by name
@@ -298,6 +333,7 @@ class System:
         This is a TERMINAL ACTION - it will cause this System to assemble itself and
         prevent any additional elements from being added to the system.
         """
+        self.xml_written = True
         xml = self.render()
         et.indent(xml, level=0)
 

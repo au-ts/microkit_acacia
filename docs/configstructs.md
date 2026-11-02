@@ -28,13 +28,58 @@ All `ConfigStruct`s must have:
 
 If a `ConfigStruct` is at the top level, i.e. it is corresponding to a symbol to patch
 as opposed to being a `ConfigStruct` nested inside another `ConfigStruct`, it must define:
-* `target_file`: the name of the ELF file this will be patched into.
+* `pd`: the `ProtectionDomain` whose program image this will be patched into.
 * `section_name`: The name of the ELF section this belongs to.
 
 In the event that a ConfigStruct is unused, or we want to zero-fill a struct inside of another
 `ConfigStruct`, you may set the `empty` field to True. This will cause Acacia to skip trying
 to populate it while suppressing the "missing field" error that would normally appear if you
 ignore fields of a struct.
+
+## Defining and using config structs
+
+Acacia will only generate config structs as part of a [subsystem](./subsystems.md) by
+default. Your subsystem should generate all necessary config structs and return them as
+a list from `Subsystem.generate_config_structs()`.
+
+All config structs from this list must be a top-level config struct ... that is, they define
+a target PD and a section name.
+
+## Generating config structs
+
+`System.make_config_structs` writes every top-level config struct from every registered
+subsystem to `<build_dir>/<ELF name>_<section_name>.data`.
+
+## Patching ELFs
+
+ By default, you must `objcopy` these into your ELFs yourself, e.g.
+
+```
+$(OBJCOPY) --update-section .device_resources=i2c_driver_device_resources.data i2c_driver.elf
+```
+
+Alternatively, pass `patch_elfs=True` and Acacia will do this for you:
+
+```python
+sdf.make_config_structs(build_dir, patch_elfs=True)
+```
+
+Since Acacia is usually run in the same Makefile recipe that builds its input ELFs, it never modifies said
+ELFs since this may confuse Make (it would change mtime!).
+
+Instead, the ELF of each PD with a config struct is copied to `<build_dir>/<ELF name>_<id(pd)>.elf`, the
+PD's `prog_image` is pointed at the copy, and the copy is patched. This means that several PDs sharing one
+ELF can each have different configurations. PDs without config structs keep their original `prog_image`.
+Any ELF in the build directory before Acacia runs is treated as read-only.
+
+**Beware!** This means that your Microkit XML will point to the newly copied ELF file, not the original!
+
+When using Acacia's patching feature, the `program_image` for each PD changes in the XML. 
+Consequently you must call `make_config_structs` before `write_xml_file` if using patching. Acacia will
+enforce this ordering for you by throwing an exception if you try write config structs after the XML.
+
+The `llvm-dwarfdump` and `llvm-objcopy` commands can be changed with the `dwarfdump_name` and
+`objcopy_name` arguments to `System`.
 
 ## Types
 

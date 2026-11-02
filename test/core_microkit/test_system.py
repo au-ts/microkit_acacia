@@ -565,6 +565,87 @@ class TestWriteXmlFile:
         assert content.startswith("<?xml")
 
 
+class TestMakeConfigStructs:
+    """
+    Test that systems correctly guard against invalid terminal actions, e.g.
+    telling Acacia to patch and copy ELF files after making XML (a no-op!)
+
+    (config struct resolver mocked)
+    """
+
+    @pytest.fixture
+    def resolver(self):
+        with patch("acacia.system.ConfigStructResolver") as mock_resolver:
+            yield mock_resolver
+
+    def test_init_flags(self, sys_):
+        assert sys_.prog_images_final is False
+        assert sys_.xml_written is False
+
+    def test_tool_names_passed_to_resolver(self, arch, resolver, tmp_path):
+        sys_ = System(
+            arch, paddr_top=0x8000_0000, dwarfdump_name="dd", objcopy_name="oc"
+        )
+        sys_.make_config_structs(tmp_path)
+
+        resolver.assert_called_once_with(
+            tmp_path, endian="little", dwarfdump_name="dd", objcopy_name="oc"
+        )
+
+    def test_patch_on_fresh_system(self, sys_, resolver, tmp_path):
+        sys_.make_config_structs(tmp_path, patch_elfs=True)
+
+        resolver.return_value.resolve_and_create_all.assert_called_once_with(
+            False, True
+        )
+        assert sys_.prog_images_final is True
+
+    def test_patch_after_manual_assemble(self, sys_, resolver, tmp_path):
+        sys_.assemble()
+        sys_.make_config_structs(tmp_path, patch_elfs=True)
+
+        resolver.return_value.resolve_and_create_all.assert_called_once()
+
+    def test_no_patch_leaves_prog_images_open(self, sys_, resolver, tmp_path):
+        sys_.make_config_structs(tmp_path)
+        assert sys_.prog_images_final is False
+
+        sys_.make_config_structs(tmp_path, patch_elfs=True)
+        assert sys_.prog_images_final is True
+
+    def test_patch_twice_fails(self, sys_, resolver, tmp_path):
+        sys_.make_config_structs(tmp_path, patch_elfs=True)
+        resolver.reset_mock()
+
+        with pytest.raises(AcaciaSystemError, match="Cannot patch ELFs"):
+            sys_.make_config_structs(tmp_path, patch_elfs=True)
+        resolver.assert_not_called()
+
+    def test_patch_after_render_fails(self, sys_, resolver, tmp_path):
+        sys_.render()
+
+        with pytest.raises(AcaciaSystemError, match="Cannot patch ELFs"):
+            sys_.make_config_structs(tmp_path, patch_elfs=True)
+        resolver.assert_not_called()
+
+    def test_patch_after_write_xml_file_fails(self, sys_, resolver, tmp_path):
+        sys_.write_xml_file(tmp_path / "sys.xml")
+        assert sys_.xml_written is True
+
+        with pytest.raises(AcaciaSystemError, match="Cannot patch ELFs"):
+            sys_.make_config_structs(tmp_path, patch_elfs=True)
+        resolver.assert_not_called()
+
+    def test_no_patch_after_write_xml_file(self, sys_, resolver, tmp_path):
+        # Data blobs alone don't change prog images, so they can be made after the XML
+        sys_.write_xml_file(tmp_path / "sys.xml")
+        sys_.make_config_structs(tmp_path)
+
+        resolver.return_value.resolve_and_create_all.assert_called_once_with(
+            False, False
+        )
+
+
 class TestSystemStateProperties:
     # This is a bit silly, but at least it will catch gremlins
     def test_state_progression_properties(self, sys_):

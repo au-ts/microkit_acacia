@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 from collections.abc import Iterable, Sized
 from ctypes import (
@@ -23,11 +24,15 @@ from ctypes import (
     c_uint32,
     c_uint64,
 )
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from lark import Lark, Token, Tree
 
 from .dwarf_dump_grammar import grammar
+
+# To avoid circular imports, we only do a "real" import when type checking.
+if TYPE_CHECKING:
+    from acacia.pd import ProtectionDomain
 
 
 class Attributes:
@@ -611,9 +616,8 @@ class ConfigStruct:
 
     If this `ConfigStruct` is at the top level, i.e. it is corresponding to a symbol to patch
     as opposed to being a `ConfigStruct` nested inside another `ConfigStruct`, it must define:
-    * `target_file`: the name of the ELF file this will be patched into.
+    * `pd`: the `ProtectionDomain` whose program image this will be patched into.
     * `section_name`: The name of the ELF section this belongs to.
-       NOTE: this currently is unused! https://github.com/au-ts/microkit_acacia/issues/48
 
     In the event that a ConfigStruct is unused, or we want to zero-fill a struct inside of another
     `ConfigStruct`, you may set the `empty` field to True. This will cause Acacia to skip trying
@@ -626,7 +630,7 @@ class ConfigStruct:
         fields: Dict[str, Any],
         type_name: Optional[str] = None,
         section_name: Optional[pathlib.Path] = None,
-        target_file: Optional[pathlib.Path] = None,
+        pd: Optional["ProtectionDomain"] = None,
         empty: bool = False,
     ):
         """
@@ -637,7 +641,7 @@ class ConfigStruct:
             * A list of values
         :param type_name: type of struct in C
         :param section_name: name of section to patch config struct into
-        :param target_file: ELF file this will be patched into
+        :param pd: protection domain whose ELF this will be patched into
         """
         self.empty = empty
         if self.empty and len(fields):
@@ -646,7 +650,7 @@ class ConfigStruct:
         self.fields = fields
         self.type_name = type_name
         self.section_name = section_name
-        self.target_file = target_file
+        self.pd = pd
 
     def __repr__(self):
         return f"<ConfigStruct {self.type_name} {self.fields}>"
@@ -693,6 +697,10 @@ class ConfigStructResolver:
     the ELF file. Each serialised struct is then written to a file in the build
     directory.
 
+    If patching is requested, each PD with config structs has its ELF copied into the
+    build directory and the serialised structs are objcopied into that copy. Any ELFs
+    in the build directory when the resolver is created are treated as read-only.
+
     This is an internal class for Acacia and is not used by end users.
     """
 
@@ -701,20 +709,25 @@ class ConfigStructResolver:
         build_dir: pathlib.Path,
         endian="little",
         dwarfdump_name: str = "llvm-dwarfdump",
+        objcopy_name: str = "llvm-objcopy",
     ):
         """
         :param build_dir: name of the build directory, used for emitting serialised
             structs
         :param endian: endianness of encoding
         :param dwarfdump_name: name of dwarf dump command
+        :param objcopy_name: name of objcopy command, used when patching ELFs
         """
         if endian != "little":
             raise NotImplementedError("Big endian is not currently supported!")
 
-        self.build_dir = build_dir
+        self.build_dir = pathlib.Path(build_dir)
         self.dwarfdump_name = dwarfdump_name
-        self.files: Dict[pathlib.Path, Dict[int, CType]] = dict()
+        self.objcopy_name = objcopy_name
+        self.files: Dict[str, Dict[int, CType]] = dict()
         self.config_structs: List[ConfigStruct] = []
+        # Never patch or overwrite ELFs that existed before we started
+        self.read_only_elfs = {p.resolve() for p in self.build_dir.glob("*.elf")}
 
         try:
             subprocess.run([self.dwarfdump_name, "--version"])
@@ -730,15 +743,13 @@ class ConfigStructResolver:
         try:
             if s.section_name is None:
                 raise ValueError("Cannot emit a config struct without a section name!")
-            if s.target_file is None:
-                raise ValueError(
-                    "Cannot patch in a config struct without a target file!"
-                )
+            if s.pd is None:
+                raise ValueError("Cannot patch in a config struct without a PD!")
             if s.type_name is None:
                 raise ValueError("Cannot patch in a config struct without a type name!")
 
-            if s.target_file not in self.files:
-                self.files[s.target_file] = self.resolve_target_file(s.target_file)
+            if s.pd.prog_image not in self.files:
+                self.files[s.pd.prog_image] = self.resolve_target_file(s.pd.prog_image)
         except Exception as e:
             raise RuntimeError(f"Failed to add config struct {s}!") from e
 
@@ -751,7 +762,7 @@ class ConfigStructResolver:
         for s in lst:
             self.add_struct(s)
 
-    def resolve_target_file(self, target_file: pathlib.Path) -> Dict[int, CType]:
+    def resolve_target_file(self, target_file: str) -> Dict[int, CType]:
         """
         Dwarf dump a target file, parse the output and collect all CTypes into a dictionary.
         """
@@ -981,17 +992,71 @@ class ConfigStructResolver:
 
         return out_blob
 
-    def resolve_and_create_all(self, dump: bool = False):
+    def copy_target_elfs(self):
+        """
+        Copy the ELF of every PD with a config struct into the build directory and point
+        the PD's `prog_image` at the copy. PDs sharing an ELF get one copy each, named
+        uniquely with the Python ID of the PD. PDs without config structs are untouched.
+        """
+        pds = {s.pd for s in self.config_structs if s.pd is not None}
+        for pd in sorted(pds, key=lambda p: p.name):
+            elf_copy = f"{pathlib.Path(pd.prog_image).stem}_{id(pd)}.elf"
+            copy_path = self.build_dir / elf_copy
+            if copy_path.resolve() in self.read_only_elfs:
+                raise RuntimeError(
+                    f"Cannot copy {pd.prog_image} to pre-existing ELF {copy_path}!"
+                )
+            shutil.copyfile(pd.prog_image, copy_path)
+            # Copies are identical, so reuse the DWARF types we already parsed
+            self.files[elf_copy] = self.files[pd.prog_image]
+            pd.prog_image = elf_copy
+
+    def patch_elf(self, config_struct: ConfigStruct, blob_path: str):
+        """
+        Objcopy a serialised config struct into its PD's (copied) ELF.
+        """
+        assert config_struct.pd is not None
+        elf_path = self.build_dir / config_struct.pd.prog_image
+        if elf_path.resolve() in self.read_only_elfs:
+            raise RuntimeError(f"Refusing to patch pre-existing ELF {elf_path}!")
+        try:
+            subprocess.run(
+                [
+                    self.objcopy_name,
+                    "--update-section",
+                    f".{config_struct.section_name}={blob_path}",
+                    elf_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                f"No objcopy! Make sure {self.objcopy_name} is on your PATH"
+            ) from e
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"Failed to patch {blob_path} into {elf_path}!\n{e.stderr}"
+            ) from e
+
+    def resolve_and_create_all(self, dump: bool = False, patch_elfs: bool = False):
         """
         Try generate data files for all currently known config structs. Output
         will be placed in `self.build_dir`.
+
+        If `patch_elfs` is set, each PD's ELF is copied (see `copy_target_elfs`) and
+        the data files are objcopied into the copies.
         """
+        if patch_elfs:
+            self.copy_target_elfs()
+
         for config_struct in self.config_structs:
             # These error checks aren't actually needed, since this is prevented by now. Do it anyway
             # to satisfy MyPy
-            if config_struct.target_file is None:
+            if config_struct.pd is None:
                 raise RuntimeError(
-                    f"Top level config struct {config_struct} has no target file!"
+                    f"Top level config struct {config_struct} has no PD!"
                 )
             if config_struct.type_name is None:
                 raise RuntimeError(
@@ -999,7 +1064,7 @@ class ConfigStructResolver:
                 )
 
             c_type = CType.find_type_by_name(
-                self.files[config_struct.target_file], config_struct.type_name
+                self.files[config_struct.pd.prog_image], config_struct.type_name
             )
             try:
                 blob = self._flatten_and_write(config_struct, c_type)
@@ -1007,7 +1072,7 @@ class ConfigStructResolver:
                 raise Exception(
                     f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{c_type}'`"
                 ) from e
-            blob_name = f"{str(config_struct.target_file).removesuffix('.elf')}_{config_struct.section_name}.data"
+            blob_name = f"{config_struct.pd.prog_image.removesuffix('.elf')}_{config_struct.section_name}.data"
             blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
                 f.write(blob)
@@ -1019,7 +1084,8 @@ class ConfigStructResolver:
                         {
                             "type_name": config_struct.type_name,
                             "section_name": str(config_struct.section_name),
-                            "target_file": str(config_struct.target_file),
+                            "pd": config_struct.pd.name,
+                            "prog_image": config_struct.pd.prog_image,
                             "empty": config_struct.empty,
                             "fields": {
                                 name: _value_to_jsonable(value)
@@ -1030,6 +1096,9 @@ class ConfigStructResolver:
                         indent=2,
                     )
                     f.write("\n")
+
+            if patch_elfs:
+                self.patch_elf(config_struct, blob_path)
 
 
 def _value_to_jsonable(value: Any) -> Any:

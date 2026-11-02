@@ -123,7 +123,7 @@ class YourSubsystem(Subsystem):
             {
                 "secret_number" : self.secret
             },
-            target_file = self.server_pd.prog_image,
+            pd = self.server_pd,
             section_name = "server_config"
             type_name = "secretServerConfig_t"
             )
@@ -178,8 +178,8 @@ All you need to do in Acacia is to specify the mapping between **names of fields
             {
                 "secret_number" : self.secret
             },
-            # Which compiled ELF file do we patch?
-            target_file = self.server_pd.prog_image,
+            # Which PD's compiled ELF file do we patch?
+            pd = self.server_pd,
             # Which section in the ELF?
             section_name = "server_config",
             # What is the name of the struct type, for sanity checking?
@@ -259,7 +259,7 @@ We've got an ID for each client, now we must get it to them! We can extend our `
             {
                 "secret_number" : self.secret
             },
-            target_file = self.server_pd.prog_image,
+            pd = self.server_pd,
             section_name = "server_config"
             type_name = "secretServerConfig_t"
             )
@@ -268,7 +268,7 @@ We've got an ID for each client, now we must get it to them! We can extend our `
                 {
                     secret_ch : self.client_channels[c]
                 },
-                target_file = c.prog_image,
+                pd = c,
                 section_name = "secret_ch",
                 type_name = "secretClientConfig_t"
             )
