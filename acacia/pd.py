@@ -155,7 +155,8 @@ class Entity:
             if self.scheduling.passive:
                 entity.set("passive", "true")
 
-        entity.set("priority", str(self.priority))
+        if self.priority is not None:
+            entity.set("priority", str(self.priority))
         if self.period is not None:
             entity.set("period", str(self.period))
         if self.budget is not None:
