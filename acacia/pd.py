@@ -150,15 +150,12 @@ class Entity:
         """
         entity = et.SubElement(parent, elem_name)
         entity.set("name", str(self.name))
-        if self.scheduling is None:
-            raise RuntimeError(
-                "Cannot render an entity without a SchedulingProperties!"
-            )
+        if self.scheduling is not None:
+            # Only add passive bool if true
+            if self.scheduling.passive:
+                entity.set("passive", "true")
 
         entity.set("priority", str(self.priority))
-        # Only add passive bool if true
-        if self.scheduling.passive:
-            entity.set("passive", "true")
         if self.period is not None:
             entity.set("period", str(self.period))
         if self.budget is not None:
