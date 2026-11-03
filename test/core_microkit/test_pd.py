@@ -483,6 +483,20 @@ class TestProtectionDomainVM:
         assert vm_elem is not None
         assert vm_elem.get("name") == "guest"
 
+    def test_x86_vm_rendered_inside_pd(self, x86sdf):
+        pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
+        vm = VirtualMachine(
+            "guest",
+            vcpus=[VirtualMachine.VCPU(id=0)],
+        )
+        pd.add_vm(vm)
+        root = et.Element("system")
+        pd.render(root)
+        pd_elem = root.find("protection_domain")
+        vm_elem = pd_elem.find("virtual_machine")
+        assert vm_elem is not None
+        assert vm_elem.get("name") == "guest"
+
     def test_vm_with_maps_rendered(self, sdf):
         pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         mr = MemoryRegion(sdf, "ram", 0x1000)
