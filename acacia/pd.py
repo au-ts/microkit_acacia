@@ -263,7 +263,7 @@ class ProtectionDomain(Entity):
         if priority is not None:
             if scheduling is not None:
                 raise RuntimeError(
-                    "Cannot define a SchedulingCharacteristics and priority separately!"
+                    "Can only define a priority OR SchedulingProperties, not both!"
                 )
             actual_scheduling = SchedulingProperties(priority)
         else:
