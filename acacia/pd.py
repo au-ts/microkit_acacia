@@ -282,7 +282,7 @@ class ProtectionDomain(Entity):
         self.child_id = None  # Assigned if this PD is made a child.
 
         # VM
-        self.vms: List[VirtualMachine] = []
+        self.vm: Optional[VirtualMachine] = None
 
         # Microkit cap map
         self.cspace: "MicrokitCSpace" = MicrokitCSpace()
@@ -317,8 +317,8 @@ class ProtectionDomain(Entity):
             iop.render(pd)
         for c in sorted(self.children, key=lambda c: c.name):
             c.render(pd)
-        for vm in self.vms:
-            vm.render(pd)
+        if self.vm is not None:
+            self.vm.render(pd)
         self.cspace.render(pd)
 
         return pd
@@ -423,14 +423,14 @@ class ProtectionDomain(Entity):
           a VM with multiple VCPUs.
         """
         assert isinstance(vm, VirtualMachine)
+        if self.vm is not None:
+            raise ValueError(f"PD already contains VM with name '{self.vm.name}'")
         # If we are targeting x86, scheduling properties are not allowed. We also can only have one
         # VM on x86, but other platforms allow more.
         if self.sdf.arch.is_x86():
             if vm.scheduling is not None:
                 raise ValueError("VMs do not support scheduling properties on x86!")
-            if len(self.vms) > 0:
-                raise ValueError("x86 systems do not support multiple VMs per PD!")
-        self.vms.append(vm)
+        self.vm = vm
 
     def add_cap_map(self, cap_map: "CapMap"):
         self.cspace.add_cap_map(cap_map)

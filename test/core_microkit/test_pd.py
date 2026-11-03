@@ -440,7 +440,7 @@ class TestProtectionDomainVM:
             scheduling=SchedulingProperties(priority=100),
         )
         pd.add_vm(vm)
-        assert vm in pd.vms
+        assert pd.vm is not None and vm.name == pd.vm.name
 
     def test_x86_add_vm_scheduling_rejected(self, x86sdf):
         pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
@@ -454,8 +454,8 @@ class TestProtectionDomainVM:
         ):
             pd.add_vm(vm1)
 
-    def test_x86_add_vm_twice_rejected(self, x86sdf):
-        pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
+    def test_add_vm_twice_rejected(self, sdf):
+        pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm1 = VirtualMachine(
             "guest1",
             vcpus=[VirtualMachine.VCPU(id=0)],
@@ -465,7 +465,7 @@ class TestProtectionDomainVM:
             vcpus=[VirtualMachine.VCPU(id=1)],
         )
         pd.add_vm(vm1)
-        with pytest.raises(ValueError, match="x86 systems do not support"):
+        with pytest.raises(ValueError, match="PD already contains VM with name"):
             pd.add_vm(vm2)
 
     def test_vm_rendered_inside_pd(self, sdf):
