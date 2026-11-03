@@ -84,7 +84,8 @@ class TestProtectionDomain:
     def test_priority_and_scheduling_conflict(self, sdf):
         sp = SchedulingProperties(priority=100)
         with pytest.raises(
-            RuntimeError, match="Cannot define.*SchedulingCharacteristics"
+            RuntimeError,
+            match="Can only define a priority OR SchedulingProperties, not both!",
         ):
             ProtectionDomain(sdf, "test", "test.elf", priority=50, scheduling=sp)
 
