@@ -295,6 +295,39 @@ class TestAutoAllocate:
         # Should be page-aligned
         assert mr.paddr % 0x1000 == 0
 
+    def test_auto_allocate_allocates_unallocated_physical_regions_large_region(
+        self, sys_
+    ):
+        mr = MemoryRegion(sys_, "unallocated_mr_2_MiB", 0x200000, physical=True)
+
+        sys_.auto_allocate()
+
+        # Should have been allocated
+        assert mr.paddr is not None
+        # Should be page-aligned
+        assert mr.paddr % 0x200000 == 0
+
+    def test_auto_allocate_allocates_combined_physical_regions(self, sys_):
+        mr_0 = MemoryRegion(sys_, "unallocated_mr_2_MiB_0", 0x300000, physical=True)
+        mr = MemoryRegion(sys_, "unallocated_mr", 0x1000, physical=True)
+        mr_1 = MemoryRegion(sys_, "unallocated_mr_2_MiB_1", 0x200000, physical=True)
+        mr_fixed = MemoryRegion(
+            sys_, "allocated_mr_2_MiB_fixed", 0x200000, paddr=0x7FE0_0000
+        )
+
+        sys_.auto_allocate()
+
+        # Should have been allocated
+        assert mr.paddr is not None
+        assert mr_0.paddr is not None
+        assert mr_1.paddr is not None
+        assert mr_fixed.paddr is not None
+
+        # Should be page-aligned
+        assert mr.paddr % 0x1000 == 0 and mr.paddr % 0x200000 != 0
+        assert mr_0.paddr % 0x200000 == 0
+        assert mr_1.paddr % 0x200000 == 0
+
     def test_auto_allocate_mixed_memory_regions(self, sys_):
         """Test auto_allocate with a mix of virtual, preallocated, and unallocated regions."""
         mr_virtual = MemoryRegion(sys_, "virtual_mr", 0x1000, physical=False)
