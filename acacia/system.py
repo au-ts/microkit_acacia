@@ -170,11 +170,11 @@ class System:
             key=lambda m: m.name,
             reverse=True,
         )
-        page_size = self.arch.default_page_size_bytes()
-
         while to_alloc:
             mr = to_alloc.pop()
-            if mr.size % page_size != 0:
+            page_size_obj = mr.find_best_page_size()
+
+            if not page_size_obj.addr_is_aligned(mr.size):
                 raise RuntimeError(
                     f"Physical region {mr} has page-unaligned size {mr.size}!"
                 )
@@ -195,7 +195,6 @@ class System:
                     # Check if we can fit in between the previous page,
                     # ensuring the end address is aligned
                     this_page_end = m.paddr + m.size
-                    this_page_end_aligned = this_page_end & ~(page_size - 1)
                     assert this_page_end <= prev_page_start
                     """
                     -----  paddr_top 0x1000_0000 (initial prev_page_start)
@@ -209,24 +208,27 @@ class System:
                     we need to see if we can can fit our new mr between the end of the next
                     allocated MR and the prev_page_start.
                     """
-                    if prev_page_start >= this_page_end_aligned + mr.size:
-                        # fits!
-                        next_paddr = prev_page_start - mr.size
+                    candidate = page_size_obj.rounddown_to_page(
+                        prev_page_start - mr.size
+                    )
+                    if candidate >= this_page_end:
+                        # Fits, including padding needed for page alignment.
+                        next_paddr = candidate
                         break
                     # move prev start to the start of this region if we don' fit
                     prev_page_start = m.paddr
 
                 if next_paddr is None:
-                    # No suitable gap found, place after the last allocated region's start
-                    next_paddr = prev_page_start - mr.size
-                    if next_paddr % page_size != 0:
-                        next_paddr += next_paddr & ~(page_size - 1)
+                    # No suitable gap found, place after the last allocated region's start, rounding down with page alignment.
+                    next_paddr = page_size_obj.rounddown_to_page(
+                        prev_page_start - mr.size
+                    )
 
             else:
-                next_paddr = self.paddr_top - mr.size
+                next_paddr = page_size_obj.rounddown_to_page(self.paddr_top - mr.size)
 
             # Ensure final address is aligned
-            assert next_paddr & ~(page_size - 1) == next_paddr
+            assert page_size_obj.addr_is_aligned(next_paddr)
             if next_paddr < 0:
                 raise RuntimeError(
                     f"System has run out of physical memory when allocating {mr}!"
