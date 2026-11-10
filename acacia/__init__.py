@@ -19,7 +19,6 @@ from .cspace import (
     VSpaceCapMap,
 )
 from .dtb import DeviceTreeBlob, DTBNode
-from .dwarf_dump_grammar import grammar
 from .irq import IRQ, ConventionalIRQ, IrqIoapic, IrqMsi
 from .memory import Map, MemoryRegion
 from .pd import (
