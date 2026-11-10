@@ -103,8 +103,8 @@ class IrqIoapic(IRQ):
     """
 
     class Polarity(Enum):
-        ACTIVEHIGH = 1
-        ACTIVELOW = 2
+        ACTIVEHIGH = "high"
+        ACTIVELOW = "low"
 
         def __str__(self):
             return str(self.value)
@@ -138,7 +138,7 @@ class IrqIoapic(IRQ):
         if self._trigger is not None:
             irq.set("trigger", self._trigger.name.lower())
         if self.polarity is not None:
-            irq.set("polarity", self.polarity.name.lower())
+            irq.set("polarity", self.polarity.value.lower())
 
     @property
     def number(self):
