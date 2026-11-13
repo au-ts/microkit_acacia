@@ -39,6 +39,7 @@ class MemoryRegion:
         cached: bool = True,
         physical: bool = False,
         prefill_bootinfo: Optional[str] = None,
+        prefill_path: Optional[str] = None,
     ):
         # Sanity: check that system is not final. We don't allow allocation of any type
         #         once the system is assembled, or we risk failing to include things in
@@ -59,6 +60,7 @@ class MemoryRegion:
         self.cached = cached
         self.sdf = sdf
         self.prefill_bootinfo = prefill_bootinfo
+        self.prefill_path = prefill_path
 
         # If a page is > 2Mebibyte, round up to 2Mebibyte. This allows Microkit to optimise by creating
         # MRs and maps as large pages
@@ -112,6 +114,8 @@ class MemoryRegion:
             mr.set("phys_addr", hex(self.paddr))
         if self.prefill_bootinfo is not None:
             mr.set("prefill_bootinfo", self.prefill_bootinfo)
+        if self.prefill_path is not None:
+            mr.set("prefill_path", str(self.prefill_path))
 
     def __repr__(self) -> str:
         props: list[tuple[str, object]] = [
@@ -119,6 +123,7 @@ class MemoryRegion:
             ("phys", self.physical),
             ("cached", self.cached),
             ("prefill_bootinfo", self.prefill_bootinfo),
+            ("prefill_path", self.prefill_path),
         ]
 
         # Flatten into list of [0] = [1]

@@ -69,6 +69,18 @@ jobs:
         run: |
           pip3 install -r dev-requirements.txt
 
+      - name: Install LLVM on linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm
+
+      - name: Install LLVM on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
       - name: Run tests
         run: |
           pytest .
