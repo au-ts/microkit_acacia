@@ -94,7 +94,7 @@ def find_base_type(
 ) -> c_type:
     if not raw_type.base_type_id or (
         not resolve_array_type and raw_type.tag_type == "array_type"
-    ):
+    ) or raw_type.tag_type == "pointer_type":
         return raw_type
 
     base_type = find_c_type_by_id(c_types, raw_type.base_type_id)
