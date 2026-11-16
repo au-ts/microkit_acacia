@@ -19,6 +19,7 @@ from acacia.dtb import (
     Arm_GIC,
     DeviceTreeBlob,
     DTBNode,
+    GicFrame,
     _arm_gic_irq_number,
     _arm_gic_irq_type,
     _arm_gic_trigger,
@@ -167,107 +168,193 @@ def test_dtbnode_equality():
     assert DTBNode(1, "/a") != DTBNode(2, "/a")
 
 
+def _gic_dtb(compatible, regs, props=None):
+    """
+    A mock DTB holding one GIC node.
+    """
+    props = props or {}
+    dtb = MagicMock()
+    node = MagicMock()
+    node.path = "/intc"
+    dtb.nodes = {0: node}
+    dtb.get_compatible.return_value = compatible
+    dtb.get_node_regs.return_value = regs
+    dtb.get_node_prop.side_effect = lambda _node, name: props.get(name)
+    dtb.get_reg_paddr.side_effect = (
+        lambda _arch, _node, addr: (addr & ~0xFFF)
+    )
+    return dtb
+
+
 def test_arm_gic_version_constants():
     assert Arm_GIC.Version.V2 == 2
     assert Arm_GIC.Version.V3 == 3
 
 
-def test_arm_gic_init_stores_fields():
-    gic = Arm_GIC(3, 0x1000, 0x2000, 0x40)
-    assert gic.version == 3
-    assert gic.cpu_paddr == 0x1000
-    assert gic.vcpu_paddr == 0x2000
-    assert gic.vcpu_size == 0x40
+def test_arm_gic_frame_end():
+    assert GicFrame(0x1000, 0x2000).end == 0x3000
 
 
-def test_arm_gic_has_mmio_cpu_interface_true():
-    gic = Arm_GIC(2, 0x1000, None, None)
-    assert gic.has_mmio_cpu_interface() is True
-
-
-def test_arm_gic_has_mmio_cpu_interface_false():
-    gic = Arm_GIC(2, None, None, None)
-    assert gic.has_mmio_cpu_interface() is False
+def test_arm_gic_has_mmio_cpu_interface():
+    dist = GicFrame(0x1000, 0x1000)
+    assert Arm_GIC(
+        Arm_GIC.Version.V2, dist, cpu=GicFrame(0x2000, 0x2000)
+    ).has_mmio_cpu_interface()
+    assert not Arm_GIC(Arm_GIC.Version.V3, dist).has_mmio_cpu_interface()
 
 
 def test_arm_gic_create_no_node_returns_none():
-    arch = MagicMock()
-    dtb = MagicMock()
-    dtb.nodes = {0: MagicMock()}
-    dtb.get_compatible.return_value = ["foo,bar"]
-    assert Arm_GIC.create(arch, dtb) is None
+    dtb = _gic_dtb(["foo,bar"], [])
+    assert Arm_GIC.create(aarch64, dtb) is None
+
+
+def test_arm_gic_create_ignores_gic_children():
+    dtb = _gic_dtb(["arm,gic-v3-its"], [(0x1000, 0x20000)])
+    assert Arm_GIC.create(aarch64, dtb) is None
 
 
 def test_arm_gic_create_v2():
-    arch = MagicMock()
-    dtb = MagicMock()
-    node = MagicMock()
-    dtb.nodes = {0: node}
-    dtb.get_compatible.return_value = ["arm,gic-400"]
-    dtb.get_node_regs.return_value = [
-        (0x1000, 0x10),
-        (0x2000, 0x20),
-        (0x3000, 0x30),
-        (0x4000, 0x40),
-    ]
-    dtb.get_reg_paddr.side_effect = lambda a, n, addr: addr
+    dtb = _gic_dtb(
+        ["arm,gic-400"],
+        [(0x1000, 0x1000), (0x2000, 0x2000), (0x4000, 0x2000), (0x6000, 0x2000)],
+    )
 
-    gic = Arm_GIC.create(arch, dtb)
+    gic = Arm_GIC.create(aarch64, dtb)
 
+    assert gic is not None
     assert gic.version == Arm_GIC.Version.V2
-    assert gic.cpu_paddr == 0x2000
-    assert gic.vcpu_paddr == 0x4000
-    assert gic.vcpu_size == 0x40
-    assert gic.has_mmio_cpu_interface() is True
+    assert gic.dist == GicFrame(0x1000, 0x1000)
+    assert gic.cpu == GicFrame(0x2000, 0x2000)
+    assert gic.hyp == GicFrame(0x4000, 0x2000)
+    assert gic.vcpu == GicFrame(0x6000, 0x2000)
+    assert gic.redists == ()
+    assert gic.redist_stride is None
+    assert gic.has_mmio_cpu_interface()
+
+
+def test_arm_gic_create_v2_without_virtualisation():
+    # A guest DT doesn't need to describe GICH and GICV.
+    dtb = _gic_dtb(["arm,cortex-a15-gic"], [(0x1000, 0x1000), (0x2000, 0x2000)])
+
+    gic = Arm_GIC.create(aarch64, dtb)
+
+    assert gic is not None
+    assert gic.cpu == GicFrame(0x2000, 0x2000)
+    assert gic.hyp is None
+    assert gic.vcpu is None
+
+
+@pytest.mark.parametrize("num_regs", [1, 5])
+def test_arm_gic_create_v2_bad_reg_count_raises(num_regs):
+    regs = [(0x1000 * (i + 1), 0x1000) for i in range(num_regs)]
+    dtb = _gic_dtb(["arm,gic-400"], regs)
+    with pytest.raises(ValueError, match="GICv2 'reg'"):
+        Arm_GIC.create(aarch64, dtb)
+
+
+def test_arm_gic_create_translates_bus_addresses():
+    # Like the Raspberry Pi 4, whose /soc maps bus 0x40000000 to CPU 0xff800000.
+    dtb = _gic_dtb(
+        ["arm,gic-400"],
+        [
+            (0x4004_1000, 0x1000),
+            (0x4004_2000, 0x2000),
+            (0x4004_4000, 0x2000),
+            (0x4004_6000, 0x2000),
+        ],
+        bus_offset=0xFF80_0000 - 0x4000_0000,
+    )
+
+    gic = Arm_GIC.create(aarch64, dtb)
+
+    assert gic is not None
+    assert gic.dist == GicFrame(0xFF84_1000, 0x1000)
+    assert gic.cpu == GicFrame(0xFF84_2000, 0x2000)
+    assert gic.vcpu == GicFrame(0xFF84_6000, 0x2000)
 
 
 def test_arm_gic_create_v3():
-    arch = MagicMock()
-    dtb = MagicMock()
-    node = MagicMock()
-    dtb.nodes = {0: node}
-    dtb.get_compatible.return_value = ["arm,gic-v3"]
-    dtb.get_node_regs.return_value = [
-        (0x0, 0x0),
-        (0x0, 0x0),
-        (0xC000, 0x10),
-        (0x0, 0x0),
-        (0xE000, 0x40),
-    ]
-    dtb.get_reg_paddr.side_effect = lambda a, n, addr: addr
+    dtb = _gic_dtb(
+        ["arm,gic-v3"],
+        [
+            (0x0800_0000, 0x10000),
+            (0x080A_0000, 0xF60000),
+            (0x0801_0000, 0x10000),
+            (0x0803_0000, 0x10000),
+            (0x0804_0000, 0x10000),
+        ],
+    )
 
-    gic = Arm_GIC.create(arch, dtb)
+    gic = Arm_GIC.create(aarch64, dtb)
 
+    assert gic is not None
     assert gic.version == Arm_GIC.Version.V3
-    assert gic.cpu_paddr == 0xC000
-    assert gic.vcpu_paddr == 0xE000
-    assert gic.vcpu_size == 0x40
+    assert gic.dist == GicFrame(0x0800_0000, 0x10000)
+    assert gic.redists == (GicFrame(0x080A_0000, 0xF60000),)
+    assert gic.redist_stride is None
+    assert gic.cpu == GicFrame(0x0801_0000, 0x10000)
+    assert gic.hyp == GicFrame(0x0803_0000, 0x10000)
+    assert gic.vcpu == GicFrame(0x0804_0000, 0x10000)
 
 
-def test_arm_gic_create_cpu_only_no_vcpu():
-    arch = MagicMock()
-    dtb = MagicMock()
-    node = MagicMock()
-    dtb.nodes = {0: node}
-    dtb.get_compatible.return_value = ["arm,gic-400"]
-    dtb.get_node_regs.return_value = [(0x1000, 0x10), (0x2000, 0x20)]
-    dtb.get_reg_paddr.side_effect = lambda a, n, addr: addr
+def test_arm_gic_create_v3_multiple_redistributor_regions():
+    dtb = _gic_dtb(
+        ["arm,gic-v3"],
+        [
+            (0x1000_0000, 0x10000),
+            (0x1100_0000, 0x100000),
+            (0x1200_0000, 0x100000),
+            (0x1300_0000, 0x2000),
+            (0x1400_0000, 0x2000),
+            (0x1500_0000, 0x2000),
+        ],
+        props={
+            "#redistributor-regions": struct.pack(">I", 2),
+            "redistributor-stride": struct.pack(">Q", 0x40000),
+        },
+    )
 
-    gic = Arm_GIC.create(arch, dtb)
+    gic = Arm_GIC.create(aarch64, dtb)
 
-    assert gic.cpu_paddr == 0x2000
-    assert gic.vcpu_paddr is None
-    assert gic.vcpu_size is None
+    assert gic is not None
+    assert gic.redists == (
+        GicFrame(0x1100_0000, 0x100000),
+        GicFrame(0x1200_0000, 0x100000),
+    )
+    assert gic.redist_stride == 0x40000
+    assert gic.cpu == GicFrame(0x1300_0000, 0x2000)
+    assert gic.hyp == GicFrame(0x1400_0000, 0x2000)
+    assert gic.vcpu == GicFrame(0x1500_0000, 0x2000)
 
 
-def test_arm_gic_create_unknown_version_raises():
-    arch = MagicMock()
-    dtb = MagicMock()
-    node = MagicMock()
-    dtb.nodes = {0: node}
-    dtb.get_compatible.side_effect = [["arm,gic-v2"], ["weird,thing"]]
-    with pytest.raises(RuntimeError, match="Unable to determine GIC version"):
-        Arm_GIC.create(arch, dtb)
+def test_arm_gic_create_v3_too_many_regs_raises():
+    # Two redistributor regions, but no '#redistributor-regions' to say so.
+    regs = [(0x1000_0000 * (i + 1), 0x10000) for i in range(6)]
+    dtb = _gic_dtb(["arm,gic-v3"], regs)
+    with pytest.raises(ValueError, match="#redistributor-regions"):
+        Arm_GIC.create(aarch64, dtb)
+
+
+def test_arm_gic_create_keeps_in_page_offset():
+    dtb = _gic_dtb(
+        ["arm,gic-400"],
+        [(0x1000, 0x1000), (0x2100, 0x100), (0x4000, 0x2000), (0x6000, 0x2000)],
+    )
+    gic = Arm_GIC.create(aarch64, dtb)
+
+    assert gic is not None
+    assert gic.cpu == GicFrame(0x2100, 0x100)
+
+
+def test_arm_gic_create_v3_sysreg_only():
+    dtb = _gic_dtb(["arm,gic-v3"], [(0x0800_0000, 0x10000), (0x080A_0000, 0xF60000)])
+
+    gic = Arm_GIC.create(aarch64, dtb)
+
+    assert gic is not None
+    assert gic.redists == (GicFrame(0x080A_0000, 0xF60000),)
+    assert gic.cpu is None and gic.hyp is None and gic.vcpu is None
+    assert not gic.has_mmio_cpu_interface()
 
 
 def test_init_stores_path_and_fdt():

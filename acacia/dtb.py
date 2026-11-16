@@ -4,7 +4,8 @@
 import struct
 from abc import ABC, abstractstaticmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from enum import IntEnum
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import libfdt  # type: ignore
 
@@ -20,8 +21,10 @@ class DTB_IRQ_Controller(ABC):
     this interface for future expansion.
     """
 
-    @abstractstaticmethod
-    def create(arch: Arch, dtb: "DeviceTreeBlob"):
+    @classmethod
+    def create(
+        cls, arch: Arch, dtb: "DeviceTreeBlob"
+    ) -> Optional["DTB_IRQ_Controller"]:
         """
         Create an instance of the interrupt controller based upon the Device Tree Blob.
 
@@ -32,84 +35,156 @@ class DTB_IRQ_Controller(ABC):
         ...
 
 
+class GicFrame(NamedTuple):
+    """One of a GIC's MMIO frames: its exact CPU physical address and its size."""
+
+    paddr: int
+    size: int
+
+    @property
+    def end(self) -> int:
+        return self.paddr + self.size
+
+
+# See https://github.com/torvalds/linux/blob/v7.3/Documentation/devicetree/bindings/interrupt-controller/arm%2Cgic.yaml
+# and https://github.com/torvalds/linux/blob/v7.3/Documentation/devicetree/bindings/interrupt-controller/arm%2Cgic-v3.yaml
+# for more details on this ARM GIC decoder.
+_GIC_V2_COMPATIBLES = ("arm,gic-400", "arm,cortex-a15-gic", "arm,gic-v2")
+_GIC_V3_COMPATIBLES = ("arm,gic-v3",)
+
+
+@dataclass(frozen=True)
 class Arm_GIC(DTB_IRQ_Controller):
     """
-    Representation of the ARM Generic Interrupt Controller.
+    An ARM Generic Interrupt Controller, as described by a DTB's GIC node.
+
+    Each MMIO frame is a GicFrame, or None if the node doesn't describe it:
+
+    * dist (GICD): the distributor.
+    * redists (GICR): GICv3 only. One frame per redistributor region, each
+      holding the redistributors of a contiguous run of CPUs.
+    * cpu (GICC): the MMIO CPU interface. Always present on GICv2. Optional on
+      GICv3, where the CPU interface is the ICC_* system registers.
+    * hyp (GICH) and vcpu (GICV): the virtualisation extensions' control and
+      virtual CPU interfaces. Optional on GICv2, where they only exist if the
+      DT describes the virtualisation extensions. Optional on GICv3, where
+      they only exist if the GIC supports GICv2 compatibility, and are
+      otherwise the ICH_* system registers.
+
+    The Microkit assumes every ARM board has the virtualisation extensions, so
+    a host DT for a GICv2 board should always have hyp and vcpu. But this class
+    also parses guest DTs, which don't need to describe them, so it's up to the
+    caller to check that they're there when it needs them.
+
+    All addresses are CPU physical addresses, i.e. translated through any bus
+    'ranges' between the GIC node and the root.
+
+    For our (primarily userspace VMM) purpose, we need to know where the guest
+    expects the dist and redists. Then for the cpu interface, we map the host's
+    vcpu interface to where the guest expects the cpu interface.
     """
 
-    class Version:
+    class Version(IntEnum):
         V2 = 2
         V3 = 3
 
-    def __init__(
-        self,
-        version: int,
-        cpu_paddr: Optional[int] = None,
-        vcpu_paddr: Optional[int] = None,
-        vcpu_size: Optional[int] = None,
-    ):
-        self.version = version
-        self.cpu_paddr = cpu_paddr
-        self.vcpu_paddr = vcpu_paddr
-        self.vcpu_size = vcpu_size
+    version: "Arm_GIC.Version"
+    dist: GicFrame
+    cpu: Optional[GicFrame] = None
+    hyp: Optional[GicFrame] = None
+    vcpu: Optional[GicFrame] = None
+    redists: Tuple[GicFrame, ...] = ()
+    # GICv3 only: 'redistributor-stride', if the redistributors are padded
+    # apart by quirky SoC rather than packed at their architectural size.
+    redist_stride: Optional[int] = None
 
     def has_mmio_cpu_interface(self) -> bool:
-        """
-        Whether or not the GIC's CPU/vCPU interface is via MMIO.
-        """
-        return self.cpu_paddr is not None
+        """Whether the CPU interface and the vCPU interface is MMIO rather than system registers."""
+        return self.cpu is not None
 
-    @staticmethod
-    def create(arch: Arch, dtb: "DeviceTreeBlob") -> Optional["Arm_GIC"]:
+    @classmethod
+    def create(cls, arch: Arch, dtb: "DeviceTreeBlob") -> Optional["Arm_GIC"]:
         """
-        Finds and parses the GIC node from the device tree.
+        Finds and parses the first GIC node from the device tree.
         """
-        compat_v2 = ["arm,gic-v2", "arm,cortex-a15-gic", "arm,gic-400"]
-        compat_v3 = ["arm,gic-v3"]
-        all_compat = compat_v2 + compat_v3
-
-        # Find the GIC node
-        gic_node = None
         for node in dtb.nodes.values():
-            node_comp = dtb.get_compatible(node)
-            if any(c in node_comp for c in all_compat):
-                gic_node = node
-                break
+            version = _gic_version(dtb.get_compatible(node))
+            if version is not None:
+                return cls._from_node(arch, dtb, node, version)
+        return None
 
-        if gic_node is None:
-            return None
+    @classmethod
+    def _from_node(
+        cls,
+        arch: Arch,
+        dtb: "DeviceTreeBlob",
+        node: "DTBNode",
+        version: "Arm_GIC.Version",
+    ) -> "Arm_GIC":
+        where = f"GIC node '{node.path}'"
+        frames = [
+            _gic_frame(arch, dtb, node, addr, size)
+            for addr, size in dtb.get_node_regs(node)
+        ]
 
-        # Determine version
-        node_comp = dtb.get_compatible(gic_node)
-        if any(c in node_comp for c in compat_v2):
-            version = Arm_GIC.Version.V2
-        elif any(c in node_comp for c in compat_v3):
-            version = Arm_GIC.Version.V3
-        else:
-            raise RuntimeError(
-                "Unable to determine GIC version from compatible strings"
+        if version == cls.Version.V2:
+            # reg = <GICD>, <GICC>, then optionally <GICH>, <GICV>
+            # (virtualisation extensions only).
+            if not 2 <= len(frames) <= 4:
+                raise ValueError(
+                    f"{where}: GICv2 'reg' needs GICD, GICC and optionally "
+                    f"GICH and GICV, but has {len(frames)} entries."
+                )
+            dist, cpu, *virt = frames
+            hyp, vcpu = virt + [None] * (2 - len(virt))
+            return cls(version, dist, cpu=cpu, hyp=hyp, vcpu=vcpu)
+
+        # reg = <GICD>, <GICR> for each of #redistributor-regions,
+        # then optionally <GICC>, <GICH>, <GICV> (GICv2 compatibility only).
+        num_redists = _gic_int_prop(dtb, node, "#redistributor-regions", default=1)
+        rest = frames[1 + num_redists :]
+        if num_redists < 1 or len(rest) > 3 or len(frames) < 1 + num_redists:
+            raise ValueError(
+                f"{where}: GICv3 'reg' needs GICD, {num_redists} GICR region(s) "
+                f"and up to 3 of GICC, GICH and GICV, but has {len(frames)} "
+                "entries. Is '#redistributor-regions' correct?"
             )
+        dist = frames[0]
+        redists = tuple(frames[1 : 1 + num_redists])
+        cpu, hyp, vcpu = rest + [None] * (3 - len(rest))
+        return cls(
+            version,
+            dist,
+            cpu=cpu,
+            hyp=hyp,
+            vcpu=vcpu,
+            redists=redists,
+            redist_stride=_gic_int_prop(
+                dtb, node, "redistributor-stride", default=None
+            ),
+        )
 
-        # Parse registers
-        # GICv2: 0=Distributor, 1=CPU, 2=virtual CPU, 3=Hypervisor
-        # GICv3: 0=Distributor, 1=Redistributor, 2=CPU, 3=..., 4=virtual CPU
-        cpu_reg_idx = 1 if version == Arm_GIC.Version.V2 else 2
-        vcpu_reg_idx = 3 if version == Arm_GIC.Version.V2 else 4
 
-        regs = dtb.get_node_regs(gic_node)
+def _gic_version(compatibles: List[str]) -> Optional[Arm_GIC.Version]:
+    if any(c in _GIC_V3_COMPATIBLES for c in compatibles):
+        return Arm_GIC.Version.V3
+    if any(c in _GIC_V2_COMPATIBLES for c in compatibles):
+        return Arm_GIC.Version.V2
+    return None
 
-        cpu_paddr = None
-        vcpu_paddr = None
-        vcpu_size = None
 
-        if cpu_reg_idx < len(regs):
-            cpu_paddr = dtb.get_reg_paddr(arch, gic_node, regs[cpu_reg_idx][0])
+def _gic_frame(
+    arch: Arch, dtb: "DeviceTreeBlob", node: "DTBNode", addr: int, size: int
+) -> GicFrame:
+    page_offset = addr & (arch.default_page_size_bytes() - 1)
+    return GicFrame(dtb.get_reg_paddr(arch, node, addr) + page_offset, size)
 
-        if vcpu_reg_idx < len(regs):
-            vcpu_paddr = dtb.get_reg_paddr(arch, gic_node, regs[vcpu_reg_idx][0])
-            vcpu_size = regs[vcpu_reg_idx][1]
 
-        return Arm_GIC(version, cpu_paddr, vcpu_paddr, vcpu_size)
+def _gic_int_prop(
+    dtb: "DeviceTreeBlob", node: "DTBNode", name: str, default: Optional[int]
+) -> Optional[int]:
+    raw = dtb.get_node_prop(node, name)
+    return default if raw is None else int.from_bytes(bytes(raw), "big")
 
 
 def _arm_gic_irq_type(irq_type_val: int) -> str:
