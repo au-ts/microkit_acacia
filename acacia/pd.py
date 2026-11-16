@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as et
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Set, Union
+from typing import List, Optional, Sequence, Set, Tuple, Union
 
 from .cspace import CapMap, MicrokitCSpace
 from .irq import IRQ
@@ -112,6 +112,9 @@ class Entity:
         self,
         mr: MemoryRegion,
         perms: Union[Map.Permissions, str],
+        setvar_vaddr: Optional[str] = None,
+        setvar_size: Optional[str] = None,
+        setvar_prefill_size: Optional[str] = None,
     ) -> Map:
         """
         Given a memory region, automatically create a map and assign it a vaddr
@@ -121,6 +124,9 @@ class Entity:
 
         :param mr: MemoryRegion to map
         :param perms: Map permissions - read, write, execute
+        :param setvar_vaddr: symbol to patch with the map's virtual address
+        :param setvar_size: symbol to patch with the size of `mr`
+        :param setvar_prefill_size: symbol to patch with the size of `mr`'s prefill data
         :returns: created map object.
 
         NOTE: This replaces `getMapVaddr` in zig sdfgen.
@@ -155,7 +161,14 @@ class Entity:
         else:
             next_vaddr = self.map_start_vaddr
 
-        m = Map(mr, next_vaddr, perms)
+        m = Map(
+            mr,
+            next_vaddr,
+            perms,
+            setvar_vaddr=setvar_vaddr,
+            setvar_size=setvar_size,
+            setvar_prefill_size=setvar_prefill_size,
+        )
         self.add_map(m)
         return m
 
@@ -201,6 +214,7 @@ class VirtualMachine(Entity):
 
         id: int
         cpu: Optional[int] = None
+        setvar_id: Optional[str] = None
 
         def __post_init__(self):
             if self.id is None or self.id < 0 or self.id > MAX_IDS:
@@ -217,6 +231,8 @@ class VirtualMachine(Entity):
             entity.set("id", str(self.id))
             if self.cpu is not None:
                 entity.set("cpu", str(self.cpu))
+            if self.setvar_id is not None:
+                entity.set("setvar_id", self.setvar_id)
 
     def __init__(
         self,
@@ -303,6 +319,10 @@ class ProtectionDomain(Entity):
         # Parental responsibilities
         self.children: List[ProtectionDomain] = []
         self.child_id = None  # Assigned if this PD is made a child.
+        self.child_setvar_id: Optional[str] = None
+
+        # (symbol, MemoryRegion) pairs for <setvar region_paddr=...>
+        self.paddr_setvars: List[Tuple[str, MemoryRegion]] = []
 
         # VM
         self.vm: Optional[VirtualMachine] = None
@@ -325,6 +345,8 @@ class ProtectionDomain(Entity):
         if self.child_id is not None:
             # If we are a child, include id.
             pd.set("id", str(self.child_id))
+            if self.child_setvar_id is not None:
+                pd.set("setvar_id", self.child_setvar_id)
 
         # Only insert stack size, CPU and SMC if defined
         # QoL: render elements in name/val order
@@ -343,6 +365,10 @@ class ProtectionDomain(Entity):
         if self.vm is not None:
             self.vm.render(pd)
         self.cspace.render(pd)
+        for symbol, mr in self.paddr_setvars:
+            setvar = et.SubElement(pd, "setvar")
+            setvar.set("symbol", symbol)
+            setvar.set("region_paddr", mr.name)
 
         return pd
 
@@ -411,10 +437,15 @@ class ProtectionDomain(Entity):
         ioport.id = new_id
         self.ioports.append(ioport)
 
-    def add_child_pd(self, child, child_id: Optional[int] = None):
+    def add_child_pd(
+        self, child, child_id: Optional[int] = None, setvar_id: Optional[str] = None
+    ):
         """
         Mark a PD as a child of this PD. This will remove the PD from the top-level system and
         make it render as a child element of this PD's XML instead.
+
+        If `setvar_id` is given, Microkit will patch the child's ID into the symbol of that name
+        in this PD's program image.
         """
         if child in self.children:
             raise RuntimeError("Cannot make the same PD a child multiple times!")
@@ -435,6 +466,7 @@ class ProtectionDomain(Entity):
         # remove child from sdf.
         self.sdf.pds.remove(child)
         child.child_id = new_child_id
+        child.child_setvar_id = setvar_id
         self.children.append(child)
         return new_child_id
 
@@ -459,6 +491,15 @@ class ProtectionDomain(Entity):
                 raise ValueError("x86 VM only support 1 VCPU!")
 
         self.vm = vm
+
+    def add_paddr_setvar(self, symbol: str, mr: MemoryRegion):
+        """
+        Have Microkit patch the physical address of `mr` into the symbol `symbol` in this PD's
+        program image. `mr` must be physical.
+        """
+        if not mr.physical:
+            raise ValueError(f"{mr} is not physical!")
+        self.paddr_setvars.append((symbol, mr))
 
     def add_cap_map(self, cap_map: "CapMap"):
         self.cspace.add_cap_map(cap_map)

@@ -23,7 +23,14 @@ class IOPort:
               -generated ones!). In almost all cases, you should use automatic allocation.
     """
 
-    def __init__(self, addr: int, size: int, id: Optional[int] = None):
+    def __init__(
+        self,
+        addr: int,
+        size: int,
+        id: Optional[int] = None,
+        setvar_id: Optional[str] = None,
+        setvar_addr: Optional[str] = None,
+    ):
         require_non_negative(addr, "IOPort addr")
         require_positive(size, "IOPort size")
         if id is not None:
@@ -31,6 +38,8 @@ class IOPort:
         self.addr = addr
         self.size = size
         self.id = id
+        self.setvar_id = setvar_id
+        self.setvar_addr = setvar_addr
 
     def render(self, parent: et.Element):
         # ID should be set by PD when calling pd.add_ioport()
@@ -40,6 +49,10 @@ class IOPort:
         ioport.set("id", str(self.id))
         ioport.set("addr", str(self.addr))
         ioport.set("size", str(self.size))
+        if self.setvar_id is not None:
+            ioport.set("setvar_id", self.setvar_id)
+        if self.setvar_addr is not None:
+            ioport.set("setvar_addr", self.setvar_addr)
 
     def __repr__(self) -> str:
         return f"<IOPort#{self.id} @ {self.addr} of size {self.size}>"

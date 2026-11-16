@@ -175,6 +175,8 @@ class Map:
         vaddr: int,
         permissions: Union[Permissions, str],
         setvar_vaddr: Optional[str] = None,
+        setvar_size: Optional[str] = None,
+        setvar_prefill_size: Optional[str] = None,
     ):
         self.mr = mr
 
@@ -200,6 +202,8 @@ class Map:
             permissions = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.perms = permissions
         self.setvar_vaddr = setvar_vaddr
+        self.setvar_size = setvar_size
+        self.setvar_prefill_size = setvar_prefill_size
         if mr.can_be_largepage_optimised() and not LargePage.addr_is_aligned(vaddr):
             # TODO: replace with logging module
             print(
@@ -224,6 +228,10 @@ class Map:
             map.set("cached", "false")
         if self.setvar_vaddr is not None:
             map.set("setvar_vaddr", str(self.setvar_vaddr))
+        if self.setvar_size is not None:
+            map.set("setvar_size", str(self.setvar_size))
+        if self.setvar_prefill_size is not None:
+            map.set("setvar_prefill_size", str(self.setvar_prefill_size))
         return map
 
     @property
