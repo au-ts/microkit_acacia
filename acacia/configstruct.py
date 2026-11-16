@@ -555,7 +555,7 @@ class ConfigStructResolver:
                         )
                     except Exception as e:
                         raise Exception(
-                            f"Exception occurred while filling member of structure c_type '{type_match}'`"
+                            f"Exception occurred while filling member {member.name}, (type = {member_type}) with value {member_value} of structure c_type '{type_match}'`"
                         ) from e
 
                 assert len(out_blob) <= type_match.byte_size
