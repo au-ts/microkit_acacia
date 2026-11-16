@@ -36,11 +36,18 @@ class IRQ:
         def __str__(self):
             return "edge" if self.value == self.EDGE.value else "level"
 
-    def __init__(self, irq: int, id: Optional[int] = None):
+    def __init__(
+        self, irq: int, id: Optional[int] = None, setvar_id: Optional[str] = None
+    ):
         if id is not None:
             require_non_negative(id, "IRQ id")
         self.id = id
         self.irq = irq
+        self.setvar_id = setvar_id
+
+    def _render_setvar_id(self, irq: et.Element):
+        if self.setvar_id is not None:
+            irq.set("setvar_id", self.setvar_id)
 
     @abstractproperty
     def number(self):
@@ -68,9 +75,15 @@ class ConventionalIRQ(IRQ):
     If using this class in a subsystem build hook, you should NEVER manually assign IDs.
     """
 
-    def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int] = None):
+    def __init__(
+        self,
+        irq_num: int,
+        trigger: IRQ.Trigger,
+        id: Optional[int] = None,
+        setvar_id: Optional[str] = None,
+    ):
         require_non_negative(irq_num, "IRQ number")
-        super().__init__(irq_num, id=id)
+        super().__init__(irq_num, id=id, setvar_id=setvar_id)
         self.irq_num = irq_num
         self._trigger = trigger
 
@@ -81,6 +94,7 @@ class ConventionalIRQ(IRQ):
         irq.set("irq", str(self.irq_num))
         irq.set("id", str(self.id))
         irq.set("trigger", str(self.trigger))
+        self._render_setvar_id(irq)
 
     @property
     def number(self):
@@ -122,11 +136,12 @@ class IrqIoapic(IRQ):
         trigger: Optional[IRQ.Trigger] = None,
         polarity: Optional[Polarity] = None,
         id: Optional[int] = None,
+        setvar_id: Optional[str] = None,
     ):
         require_non_negative(ioapic_id, "IOAPIC id")
         require_non_negative(pin, "IOAPIC pin")
         require_non_negative(vector, "IRQ vector")
-        super().__init__(ioapic_id, id=id)
+        super().__init__(ioapic_id, id=id, setvar_id=setvar_id)
         self.pin = pin
         self.vector = vector
         self._trigger = trigger
@@ -146,6 +161,7 @@ class IrqIoapic(IRQ):
             irq.set("trigger", self._trigger.name.lower())
         if self.polarity is not None:
             irq.set("polarity", self.polarity.value.lower())
+        self._render_setvar_id(irq)
 
     @property
     def number(self):
@@ -183,13 +199,14 @@ class IrqMsi(IRQ):
         vector: int,
         handle: int,
         id: Optional[int] = None,
+        setvar_id: Optional[str] = None,
     ):
         require_non_negative(pci_bus, "PCI bus")
         require_non_negative(pci_device, "PCI device")
         require_non_negative(pci_func, "PCI function")
         require_non_negative(vector, "IRQ vector")
         require_non_negative(handle, "MSI handle")
-        super().__init__(handle, id=id)
+        super().__init__(handle, id=id, setvar_id=setvar_id)
         self.pci_bus = pci_bus
         self.pci_device = pci_device
         self.pci_func = pci_func
@@ -208,6 +225,7 @@ class IrqMsi(IRQ):
         irq.set("handle", str(self.irq))
         irq.set("vector", str(self.vector))
         irq.set("id", str(self.id))
+        self._render_setvar_id(irq)
 
     @property
     def number(self):

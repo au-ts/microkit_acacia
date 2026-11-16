@@ -42,6 +42,9 @@ class Channel:
         You may optionally specify the channel ID of the end, although it will be automatically
         assigned when handed to a `Channel` if you do not.
 
+        If `setvar_id` is given, Microkit will patch the channel ID into the symbol of that name
+        in the PD's program image.
+
         If using this class in a subsystem build hook, you should NEVER manually assign IDs.
         """
 
@@ -49,6 +52,7 @@ class Channel:
         can_notify: bool = True
         can_pp: bool = False
         ch_id: Optional[int] = None
+        setvar_id: Optional[str] = None
 
         def __post_init__(self):
             if self.ch_id is not None and (self.ch_id < 0 or self.ch_id >= 255):
@@ -114,6 +118,8 @@ class Channel:
                 end.set("notify", "false")
             if e.can_pp:
                 end.set("pp", "true")
+            if e.setvar_id is not None:
+                end.set("setvar_id", e.setvar_id)
 
         return channel
 
