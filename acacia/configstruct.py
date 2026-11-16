@@ -420,12 +420,10 @@ class ConfigStructResolver:
             case "base_type":
                 try:
                     if isinstance(user_value, str) or isinstance(user_value, bytes):
-                        if type_match.encoding not in ("unsigned_char", "signed_char"):
+                        if type_match.byte_size != 1 or len(user_value) != 1:
                             raise ValueError(
-                                f"Strings and bytes are only supported for char encodings, not '{type_match.encoding}'"
+                                f"Strings and bytes are only supported for single byte sized encoding, not encoding '{type_match.encoding}' with byte size '{type_match.byte_size}'"
                             )
-
-                        assert len(user_value) == 1
 
                         if isinstance(user_value, str):
                             return user_value.encode()
