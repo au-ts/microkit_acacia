@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # - docs
 # - mypy
 
+
 class c_type:
     def __init__(self, tag_type: str):
         self.tag_type = tag_type
@@ -92,9 +93,11 @@ def find_c_type_by_id(c_types: Dict[int, c_type], target_id: int) -> Optional[c_
 def find_base_type(
     c_types: Dict[int, c_type], raw_type: c_type, resolve_array_type: bool
 ) -> c_type:
-    if not raw_type.base_type_id or (
-        not resolve_array_type and raw_type.tag_type == "array_type"
-    ) or raw_type.tag_type == "pointer_type":
+    if (
+        not raw_type.base_type_id
+        or (not resolve_array_type and raw_type.tag_type == "array_type")
+        or raw_type.tag_type == "pointer_type"
+    ):
         return raw_type
 
     base_type = find_c_type_by_id(c_types, raw_type.base_type_id)
