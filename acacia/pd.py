@@ -11,6 +11,7 @@ from .memory import Map, MemoryRegion
 from .system import AcaciaSystemError, System, SystemState
 from .cspace import CapMap, MicrokitCSpace
 from .x86 import IOPort
+from .util import require_non_negative, require_positive
 
 MAX_IDS = 62  # matches microkit. limit for child pds, ioports, irqs and channel IDs
 
@@ -32,6 +33,11 @@ class SchedulingProperties:
         # Enforce sane values
         if self.priority is None or self.priority < 0:
             raise ValueError("Must define a non-negative priority!")
+
+        if self.period is not None:
+            require_positive(self.period, "Scheduling period")
+        if self.budget is not None:
+            require_positive(self.budget, "Scheduling budget")
 
         # If we have a period, we must also have a budget, and the budget must be
         # larger than (or equal to) the period
@@ -64,6 +70,7 @@ class Entity:
         scheduling: Optional[SchedulingProperties],
         map_start_vaddr: int = 0x20_000_000,
     ):
+        require_non_negative(map_start_vaddr, "map_start_vaddr")
         self.name = name.strip()
         self.scheduling = scheduling
         self.maps: List[Map] = []
@@ -190,6 +197,8 @@ class VirtualMachine(Entity):
         def __post_init__(self):
             if self.id is None or self.id < 0 or self.id > MAX_IDS:
                 raise RuntimeError(f"VCPU ID={self.id} is invalid!")
+            if self.cpu is not None:
+                require_non_negative(self.cpu, "VCPU cpu")
 
         def render(self, parent: et.Element):
             """
@@ -269,6 +278,10 @@ class ProtectionDomain(Entity):
         super().__init__(name, actual_scheduling)
         if not prog_image.endswith(".elf"):
             raise ValueError("Non-elf program image!")
+        if stack_size is not None:
+            require_positive(stack_size, "PD stack_size")
+        if cpu is not None:
+            require_non_negative(cpu, "PD cpu")
         self.prog_image = prog_image
         self.stack_size = stack_size
         self.cpu = cpu
@@ -347,6 +360,7 @@ class ProtectionDomain(Entity):
         assigned_ids: List[int] = sorted(allocated_ch_ids + allocated_irq_ids)
 
         if requested_id is not None:
+            require_non_negative(requested_id, "Requested id")
             if requested_id not in assigned_ids:
                 return requested_id
             else:
@@ -403,6 +417,7 @@ class ProtectionDomain(Entity):
                     "Manual allocation of IDs is not allowed after assembly begins!"
                 )
 
+            require_non_negative(child_id, "Child PD id")
             if child_id not in assigned_ids:
                 new_child_id = child_id
             else:

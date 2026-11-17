@@ -7,6 +7,7 @@ from typing import Optional, Set, Union
 
 from .arch import LargePage, PageSize, SmallPage
 from .system import AcaciaSystemError, System
+from .util import require_non_negative, require_positive
 
 
 class MemoryRegion:
@@ -47,12 +48,12 @@ class MemoryRegion:
             raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
 
         self.name = name
-        if size <= 0:
-            raise ValueError("Size must be positive and non-zero!")
+        require_positive(size, "MemoryRegion size")
         if not sdf.arch.addr_is_page_aligned(size):
             raise ValueError("MemoryRegion size must be a multiple of a page size!")
         self.size = size
         if paddr is not None:
+            require_non_negative(paddr, "MemoryRegion paddr")
             physical = True
         self.paddr = paddr
         self.physical = physical
@@ -88,7 +89,7 @@ class MemoryRegion:
         """
         Set the paddr for this MR if it wasn't set already.
         """
-        assert paddr >= 0
+        require_non_negative(paddr, "MemoryRegion paddr")
         if self.paddr is not None:
             return None  # nothing to do if already assigned or virtual
         if not self.physical:
@@ -175,6 +176,7 @@ class Map:
         if not mr.sdf.microkit_alloc_allowed:
             raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
 
+        require_non_negative(vaddr, "Map vaddr")
         if not mr.sdf.arch.addr_is_page_aligned(vaddr):
             raise RuntimeError(f"{vaddr} of map is not page aligned, invalid!")
 
@@ -255,6 +257,8 @@ class IOMap:
         #         the XML!
         if not mr.sdf.microkit_alloc_allowed:
             raise AcaciaSystemError("System is finalised, cannot add Microkit objects!")
+
+        require_non_negative(iovaddr, "IOMap iovaddr")
 
         self.mr = mr
         self.iovaddr = iovaddr

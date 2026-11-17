@@ -12,6 +12,7 @@ from .arch import Arch, ArchID
 from .configstruct import ConfigStructResolver
 from .dtb import DeviceTreeBlob
 from .subsystem import Subsystem, SubsystemBuildError
+from .util import require_positive
 
 # To avoid circular imports, we only do a "real" import when type checking.
 if TYPE_CHECKING:
@@ -81,6 +82,8 @@ class System:
     def __init__(
         self, sys_arch: Arch, paddr_top: int, dtb: Optional[DeviceTreeBlob] = None
     ):
+        # Physical MRs are allocated downwards from paddr_top, so it must be above zero.
+        require_positive(paddr_top, "System paddr_top")
         self.arch = sys_arch
         self.paddr_top = paddr_top
 

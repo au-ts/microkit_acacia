@@ -24,6 +24,21 @@ class TestMemoryRegion:
         with pytest.raises(ValueError, match="positive"):
             MemoryRegion(sdf, "test", -1)
 
+    def test_negative_paddr_rejected(self, sdf):
+        with pytest.raises(ValueError, match="negative"):
+            MemoryRegion(sdf, "test", 0x1000, paddr=-0x1000)
+
+    def test_set_paddr_negative_rejected(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000, physical=True)
+        with pytest.raises(ValueError, match="negative"):
+            mr._set_paddr(-0x1000)
+        assert mr.paddr is None
+
+    def test_zero_paddr_allowed(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000, paddr=0)
+        assert mr.physical
+        assert mr.paddr == 0
+
     def test_paddr_sets_physical(self, sdf):
         mr = MemoryRegion(sdf, "test", 0x1000, paddr=0x40000000)
         assert mr.physical
@@ -80,6 +95,12 @@ class TestMapPermissions:
 
 
 class TestMap:
+    def test_negative_vaddr_rejected(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        # -0x1000 is page aligned, so this must be caught by the sign check.
+        with pytest.raises(ValueError, match="negative"):
+            Map(mr, -0x1000, "rw")
+
     def test_string_permissions_parsing(self, sdf):
         mr = MemoryRegion(sdf, "test", 0x1000)
         m = Map(mr, 0x40000000, "rwx")
@@ -131,6 +152,11 @@ class TestMap:
 
 
 class TestIOMap:
+    def test_negative_iovaddr_rejected(self, sdf):
+        mr = MemoryRegion(sdf, "test", 0x1000)
+        with pytest.raises(ValueError, match="negative"):
+            IOMap(mr, -0x1000)
+
     def test_unreadable_and_unwritable_rejected(self, sdf):
         mr = MemoryRegion(sdf, "test", 0x1000)
         with pytest.raises(ValueError, match="unreadable and unwritable"):
