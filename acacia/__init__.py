@@ -29,4 +29,5 @@ from .pd import (
 )
 from .subsystem import Subsystem, SubsystemBuildError, build_hook
 from .system import System
+from .util import require_non_negative, require_positive
 from .x86 import IOPort
