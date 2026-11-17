@@ -345,17 +345,18 @@ class DeviceTreeBlob:
 
         return parsed
 
-    def get_reg_paddr(self, arch: Arch, node: DTBNode, paddr: int) -> int:
+    def get_reg_paddr(
+        self, arch: Arch, node: DTBNode, paddr: int, *, align_to_page: bool = True
+    ) -> int:
         """
         Given an address from a DTB node's 'reg' property, convert it to a
         mappable MMIO address. This involves traversing any higher-level busses
         to find the CPU visible address rather than some address relative to the
-        particular bus the address is on. We also align to the smallest page size.
-        """
-        page_bits = ctz(arch.default_page_size_bytes())
+        particular bus the address is on.
 
-        # align page size
-        device_paddr = paddr & ~((1 << page_bits) - 1)
+        We will align to the default page size if `page_align` == True.
+        """
+        device_paddr = paddr
 
         # Walk tree
         curr_node = node
@@ -426,6 +427,9 @@ class DeviceTreeBlob:
 
             curr_node = parent
         # TODO: make sure this works...
+
+        if align_to_page:
+            device_paddr = arch.default_page_size().rounddown_to_page(device_paddr)
 
         return device_paddr
 

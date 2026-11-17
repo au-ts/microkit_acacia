@@ -443,6 +443,15 @@ def test_get_reg_paddr_alignment_only(blob):
     assert blob.get_reg_paddr(arch, DTBNode(5, "/x"), 0x1234) == 0x1000
 
 
+def test_get_reg_paddr_no_not_align(blob):
+    arch = aarch64
+    blob.get_node_parent = MagicMock(side_effect=KeyError)
+    assert (
+        blob.get_reg_paddr(arch, DTBNode(5, "/x"), 0x1234, align_to_page=False)
+        == 0x1234
+    )
+
+
 def test_get_reg_paddr_empty_ranges_is_passthrough(blob, fdt):
     arch = aarch64
     node = DTBNode(10, "/soc/dev")
