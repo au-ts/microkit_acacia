@@ -10,6 +10,14 @@ from .system import AcaciaSystemError, System
 from .util import require_non_negative, require_positive
 
 
+def ranges_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
+    """
+    Return True if the half-open address ranges [a_start, a_end) and [b_start, b_end)
+    overlap. Ranges that only touch (one ends where the other starts) do not overlap.
+    """
+    return a_start < b_end and b_start < a_end
+
+
 class MemoryRegion:
     """
     A Microkit MemoryRegion (MR) as represented in Acacia.
@@ -283,6 +291,17 @@ class IOMap:
         return iomap
 
     @property
+    def size(self) -> int:
+        return self.mr.size
+
+    @property
+    def end_iovaddr(self) -> int:
+        """
+        Return the IO address where this mapping ends (exclusive).
+        """
+        return self.iovaddr + self.size
+
+    @property
     def perms(self) -> str:
         base = ""
         if self.allow_reads:
@@ -315,7 +334,20 @@ class IOAddressSpace:
         self.iomaps: Set[IOMap] = set()
         self.sdf._add_io_address_space(self)
 
+    def _find_overlapping_io_map(self, start: int, end: int) -> Optional[IOMap]:
+        for m in self.iomaps:
+            if ranges_overlap(start, end, m.iovaddr, m.end_iovaddr):
+                return m
+        return None
+
     def add_io_map(self, iomap: IOMap):
+        if iomap in self.iomaps:
+            raise RuntimeError(f"Cannot add {iomap} to {self} twice!")
+        overlapping = self._find_overlapping_io_map(iomap.iovaddr, iomap.end_iovaddr)
+        if overlapping is not None:
+            raise RuntimeError(
+                f"IOMap {iomap} cannot be added to {self} as it overlaps with {overlapping}!"
+            )
         self.iomaps.add(iomap)
 
     def render(self, system_root: et.Element) -> et.Element:
@@ -323,7 +355,7 @@ class IOAddressSpace:
         ioas.set("name", self.name)
         ioas.set("peripheral_id", self.peripheral_id)
         ioas.set("domain_id", self.domain_id)
-        for iomap in self.iomaps:
+        for iomap in sorted(self.iomaps, key=lambda m: m.iovaddr):
             iomap.render(ioas)
         return ioas
 

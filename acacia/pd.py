@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from __future__ import annotations
+
 import xml.etree.ElementTree as et
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Set, Union
 
-from .irq import IRQ
-from .memory import Map, MemoryRegion
-from .system import AcaciaSystemError, System, SystemState
 from .cspace import CapMap, MicrokitCSpace
+from .irq import IRQ
+from .memory import Map, MemoryRegion, ranges_overlap
+from .system import AcaciaSystemError, System
 from .x86 import IOPort
 from .util import require_non_negative, require_positive
 
@@ -88,16 +89,23 @@ class Entity:
     def period(self):
         return self.scheduling.period if self.scheduling is not None else None
 
+    def _find_overlapping_map(self, start: int, end: int) -> Optional[Map]:
+        for m in self.maps:
+            if ranges_overlap(start, end, m.vaddr, m.end_vaddr):
+                return m
+        return None
+
     def add_map(self, map: Map):
         """
         Add a `Map` to this entity; i.e. put this mapping into the virtual address space.
         """
-        # Check that this map doesn't overlap any existing maps before adding.
-        for m in self.maps:
-            if m.vaddr_in_map(map.vaddr) or m.vaddr_in_map(map.end_vaddr):
-                raise RuntimeError(
-                    f"Map {map} cannot be added as it overlaps with {m}!"
-                )
+        if map in self.maps:
+            raise RuntimeError(f"Cannot add {map} to {self} twice!")
+        overlapping = self._find_overlapping_map(map.vaddr, map.end_vaddr)
+        if overlapping is not None:
+            raise RuntimeError(
+                f"Map {map} cannot be added as it overlaps with {overlapping}!"
+            )
         self.maps.append(map)
 
     def create_automap(
