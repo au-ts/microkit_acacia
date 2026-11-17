@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod, abstractproperty
 from enum import Enum
 from typing import Optional
 
+from .util import require_non_negative
+
 # Note: x86 IRQ types are in x86.py
 
 
@@ -35,6 +37,8 @@ class IRQ:
             return "edge" if self.value == self.EDGE.value else "level"
 
     def __init__(self, irq: int, id: Optional[int] = None):
+        if id is not None:
+            require_non_negative(id, "IRQ id")
         self.id = id
         self.irq = irq
 
@@ -65,6 +69,7 @@ class ConventionalIRQ(IRQ):
     """
 
     def __init__(self, irq_num: int, trigger: IRQ.Trigger, id: Optional[int] = None):
+        require_non_negative(irq_num, "IRQ number")
         super().__init__(irq_num, id=id)
         self.irq_num = irq_num
         self._trigger = trigger
@@ -118,7 +123,9 @@ class IrqIoapic(IRQ):
         polarity: Optional[Polarity] = None,
         id: Optional[int] = None,
     ):
-
+        require_non_negative(ioapic_id, "IOAPIC id")
+        require_non_negative(pin, "IOAPIC pin")
+        require_non_negative(vector, "IRQ vector")
         super().__init__(ioapic_id, id=id)
         self.pin = pin
         self.vector = vector
@@ -177,7 +184,11 @@ class IrqMsi(IRQ):
         handle: int,
         id: Optional[int] = None,
     ):
-
+        require_non_negative(pci_bus, "PCI bus")
+        require_non_negative(pci_device, "PCI device")
+        require_non_negative(pci_func, "PCI function")
+        require_non_negative(vector, "IRQ vector")
+        require_non_negative(handle, "MSI handle")
         super().__init__(handle, id=id)
         self.pci_bus = pci_bus
         self.pci_device = pci_device

@@ -4,6 +4,8 @@
 import xml.etree.ElementTree as et
 from typing import Optional
 
+from .util import require_non_negative, require_positive
+
 
 class IOPort:
     """
@@ -22,6 +24,10 @@ class IOPort:
     """
 
     def __init__(self, addr: int, size: int, id: Optional[int] = None):
+        require_non_negative(addr, "IOPort addr")
+        require_positive(size, "IOPort size")
+        if id is not None:
+            require_non_negative(id, "IOPort id")
         self.addr = addr
         self.size = size
         self.id = id

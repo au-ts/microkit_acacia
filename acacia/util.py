@@ -21,6 +21,26 @@ from ctypes import (
 from typing import Union, Optional, Type
 
 
+def require_non_negative(value: int, what: str) -> None:
+    """
+    Raise a ValueError if `value` is negative.
+
+    `what` names the value in the error message.
+    """
+    if value < 0:
+        raise ValueError(f"{what} must be non-negative, got {value}!")
+
+
+def require_positive(value: int, what: str) -> None:
+    """
+    Raise a ValueError if `value` is zero or negative.
+
+    `what` names the value in the error message.
+    """
+    if value <= 0:
+        raise ValueError(f"{what} must be positive and non-zero, got {value}!")
+
+
 def ctz(x: int, bits: int = 64):
     # invariant: input is sized to fit in a word of size `bits`
     if x == 0:

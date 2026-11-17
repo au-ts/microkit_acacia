@@ -63,8 +63,8 @@ clk_driver.add_map(clk_ccm_map)
 clk_driver.add_map(clk_ccm_analog_map)
 
 # Add dummy interrupts
-clk_irq = ConventionalIRQ(0, 15, IRQ.Trigger.EDGE)
-i2c_irq = ConventionalIRQ(1, 16, IRQ.Trigger.LEVEL)
+clk_irq = ConventionalIRQ(15, IRQ.Trigger.EDGE, id=0)
+i2c_irq = ConventionalIRQ(16, IRQ.Trigger.LEVEL, id=1)
 
 clk_driver.add_irq(clk_irq)
 i2c_driver.add_irq(i2c_irq)
