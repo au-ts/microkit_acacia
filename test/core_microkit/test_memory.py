@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from acacia.arch import LargePage, aarch64, x86_64
-from acacia.memory import IOAddressSpace, IOMap, Map, MemoryRegion
+from acacia.memory import IOAddressSpace, IOMap, Map, MemoryRegion, ranges_overlap
 from acacia.system import AcaciaSystemError, System, SystemState
 
 
@@ -248,6 +248,75 @@ class TestIOAddressSpace:
         ioas_elem = root.find("io_address_space")
         assert ioas_elem is not None
         assert ioas_elem.find("iomap") is None
+
+    def test_render_sorted_by_iovaddr(self, sdf):
+        ioas = IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")
+        for i, iovaddr in enumerate([0x50000000, 0x30000000, 0x40000000]):
+            ioas.add_io_map(IOMap(MemoryRegion(sdf, f"mr{i}", 0x1000), iovaddr))
+        root = et.Element("system")
+        ioas.render(root)
+        rendered = [e.get("iovaddr") for e in root.iter("iomap")]
+        assert rendered == ["0x30000000", "0x40000000", "0x50000000"]
+
+
+class TestIOMapOverlap:
+    @pytest.fixture
+    def ioas(self, sdf):
+        ioas = IOAddressSpace(sdf, "test_ioas", "0x12345", "0x1")
+        ioas.add_io_map(IOMap(MemoryRegion(sdf, "existing", 0x2000), 0x40002000))
+        return ioas
+
+    def test_iomap_size_and_end(self, sdf):
+        iomap = IOMap(MemoryRegion(sdf, "mr", 0x3000), 0x40000000)
+        assert iomap.size == 0x3000
+        assert iomap.end_iovaddr == 0x40003000
+
+    @pytest.mark.parametrize(
+        "iovaddr, size",
+        [
+            (0x40001000, 0x2000),  # overlaps start
+            (0x40003000, 0x2000),  # overlaps end
+            (0x40002000, 0x2000),  # identical range
+            (0x40003000, 0x1000),  # strictly inside
+            (0x40001000, 0x4000),  # strictly contains
+        ],
+    )
+    def test_overlap_rejected(self, sdf, ioas, iovaddr, size):
+        new = IOMap(MemoryRegion(sdf, "new", size), iovaddr)
+        with pytest.raises(RuntimeError, match="overlaps"):
+            ioas.add_io_map(new)
+        assert new not in ioas.iomaps
+
+    @pytest.mark.parametrize("iovaddr", [0x40001000, 0x40004000])
+    def test_touching_iomaps_allowed(self, sdf, ioas, iovaddr):
+        ioas.add_io_map(IOMap(MemoryRegion(sdf, "new", 0x1000), iovaddr))
+        assert len(ioas.iomaps) == 2
+
+    def test_same_iomap_twice_rejected(self, ioas):
+        existing = next(iter(ioas.iomaps))
+        with pytest.raises(RuntimeError, match="twice"):
+            ioas.add_io_map(existing)
+
+    def test_same_range_in_different_spaces_allowed(self, sdf, ioas):
+        # Each IO address space is separate, so the same iovaddr range is fine elsewhere.
+        other = IOAddressSpace(sdf, "other_ioas", "0x6789", "0x2")
+        other.add_io_map(IOMap(MemoryRegion(sdf, "new", 0x2000), 0x40002000))
+        assert len(other.iomaps) == 1
+
+
+@pytest.mark.parametrize(
+    "a, b, expected",
+    [
+        ((0x0, 0x1000), (0x1000, 0x2000), False),  # touching
+        ((0x1000, 0x2000), (0x0, 0x1000), False),  # touching, reversed
+        ((0x0, 0x2000), (0x1000, 0x3000), True),  # partial
+        ((0x0, 0x4000), (0x1000, 0x2000), True),  # containment
+        ((0x1000, 0x2000), (0x0, 0x4000), True),  # contained
+        ((0x0, 0x1000), (0x5000, 0x6000), False),  # disjoint
+    ],
+)
+def test_ranges_overlap(a, b, expected):
+    assert ranges_overlap(*a, *b) is expected
 
 
 class TestMemoryRegionLargePageOptimisation:

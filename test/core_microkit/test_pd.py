@@ -6,7 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from acacia.arch import aarch64, x86_64
+import random
+
+from acacia.arch import LargePage, SmallPage, aarch64, x86_64
 from acacia.channel import Channel
 from acacia.irq import ConventionalIRQ
 from acacia.memory import Map, MemoryRegion
@@ -577,6 +579,40 @@ class TestCreateAutomap:
         m = pd.create_automap(gap_mr, "rw")
         assert m.vaddr >= m1.end_vaddr + 0x1000
         assert m.end_vaddr + 0x1000 <= m2.vaddr
+
+
+class TestAddMapOverlap:
+    @pytest.fixture
+    def pd(self, sdf):
+        pd = ProtectionDomain(sdf, "test", "test.elf", priority=100)
+        pd.add_map(Map(MemoryRegion(sdf, "existing", 0x2000), 0x40002000, "rw"))
+        return pd
+
+    @pytest.mark.parametrize(
+        "vaddr, size",
+        [
+            (0x40001000, 0x2000),  # overlaps start
+            (0x40003000, 0x2000),  # overlaps end
+            (0x40002000, 0x2000),  # identical range
+            (0x40003000, 0x1000),  # strictly inside
+            (0x40001000, 0x4000),  # strictly contains (regression for #67)
+        ],
+    )
+    def test_overlap_rejected(self, sdf, pd, vaddr, size):
+        with pytest.raises(RuntimeError, match="overlaps"):
+            pd.add_map(Map(MemoryRegion(sdf, "new", size), vaddr, "rw"))
+
+    @pytest.mark.parametrize("vaddr", [0x40001000, 0x40004000])
+    def test_touching_maps_allowed(self, sdf, pd, vaddr):
+        # Ranges are half-open, so a map ending at another's start does not overlap it.
+        pd.add_map(Map(MemoryRegion(sdf, "new", 0x1000), vaddr, "rw"))
+        assert len(pd.maps) == 2
+
+    def test_find_overlapping_map(self, pd):
+        existing = pd.maps[0]
+        assert pd._find_overlapping_map(0x40000000, 0x40002000) is None
+        assert pd._find_overlapping_map(0x40004000, 0x40005000) is None
+        assert pd._find_overlapping_map(0x40000000, 0x40010000) is existing
 
 
 class TestProtectionDomainStateConstraints:
