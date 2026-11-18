@@ -73,7 +73,10 @@ class c_type:
     # Raw line: DW_AT_declaration (true), captured value: true
     @property
     def declaration(self) -> Optional[str]:
-        if "declaration" in self.attributes and self.attributes["declaration"] == "true":
+        if (
+            "declaration" in self.attributes
+            and self.attributes["declaration"] == "true"
+        ):
             return True
         return False
 
