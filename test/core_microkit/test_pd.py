@@ -372,6 +372,12 @@ class TestVCPU:
 
 
 class TestVirtualMachine:
+    def test_init_with_no_vcpu(self):
+        with pytest.raises(RuntimeError, match="VM must contain at least 1 VCPU"):
+            VirtualMachine(
+                "vm", vcpus=[], scheduling=SchedulingProperties(priority=100)
+            )
+
     def test_init_with_single_vcpu(self):
         v = VirtualMachine.VCPU(id=0)
         vm = VirtualMachine(
@@ -452,6 +458,15 @@ class TestProtectionDomainVM:
         with pytest.raises(
             ValueError, match="VMs do not support scheduling properties on x86"
         ):
+            pd.add_vm(vm1)
+
+    def test_x86_more_than_one_vcpu_rejected(self, x86sdf):
+        pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
+        vm1 = VirtualMachine(
+            "guest1",
+            vcpus=[VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)],
+        )
+        with pytest.raises(ValueError, match="x86 VM only support 1 VCPU"):
             pd.add_vm(vm1)
 
     def test_add_vm_twice_rejected(self, sdf):
