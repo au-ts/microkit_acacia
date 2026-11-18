@@ -80,8 +80,21 @@ class c_type:
             return True
         return False
 
-    def __eq__(self, other):
-        # TODO: Write
+    def __eq__(self, other: object):
+        if not isinstance(other, c_type):
+            return False
+
+        if self.tag_type != other.tag_type:
+            return False
+
+        if {k: v for k, v in self.attributes.items() if k != "type"} != {
+            k: v for k, v in other.attributes.items() if k != "type"
+        }:
+            return False
+
+        if self.children != other.children:
+            return False
+
         return True
 
     def __repr__(self):
