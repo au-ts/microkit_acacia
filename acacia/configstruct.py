@@ -14,8 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 class c_type:
     def __init__(self, tag_type: str):
         self.tag_type = tag_type
-        self.children = dict()
-        self.attributes = dict()
+        self.attributes: Dict[str, str] = dict()
+        self.children: Dict[int, c_type]  = dict()
 
     # Raw line: DW_AT_name	("usize"), captured value: "usize"
     @property
@@ -64,7 +64,7 @@ class c_type:
 
     # Raw line: DW_AT_declaration (true), captured value: true
     @property
-    def declaration(self) -> Optional[str]:
+    def declaration(self) -> bool:
         if (
             "declaration" in self.attributes
             and self.attributes["declaration"] == "true"
@@ -479,22 +479,22 @@ class ConfigStructResolver:
 
             case "array_type":
                 entry_type = find_base_type(c_types, type_match, True)
-                array_count = find_array_count(type_match)
+                array_counts = find_array_count(type_match)
 
-                if len(array_count) != 1:
+                if len(array_counts) != 1:
                     raise ValueError(
-                        f"Acacia does not support config structs with multi-dimensional arrays. Array type '{type_match}' has dimensions '{array_count}'"
+                        f"Acacia does not support config structs with multi-dimensional arrays. Array type '{type_match}' has dimensions '{array_counts}'"
                     )
-                elif array_count[0] == None:
+                elif array_counts[0] == None:
                     raise ValueError(
                         f"Acacia does not support config structs including arrays with no specified number of entries. Array type '{type_match}'"
                     )
-                elif array_count[0] == 0:
+                elif array_counts[0] == 0:
                     raise ValueError(
                         f"Acacia does not support config structs including arrays with zero entries. Array type '{type_match}'"
                     )
 
-                array_count = array_count[0]
+                num_entries = array_counts[0]
 
                 if not entry_type.byte_size:
                     raise ValueError(
@@ -509,7 +509,7 @@ class ConfigStructResolver:
                         or isinstance(user_value, bytes)
                         or isinstance(user_value, bytearray)
                     )
-                    or len(user_value) > array_count
+                    or len(user_value) > num_entries
                 ):
                     raise ValueError(
                         f"Can't fill an array with a non-iterable or too-large an iterable '{user_value}', c_type '{type_match}'"
@@ -526,7 +526,7 @@ class ConfigStructResolver:
                             f"Exception occurred while filling field of array c_type '{type_match}'`"
                         ) from e
 
-                type_size = array_count * entry_type.byte_size
+                type_size = num_entries * entry_type.byte_size
 
                 # Pad the remaining array entries
                 assert len(out_blob) <= type_size
@@ -561,7 +561,7 @@ class ConfigStructResolver:
 
                 out_blob = bytearray()
                 for member in sorted(
-                    member_types, key=lambda m: m.data_member_location
+                    member_types, key=lambda m: m.data_member_location if m.data_member_location != None else 0
                 ):
                     if member.data_member_location == None:
                         raise ValueError(
