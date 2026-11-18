@@ -434,6 +434,20 @@ class DeviceTreeBlob:
 
         return device_paddr
 
+    def get_memory(self) -> List[Tuple]:
+        """
+        Return every range of every device_type = "memory" node, lowest first.
+        """
+        ranges: list[Tuple] = []
+        for node in self.nodes.values():
+            device_type = self.get_node_prop(node, "device_type")
+            if (
+                device_type is not None
+                and bytes(device_type).rstrip(b"\0") == b"memory"
+            ):
+                ranges.extend(self.get_node_regs(node))
+        return sorted(ranges)
+
 
 def _parse_irq(arch: Arch, irq_cells: List[int]) -> ConventionalIRQ:
     """

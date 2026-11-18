@@ -511,3 +511,27 @@ def test_get_reg_paddr_translates_through_ranges(blob, fdt):
         ranges_raw if (off == 5 and name == "ranges") else b""
     )
     assert blob.get_reg_paddr(arch, node, 0x2000) == 0x80001000
+
+
+def test_no_memory(blob):
+    assert blob.get_memory() == []
+
+
+def test_one_memory(blob, fdt):
+    root = DTBNode(0, "/")
+    memory = DTBNode(1, "/memory@40000000")
+    uart = DTBNode(2, "/uart@9000000")
+    blob.nodes = {0: root, 1: memory, 2: uart}
+    blob.get_node_parent = MagicMock(return_value=root)
+    blob.get_size_and_addr_cells = MagicMock(return_value=(2, 2))
+
+    props = {
+        (1, "device_type"): b"memory\x00",
+        (1, "reg"): struct.pack(">4I", 0x0, 0x40000000, 0x0, 0x80000000),
+        # Non-memory node with regs gotta be ignored.
+        (2, "reg"): struct.pack(">4I", 0x0, 0x9000000, 0x0, 0x1000),
+    }
+    fdt.hasprop.side_effect = lambda off, name: (off, name) in props
+    fdt.getprop.side_effect = lambda off, name: props[(off, name)]
+
+    assert blob.get_memory() == [(0x40000000, 0x80000000)]
