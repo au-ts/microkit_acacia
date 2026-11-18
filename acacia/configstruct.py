@@ -481,8 +481,19 @@ class ConfigStructResolver:
                 entry_type = find_base_type(c_types, type_match, True)
                 array_count = find_array_count(type_match)
 
-                # TODO: Multi dimension arrays and variable length arrays
-                assert len(array_count) == 1 and array_count[0] != None
+                if len(array_count) != 1:
+                    raise ValueError(
+                        f"Acacia does not support config structs with multi-dimensional arrays. Array type '{type_match}' has dimensions '{array_count}'"
+                    )
+                elif array_count[0] == None:
+                    raise ValueError(
+                        f"Acacia does not support config structs including arrays with no specified number of entries. Array type '{type_match}'"
+                    )
+                elif array_count[0] == 0:
+                    raise ValueError(
+                        f"Acacia does not support config structs including arrays with zero entries. Array type '{type_match}'"
+                    )
+
                 array_count = array_count[0]
 
                 if not entry_type.byte_size:
