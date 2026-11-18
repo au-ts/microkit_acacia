@@ -10,14 +10,6 @@ import subprocess
 from collections.abc import Iterable, Sized
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-# TODO:
-# - declarations
-# - Handle multi-dimensional arrays and variable length like net queue
-# - empty structs?
-# - test jsonify
-# - docs
-# - mypy
-
 
 class c_type:
     def __init__(self, tag_type: str):
