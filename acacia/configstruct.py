@@ -326,7 +326,9 @@ class CType:
     required_attributes = {
         "base_tag": ("encoding", "byte_size"),
         "typedef_tag": ("name", "type"),
-        "member_tag": (("data_member_location", "data_bit_offset"), "name", "type"),
+        # Members may be unnamed (C11 anonymous structs/unions). Names are only
+        # needed when serialising a config struct, which checks them there.
+        "member_tag": (("data_member_location", "data_bit_offset"), "type"),
         "array_tag": ("type",),
     }
 
