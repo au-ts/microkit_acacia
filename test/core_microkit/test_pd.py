@@ -372,6 +372,12 @@ class TestVCPU:
 
 
 class TestVirtualMachine:
+    def test_init_with_no_vcpu(self):
+        with pytest.raises(RuntimeError, match="VM must contain at least 1 VCPU"):
+            VirtualMachine(
+                "vm", vcpus=[], scheduling=SchedulingProperties(priority=100)
+            )
+
     def test_init_with_single_vcpu(self):
         v = VirtualMachine.VCPU(id=0)
         vm = VirtualMachine(

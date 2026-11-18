@@ -217,6 +217,8 @@ class VirtualMachine(Entity):
         scheduling: Optional[SchedulingProperties] = None,
     ):
         super().__init__(name, scheduling)
+        if len(vcpus) == 0:
+            raise RuntimeError("VM must contain at least 1 VCPU!")
         # Check all IDs are unique
         ids = [x.id for x in vcpus]
         if len(ids) != len(set(ids)):
