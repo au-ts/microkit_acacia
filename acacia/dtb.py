@@ -293,7 +293,7 @@ class DeviceTreeBlob:
         ]
         return regs
 
-    def get_node_irqs(self, node: DTBNode) -> Tuple[int, ...]:
+    def get_node_irqs(self, node: DTBNode) -> Optional[Tuple[int, ...]]:
         """
         Return the list of words from the IRQ field on a node. We don't
         attempt to concetenate the u32s or anything here, since the meaning
@@ -308,20 +308,21 @@ class DeviceTreeBlob:
         if irqs_raw is None:
             irqs_raw = self.get_node_prop(node, "interrupt")
 
-        num_u32s = len(irqs_raw) // 4
-        # otherwise: doomed
         if irqs_raw is None:
-            raise RuntimeError(f"{node} has no IRQs!")
+            return None
 
         # just a bunch of u32s ... unpack using struct and return
+        num_u32s = len(irqs_raw) // 4
         return struct.unpack(f">{num_u32s}I", irqs_raw)
 
     def get_parsed_irqs(self, node: DTBNode, arch: Arch) -> Sequence[IRQ]:
         """
         Parses the 'interrupts' property of a node into a list of IRQ objects.
         """
+        parsed: list[IRQ] = []
         raw_irqs = self.get_node_irqs(node)
-        parsed = []
+        if raw_irqs is None:
+            return parsed
 
         # Determine number of cells per interrupt based on architecture
         # Zig logic implies hardcoding expected cells
