@@ -70,6 +70,13 @@ class c_type:
             return self.attributes["encoding"][7:]
         return None
 
+    # Raw line: DW_AT_declaration (true), captured value: true
+    @property
+    def declaration(self) -> Optional[str]:
+        if "declaration" in self.attributes and self.attributes["declaration"] == "true":
+            return True
+        return False
+
     def __eq__(self, other):
         # TODO: Write
         return True
@@ -121,6 +128,8 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
 
     match = None
     for next_match in matches:
+        if next_match.declaration:
+            continue
         if match == None:
             match = next_match
             continue
