@@ -404,6 +404,28 @@ def test_get_node_irqs(blob, fdt):
     assert blob.get_node_irqs(DTBNode(7, "/x")) == (0, 5, 4)
 
 
+def test_get_node_irqs_falls_back_to_interrupt_prop(blob, fdt):
+    fdt.hasprop.side_effect = lambda off, name: name == "interrupt"
+    fdt.getprop.return_value = struct.pack(">2I", 3, 9)
+    assert blob.get_node_irqs(DTBNode(7, "/x")) == (3, 9)
+    fdt.getprop.assert_called_once_with(7, "interrupt")
+
+
+def test_get_node_irqs_no_interrupts_returns_empty_tuple(blob, fdt):
+    fdt.hasprop.return_value = False
+    result = blob.get_node_irqs(DTBNode(7, "/x"))
+    assert result == None
+    fdt.getprop.assert_not_called()
+
+
+def test_get_parsed_irqs_no_interrupts_returns_empty(blob, fdt):
+    fdt.hasprop.return_value = False
+    with patch.object(dtb_module, "_parse_irq") as parse_irq:
+        result = blob.get_parsed_irqs(DTBNode(7, "/x"), aarch64)
+    assert result == []
+    parse_irq.assert_not_called()
+
+
 def test_get_parsed_irqs_arm_groups_by_three(blob, fdt):
     arch = MagicMock()
     arch.is_arm.return_value = True
