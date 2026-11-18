@@ -447,6 +447,9 @@ class ProtectionDomain(Entity):
         if self.sdf.arch.is_x86():
             if vm.scheduling is not None:
                 raise ValueError("VMs do not support scheduling properties on x86!")
+            if len(vm.vcpus) > 1:
+                raise ValueError("x86 VM only support 1 VCPU!")
+
         self.vm = vm
 
     def add_cap_map(self, cap_map: "CapMap"):

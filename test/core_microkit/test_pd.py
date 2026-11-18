@@ -460,6 +460,15 @@ class TestProtectionDomainVM:
         ):
             pd.add_vm(vm1)
 
+    def test_x86_more_than_one_vcpu_rejected(self, x86sdf):
+        pd = ProtectionDomain(x86sdf, "vmm", "vmm.elf", priority=254)
+        vm1 = VirtualMachine(
+            "guest1",
+            vcpus=[VirtualMachine.VCPU(id=0), VirtualMachine.VCPU(id=1)],
+        )
+        with pytest.raises(ValueError, match="x86 VM only support 1 VCPU"):
+            pd.add_vm(vm1)
+
     def test_add_vm_twice_rejected(self, sdf):
         pd = ProtectionDomain(sdf, "vmm", "vmm.elf", priority=254)
         vm1 = VirtualMachine(
