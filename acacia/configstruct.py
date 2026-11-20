@@ -84,7 +84,7 @@ class c_type:
         }:
             return False
 
-        if self.children != other.children:
+        if list(self.children.values()) != list(other.children.values()):
             return False
 
         return True
