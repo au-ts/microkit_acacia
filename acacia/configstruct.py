@@ -288,6 +288,17 @@ def find_array_count(array_type: c_type) -> List[Optional[int]]:
     return subrange_counts
 
 
+# The following functions parse dwarf dump output relying on:
+# 1. Indentation, meaning:
+#   - The amount of whitespace between IDs and the tag entry declaration
+#   - The amount of whitespace preceding an attribute
+# Dwarf dump output uses indentation to indicate whether a subsequent child
+# entry is within the scope of the preceding entry.
+# 2. Tag entries beginning with an ID followed by "DW_TAG_*".
+# 3. Tag entry's attributes starting on the line immediately after the tag
+#    entry, and terminating with a newline.
+# 4. Attributes having the format ` `+DW_AT_* (...)
+
 # Smallest whitespace between ID and tag name: 0x000000a9: DW_TAG_compile_unit
 BASE_TAG_INDENT = 1
 
@@ -301,6 +312,23 @@ DEPTH_MULTIPLIER = 2
 def eat_attributes(
     lines: List[str], start_idx: int, depth: int, c_type_attrs: Dict[str, str]
 ) -> int:
+    """
+    Extracts the attributes of a tag entry. Assumes that an entry's attributes
+    are listed contiguously after the entry declaration, terminating with an
+    empty newline.
+
+    :param lines: Lines of dwarfdump output
+    :param start_idx: Current line to search from
+    :param depth: Recursive depth of the function, or the current number of
+        parent c_types. Required to determine the expected amount of whitespace
+        prior to each attribute
+    :param c_type_attrs: The corresponding c_type's attribute dictionary to
+        collect attributes into. Attributes are inserted into the dictionary
+        with the attribute name as the key, and the value without the enclosing
+        brackets as the value
+
+    :return: The next line number after the empty attribute terminating line
+    """
     while start_idx < len(lines):
         attribute_match = re.match(r"^( +)DW_AT_([^\s]+)\t(.*)", lines[start_idx])
         if attribute_match:
@@ -312,6 +340,11 @@ def eat_attributes(
 
             attribute_value = attribute_match.group(3)
             start_idx += 1
+            # The following lines handle multi-line attributes, like
+            # DW_AT_location	(indexed (0x3) loclist = 0x00002f0a:
+            #    [0x0000000000205dc0, 0x0000000000205ddc): DW_OP_reg11 W11
+            #    [0x0000000000205e98, 0x0000000000205eb4): DW_OP_reg12 W12
+            #    [0x0000000000205f64, 0x0000000000205f80): DW_OP_reg11 W11)
             while start_idx < len(lines) and len(lines[start_idx]):
                 if re.match(r"^( +)DW_AT_([^\s]+)\t(.*)", lines[start_idx]):
                     break
@@ -340,6 +373,22 @@ def eat_attributes(
 def eat_tag(
     lines: List[str], start_idx: int, depth: int, c_types: Dict[int, c_type]
 ) -> int:
+    """
+    Extracts each tag entry contained within 'lines', creating a dictionary of
+    tag IDs to extracted c_types. This function is called recursively, so each
+    time a new indentation level is found, the function will be called again.
+
+    :param lines: Lines of dwarfdump output
+    :param start_idx: Current line to search from
+    :param depth: Recursive depth of the function, or the current number of
+        parent c_types
+    :param c_types: The c_types dictionary to collect c_types into. When a
+        greater indentation or depth is found, eat_tag will be called
+        recursively using the 'children' dictionary of the parent c_type, or the
+        c_type whose scope the tag entry belongs to.
+
+    :return: Next line number to be parsed
+    """
     prev_id = 0
     while start_idx < len(lines):
         tag_match = re.match(r"^0x([0-9a-f]{8}):( +)DW_TAG_(.+)", lines[start_idx])
@@ -352,8 +401,10 @@ def eat_tag(
                     lines, start_idx + 1, tag_depth, c_types[prev_id].attributes
                 )
             elif tag_depth < depth:
+                # We are no longer in scope
                 return start_idx
             elif tag_depth == depth + 1:
+                # This tag is in the scope of last entry
                 start_idx = eat_tag(
                     lines, start_idx, depth + 1, c_types[prev_id].children
                 )
