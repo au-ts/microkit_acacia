@@ -59,6 +59,7 @@ class c_type:
 
     0x000000ef:     NULL
     """
+
     def __init__(self, tag_type: str):
         """
         :param tag_type: Type of the tag entry, encoded as the string that
@@ -67,7 +68,7 @@ class c_type:
         """
         self.tag_type = tag_type
         self.attributes: Dict[str, str] = dict()
-        self.children: Dict[int, c_type]  = dict()
+        self.children: Dict[int, c_type] = dict()
 
     @property
     def name(self) -> Optional[str]:
@@ -253,7 +254,9 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
 
     match = None
     for next_match in matches:
-        if (next_match.tag_type[-4:] != "type" and next_match.tag_type != "typedef") or next_match.declaration:
+        if (
+            next_match.tag_type[-4:] != "type" and next_match.tag_type != "typedef"
+        ) or next_match.declaration:
             continue
         if match == None:
             match = next_match
@@ -682,7 +685,10 @@ class ConfigStructResolver:
 
                 out_blob = bytearray()
                 for member in sorted(
-                    member_types, key=lambda m: m.data_member_location if m.data_member_location != None else 0
+                    member_types,
+                    key=lambda m: (
+                        m.data_member_location if m.data_member_location != None else 0
+                    ),
                 ):
                     if member.data_member_location == None:
                         raise ValueError(
