@@ -492,15 +492,13 @@ class ConfigStructResolver:
 
         This function is recursive. If the C type is an array or struct type,
         the function will call itself on each of the entries/members, until
-        eventually a "base" type or "pointer" type is reached.
+        eventually a "base" type or "pointer" type is reached. The user value
+        will then be serialised into bytes of the base C type.
 
-        The user value will then be serialised into bytes of the base C type
-        using the ctypes module.
-
-        The bytes of each struct member are then placed at the member's offset
-        within the struct. Members are filled from offset 0 onwards. Zero-filled
-        padding is added between members if the member's bytes do not reach the
-        next offset.
+        The bytes of each member are then placed at the member's offset within
+        the struct or array. Members are filled from offset 0 onwards.
+        Zero-filled padding is added between members if the member's bytes do
+        not reach the next offset.
 
         We only support pointer types for 64 bit architectures. Pointers are
         translated into 8 byte unsigned C types.
