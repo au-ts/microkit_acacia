@@ -182,6 +182,14 @@ class c_type:
 
 
 def find_c_type_by_id(c_types: Dict[int, c_type], target_id: int) -> Optional[c_type]:
+    """
+    Recursively searches for the c_type corresponding to target_id in the
+    c_types dictionary. Once a match is found, the function returns immediately
+    since type ID is unique for each tag entry. Returns None if not found.
+
+    :param c_types: Dictionary of type IDs to c_types to search
+    :param target_id: ID of the c_type to find
+    """
     for entry_id in c_types:
         if entry_id == target_id:
             return c_types[entry_id]
@@ -196,6 +204,17 @@ def find_c_type_by_id(c_types: Dict[int, c_type], target_id: int) -> Optional[c_
 def find_base_type(
     c_types: Dict[int, c_type], raw_type: c_type, resolve_array_type: bool
 ) -> c_type:
+    """
+    Finds the base c_type of a given c_type using the base type's ID. This
+    function does not resolve the base type of pointer types as Acacia treats
+    all pointer types as 8 byte unsigned encodings. raw_type is returned if a
+    base type does not exist.
+
+    :param c_types: Dictionary of type IDs to c_types to search
+    :param raw_type: c_type to resolve
+    :param resolve_array_type: Whether array types should be resolved to their
+        entry type or returned without modification
+    """
     if (
         not raw_type.base_type_id
         or (not resolve_array_type and raw_type.tag_type == "array_type")
@@ -213,6 +232,16 @@ def find_base_type(
 
 
 def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_type]:
+    """
+    Recursively searches for c_types of a given name. Only considers matches
+    which correspond to a 'type' or 'typedef' entry. If multiple matches are
+    found, equality is checked. If valid matches are found which are not equal,
+    an exception is raised as Acacia is unable to determine which encoding the
+    user intends to serialise to.
+
+    :param c_types: Dictionary of type IDs to c_types to search
+    :param name: Name of the c_type to find
+    """
     matches = list()
     for entry in c_types.values():
         child_match = find_c_type_by_name(entry.children, name)
@@ -238,6 +267,12 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
 
 
 def find_array_count(array_type: c_type) -> List[Optional[int]]:
+    """
+    Finds the number of entries in each dimension of an array type by examining
+    each subrange type. E.g. array[6][8] will return [6, 8].
+
+    :param array_type: Array type to find the number of entries of
+    """
     subrange_counts = list()
     for subrange_type in array_type.children.values():
         if subrange_type.tag_type != "subrange_type":
