@@ -12,67 +12,154 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 class c_type:
+    """
+    Class encapsulating a "tag entry" (or debugging information entry) found in
+    a binary file's llvm-dwarfdump output. Tag entries contain information about
+    the source program, including the defined types. The type information
+    captured allows Acacia to serialise Python configuration data into the
+    format expected by the source program.
+
+    Each c_type contains a dictionary of the tag's listed attributes, with the
+    string of the attribute's name as the key. c_types also contain a dictionary
+    of child c_types with the child's numeric identifier as the key. Child
+    c_types are tag entries defined within the scope of the parent tag entry.
+
+    Examples of such tag entries used by this module include an array entry with
+    a subrange child:
+
+    0x0000003d:   DW_TAG_array_type
+                    DW_AT_type	(0x00000049 "char")
+
+    0x00000042:     DW_TAG_subrange_type
+                      DW_AT_type	(0x0000004d "__ARRAY_SIZE_TYPE__")
+                      DW_AT_count	(0x37)
+
+    0x00000048:     NULL
+
+    or a structure type entry with member type children:
+
+    0x000000d8:   DW_TAG_structure_type
+                    DW_AT_name	("region_resource") DW_AT_byte_size (0x10)
+                    DW_AT_decl_file	("/sDDF/include/sddf/resources/common.h")
+                    DW_AT_decl_line	(11)
+
+    0x000000dd:     DW_TAG_member
+                      DW_AT_name	("vaddr")
+                      DW_AT_type	(0x000000f0 "void *")
+                      DW_AT_decl_file	("/sDDF/include/sddf/resources/common.h")
+                      DW_AT_decl_line	(12)
+                      DW_AT_data_member_location	(0x00)
+
+    0x000000e6:     DW_TAG_member
+                      DW_AT_name	("size")
+                      DW_AT_type	(0x000000f1 "uint64_t")
+                      DW_AT_decl_file	("/sDDF/include/sddf/resources/common.h")
+                      DW_AT_decl_line	(13)
+                      DW_AT_data_member_location	(0x08)
+
+    0x000000ef:     NULL
+    """
     def __init__(self, tag_type: str):
+        """
+        :param tag_type: Type of the tag entry, encoded as the string that
+            follows 'DW_TAG_'. Examples include 'array_type', 'subrange_type',
+            'structure_type', or 'member'
+        """
         self.tag_type = tag_type
         self.attributes: Dict[str, str] = dict()
         self.children: Dict[int, c_type]  = dict()
 
-    # Raw line: DW_AT_name	("usize"), captured value: "usize"
     @property
     def name(self) -> Optional[str]:
+        """
+        Returns the name of the c_type if defined, else None.
+        """
         if "name" in self.attributes:
+            # Raw line: DW_AT_name	("usize"), captured value: "usize"
             return self.attributes["name"][1:-1]
         return None
 
-    # Raw line: DW_AT_type	(0x00000068 "usize"), captured value: 0x00000068 "usize"
     @property
     def base_type_id(self) -> Optional[int]:
+        """
+        Returns the ID of the c_type's base type if defined, else None. This
+        field is used in tags where the type of the entry is defined elsewhere,
+        like typedef types or member types.
+        """
         if "type" in self.attributes:
+            # Raw line: DW_AT_type	(0x00000068 "usize"), captured value: 0x00000068 "usize"
             return int(self.attributes["type"][2:10], base=16)
         return None
 
-    # Raw line: DW_AT_count	(0x01), captured value: 0x01
-    # OR Raw line: DW_AT_upper_bound	(0x14), captured value: 0x14 -- this is the last valid index
     @property
     def count(self) -> Optional[int]:
+        """
+        Returns the count or number of entries of a c_type if defined, else
+        None. This field is used in subrange types, which are children of array
+        types.
+        """
         if "count" in self.attributes:
+            # Raw line: DW_AT_count	(0x01), captured value: 0x01
             return int(self.attributes["count"][2:], base=16)
         if "upper_bound" in self.attributes:
+            # Raw line: DW_AT_upper_bound	(0x14), captured value: 0x14 -- this is the last valid index
             return int(self.attributes["count"][2:], base=16) + 1
         return None
 
-    # Raw line: DW_AT_byte_size	(0x08), captured value: 0x08
     @property
     def byte_size(self) -> Optional[int]:
+        """
+        Returns the size of the c_type in bytes if defined, else None.
+        """
         if "byte_size" in self.attributes:
+            # Raw line: DW_AT_byte_size	(0x08), captured value: 0x08
             return int(self.attributes["byte_size"][2:], base=16)
         return None
 
-    # Raw line: DW_AT_data_member_location	(0x00), captured value: 0x00
     @property
     def data_member_location(self) -> Optional[int]:
+        """
+        Returns the data member location or byte offset from the start of the
+        parent c_type if defined, else None. Used in member types, which are
+        child types of structure types or union types.
+        """
         if "data_member_location" in self.attributes:
+            # Raw line: DW_AT_data_member_location  (0x00), captured value: 0x00
             return int(self.attributes["data_member_location"][2:], base=16)
         return None
 
-    # Raw line: DW_AT_encoding	(DW_ATE_unsigned), captured value: DW_ATE_unsigned
     @property
     def encoding(self) -> Optional[str]:
+        """
+        Returns how the c_type is encoded if defined, else None. Used in
+        base_types.
+        """
         if "encoding" in self.attributes:
+            # Raw line: DW_AT_encoding	(DW_ATE_unsigned), captured value: DW_ATE_unsigned
             return self.attributes["encoding"][7:]
         return None
 
-    # Raw line: DW_AT_declaration (true), captured value: true
     @property
     def declaration(self) -> bool:
+        """
+        Returns whether the c_type is simply a declaration and not defined.
+        """
         if (
             "declaration" in self.attributes
+            # Raw line: DW_AT_declaration (true), captured value: true
             and self.attributes["declaration"] == "true"
         ):
             return True
         return False
 
     def __eq__(self, other: object):
+        """
+        Checks whether another object is equal to a c_type. Equality requires
+        that the object is a c_type with equal attributes and children,
+        excluding the base type ID attribute. Types with identical shapes can
+        have different type IDs, thus this field can produce false inequality
+        for the purposes of serialising types.
+        """
         if not isinstance(other, c_type):
             return False
 
@@ -84,6 +171,7 @@ class c_type:
         }:
             return False
 
+        # We only consider the values as the key is the tag ID of the child tag
         if list(self.children.values()) != list(other.children.values()):
             return False
 
