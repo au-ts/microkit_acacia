@@ -621,7 +621,9 @@ class ConfigStructResolver:
                             )
 
                         if isinstance(user_value, str):
-                            return user_value.encode()
+                            user_byte_value = user_value.encode()
+                            assert len(user_byte_value) == 1
+                            return user_byte_value
                         elif isinstance(user_value, bytes):
                             return user_value
 
