@@ -175,7 +175,7 @@ class CType:
         return list(self.children.values()) == list(other.children.values())
 
     def __repr__(self):
-        return f"\n{self.tag_type}: {self.name}\nAttributes:\n{self.attributes}\nChildren:\n{self.children}\n"
+        return f"{self.tag_type}: {self.name}, Attributes: {self.attributes}, Children: {self.children}"
 
 
 def find_ctype_by_id(ctypes: Dict[int, CType], target_id: int) -> Optional[CType]:
