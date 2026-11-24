@@ -254,7 +254,7 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
             not next_match.tag_type.endswith("type") and next_match.tag_type != "typedef"
         ) or next_match.declaration:
             continue
-        if match == None:
+        if match is None:
             match = next_match
             continue
         elif match != next_match:
@@ -656,7 +656,7 @@ class ConfigStructResolver:
                     raise ValueError(
                         f"Acacia does not support config structs with multi-dimensional arrays. Array type '{type_match}' has dimensions '{array_counts}'"
                     )
-                elif array_counts[0] == None:
+                elif array_counts[0] is None:
                     raise ValueError(
                         f"Acacia does not support config structs including arrays with no specified number of entries. Array type '{type_match}'"
                     )
@@ -737,7 +737,7 @@ class ConfigStructResolver:
                         m.data_member_location if m.data_member_location != None else 0
                     ),
                 ):
-                    if member.data_member_location == None:
+                    if member.data_member_location is None:
                         raise ValueError(
                             f"Member type '{member}' does not support struct members without byte offset locations (bit offsets are not supported)"
                         )
