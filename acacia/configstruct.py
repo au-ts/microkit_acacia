@@ -251,7 +251,7 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
     match = None
     for next_match in matches:
         if (
-            next_match.tag_type[-4:] != "type" and next_match.tag_type != "typedef"
+            not next_match.tag_type.endswith("type") and next_match.tag_type != "typedef"
         ) or next_match.declaration:
             continue
         if match == None:
