@@ -138,7 +138,7 @@ class c_type:
         """
         if "encoding" in self.attributes:
             # Raw line: DW_AT_encoding	(DW_ATE_unsigned), captured value: DW_ATE_unsigned
-            return self.attributes["encoding"][len("DW_ATE_"):]
+            return self.attributes["encoding"][len("DW_ATE_") :]
         return None
 
     @property
@@ -146,13 +146,11 @@ class c_type:
         """
         Returns whether the c_type is simply a declaration and not defined.
         """
-        if (
+        return (
             "declaration" in self.attributes
             # Raw line: DW_AT_declaration (true), captured value: true
             and self.attributes["declaration"] == "true"
-        ):
-            return True
-        return False
+        )
 
     def __eq__(self, other: object):
         """
