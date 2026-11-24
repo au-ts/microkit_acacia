@@ -192,7 +192,7 @@ def find_c_type_by_id(c_types: Dict[int, c_type], target_id: int) -> Optional[c_
             return c_types[entry_id]
 
         child_match = find_c_type_by_id(c_types[entry_id].children, target_id)
-        if child_match:
+        if child_match is not None:
             return child_match
 
     return None
