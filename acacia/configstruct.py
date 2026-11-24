@@ -138,7 +138,7 @@ class c_type:
         """
         if "encoding" in self.attributes:
             # Raw line: DW_AT_encoding	(DW_ATE_unsigned), captured value: DW_ATE_unsigned
-            return self.attributes["encoding"][7:]
+            return self.attributes["encoding"][len("DW_ATE_"):]
         return None
 
     @property
