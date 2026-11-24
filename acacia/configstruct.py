@@ -172,10 +172,7 @@ class c_type:
             return False
 
         # We only consider the values as the key is the tag ID of the child tag
-        if list(self.children.values()) != list(other.children.values()):
-            return False
-
-        return True
+        return list(self.children.values()) == list(other.children.values())
 
     def __repr__(self):
         return f"\n{self.tag_type}: {self.name}\nAttributes:\n{self.attributes}\nChildren:\n{self.children}\n"
