@@ -11,7 +11,7 @@ from collections.abc import Iterable, Sized
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 
-class c_type:
+class CType:
     """
     Class encapsulating a "tag entry" (or debugging information entry) found in
     a binary file's llvm-dwarfdump output. Tag entries contain information about
@@ -19,10 +19,10 @@ class c_type:
     captured allows Acacia to serialise Python configuration data into the
     format expected by the source program.
 
-    Each c_type contains a dictionary of the tag's listed attributes, with the
-    string of the attribute's name as the key. c_types also contain a dictionary
-    of child c_types with the child's numeric identifier as the key. Child
-    c_types are tag entries defined within the scope of the parent tag entry.
+    Each CType contains a dictionary of the tag's listed attributes, with the
+    string of the attribute's name as the key. CTypes also contain a dictionary
+    of child CTypes with the child's numeric identifier as the key. Child
+    CTypes are tag entries defined within the scope of the parent tag entry.
 
     Examples of such tag entries used by this module include an array entry with
     a subrange child:
@@ -68,12 +68,12 @@ class c_type:
         """
         self.tag_type = tag_type
         self.attributes: Dict[str, str] = dict()
-        self.children: Dict[int, c_type] = dict()
+        self.children: Dict[int, CType] = dict()
 
     @property
     def name(self) -> Optional[str]:
         """
-        Returns the name of the c_type if defined, else None.
+        Returns the name of the CType if defined, else None.
         """
         if "name" in self.attributes:
             # Raw line: DW_AT_name	("usize"), self.attributes["name"] = '"usize"'
@@ -83,7 +83,7 @@ class c_type:
     @property
     def base_type_id(self) -> Optional[int]:
         """
-        Returns the ID of the c_type's base type if defined, else None. This
+        Returns the ID of the CType's base type if defined, else None. This
         field is used in tags where the type of the entry is defined elsewhere,
         like typedef types or member types.
         """
@@ -95,7 +95,7 @@ class c_type:
     @property
     def count(self) -> Optional[int]:
         """
-        Returns the count or number of entries of a c_type if defined, else
+        Returns the count or number of entries of a CType if defined, else
         None. This field is used in subrange types, which are children of array
         types.
         """
@@ -111,7 +111,7 @@ class c_type:
     @property
     def byte_size(self) -> Optional[int]:
         """
-        Returns the size of the c_type in bytes if defined, else None.
+        Returns the size of the CType in bytes if defined, else None.
         """
         if "byte_size" in self.attributes:
             # Raw line: DW_AT_byte_size	(0x08), self.attributes["byte_size"] = '0x08'
@@ -122,7 +122,7 @@ class c_type:
     def data_member_location(self) -> Optional[int]:
         """
         Returns the data member location or byte offset from the start of the
-        parent c_type if defined, else None. Used in member types, which are
+        parent CType if defined, else None. Used in member types, which are
         child types of structure types or union types.
         """
         if "data_member_location" in self.attributes:
@@ -133,7 +133,7 @@ class c_type:
     @property
     def encoding(self) -> Optional[str]:
         """
-        Returns how the c_type is encoded if defined, else None. Used in
+        Returns how the CType is encoded if defined, else None. Used in
         base_types.
         """
         if "encoding" in self.attributes:
@@ -144,7 +144,7 @@ class c_type:
     @property
     def declaration(self) -> bool:
         """
-        Returns whether the c_type is simply a declaration and not defined.
+        Returns whether the CType is simply a declaration and not defined.
         """
         return (
             "declaration" in self.attributes
@@ -154,13 +154,13 @@ class c_type:
 
     def __eq__(self, other: object):
         """
-        Checks whether another object is equal to a c_type. Equality requires
-        that the object is a c_type with equal attributes and children,
+        Checks whether another object is equal to a CType. Equality requires
+        that the object is a CType with equal attributes and children,
         excluding the base type ID attribute. Types with identical shapes can
         have different type IDs, thus this field can produce false inequality
         for the purposes of serialising types.
         """
-        if not isinstance(other, c_type):
+        if not isinstance(other, CType):
             return False
 
         if self.tag_type != other.tag_type:
@@ -178,20 +178,20 @@ class c_type:
         return f"\n{self.tag_type}: {self.name}\nAttributes:\n{self.attributes}\nChildren:\n{self.children}\n"
 
 
-def find_c_type_by_id(c_types: Dict[int, c_type], target_id: int) -> Optional[c_type]:
+def find_ctype_by_id(ctypes: Dict[int, CType], target_id: int) -> Optional[CType]:
     """
-    Recursively searches for the c_type corresponding to target_id in the
-    c_types dictionary. Once a match is found, the function returns immediately
+    Recursively searches for the CType corresponding to target_id in the
+    ctypes dictionary. Once a match is found, the function returns immediately
     since type ID is unique for each tag entry. Returns None if not found.
 
-    :param c_types: Dictionary of type IDs to c_types to search
-    :param target_id: ID of the c_type to find
+    :param ctypes: Dictionary of type IDs to CTypes to search
+    :param target_id: ID of the CType to find
     """
-    for entry_id in c_types:
+    for entry_id in ctypes:
         if entry_id == target_id:
-            return c_types[entry_id]
+            return ctypes[entry_id]
 
-        child_match = find_c_type_by_id(c_types[entry_id].children, target_id)
+        child_match = find_ctype_by_id(ctypes[entry_id].children, target_id)
         if child_match is not None:
             return child_match
 
@@ -199,16 +199,16 @@ def find_c_type_by_id(c_types: Dict[int, c_type], target_id: int) -> Optional[c_
 
 
 def find_base_type(
-    c_types: Dict[int, c_type], raw_type: c_type, resolve_array_type: bool
-) -> c_type:
+    ctypes: Dict[int, CType], raw_type: CType, resolve_array_type: bool
+) -> CType:
     """
-    Finds the base c_type of a given c_type using the base type's ID. This
+    Finds the base CType of a given CType using the base type's ID. This
     function does not resolve the base type of pointer types as Acacia treats
     all pointer types as 8 byte unsigned encodings. raw_type is returned if a
     base type does not exist.
 
-    :param c_types: Dictionary of type IDs to c_types to search
-    :param raw_type: c_type to resolve
+    :param ctypes: Dictionary of type IDs to CTypes to search
+    :param raw_type: CType to resolve
     :param resolve_array_type: Whether array types should be resolved to their
         entry type or returned without modification
     """
@@ -219,29 +219,29 @@ def find_base_type(
     ):
         return raw_type
 
-    base_type = find_c_type_by_id(c_types, raw_type.base_type_id)
+    base_type = find_ctype_by_id(ctypes, raw_type.base_type_id)
     if not base_type:
         raise ValueError(
-            f"Could not find base type ({raw_type.base_type_id}) of c_type {raw_type}"
+            f"Could not find base type ({raw_type.base_type_id}) of CType {raw_type}"
         )
 
-    return find_base_type(c_types, base_type, resolve_array_type)
+    return find_base_type(ctypes, base_type, resolve_array_type)
 
 
-def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_type]:
+def find_ctype_by_name(ctypes: Dict[int, CType], name: str) -> Optional[CType]:
     """
-    Recursively searches for c_types of a given name. Only considers matches
+    Recursively searches for CTypes of a given name. Only considers matches
     which correspond to a 'type' or 'typedef' entry. If multiple matches are
     found, equality is checked. If valid matches are found which are not equal,
     an exception is raised as Acacia is unable to determine which encoding the
     user intends to serialise to.
 
-    :param c_types: Dictionary of type IDs to c_types to search
-    :param name: Name of the c_type to find
+    :param ctypes: Dictionary of type IDs to CTypes to search
+    :param name: Name of the CType to find
     """
     matches = list()
-    for entry in c_types.values():
-        child_match = find_c_type_by_name(entry.children, name)
+    for entry in ctypes.values():
+        child_match = find_ctype_by_name(entry.children, name)
         if child_match:
             matches.append(child_match)
 
@@ -251,7 +251,8 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
     match = None
     for next_match in matches:
         if (
-            not next_match.tag_type.endswith("type") and next_match.tag_type != "typedef"
+            not next_match.tag_type.endswith("type")
+            and next_match.tag_type != "typedef"
         ) or next_match.declaration:
             continue
         if match is None:
@@ -259,13 +260,13 @@ def find_c_type_by_name(c_types: Dict[int, c_type], name: str) -> Optional[c_typ
             continue
         elif match != next_match:
             raise ValueError(
-                f"Found two distinct c_types with the same name ({name}), {match} {next_match}"
+                f"Found two distinct CTypes with the same name ({name}), {match} {next_match}"
             )
 
     return match
 
 
-def find_array_count(array_type: c_type) -> List[Optional[int]]:
+def find_array_count(array_type: CType) -> List[Optional[int]]:
     """
     Finds the number of entries in each dimension of an array type by examining
     each subrange type. E.g. array[6][8] will return [6, 8].
@@ -306,7 +307,7 @@ DEPTH_MULTIPLIER = 2
 
 
 def eat_attributes(
-    lines: List[str], start_idx: int, depth: int, c_type_attrs: Dict[str, str]
+    lines: List[str], start_idx: int, depth: int, ctype_attrs: Dict[str, str]
 ) -> int:
     """
     Extracts the attributes of a tag entry. Assumes that an entry's attributes
@@ -316,9 +317,9 @@ def eat_attributes(
     :param lines: Lines of dwarfdump output
     :param start_idx: Current line to search from
     :param depth: Recursive depth of the function, or the current number of
-        parent c_types. Required to determine the expected amount of whitespace
+        parent CTypes. Required to determine the expected amount of whitespace
         prior to each attribute
-    :param c_type_attrs: The corresponding c_type's attribute dictionary to
+    :param ctype_attrs: The corresponding CType's attribute dictionary to
         collect attributes into. Attributes are inserted into the dictionary
         with the attribute name as the key, and the value without the enclosing
         brackets as the value
@@ -354,7 +355,7 @@ def eat_attributes(
                 attribute_value += multi_line_value_match.group(1)
                 start_idx += 1
 
-            c_type_attrs[attribute_match.group(2)] = attribute_value[1:-1]
+            ctype_attrs[attribute_match.group(2)] = attribute_value[1:-1]
 
         else:
             if not len(lines[start_idx]) == 0:
@@ -367,21 +368,21 @@ def eat_attributes(
 
 
 def eat_tag(
-    lines: List[str], start_idx: int, depth: int, c_types: Dict[int, c_type]
+    lines: List[str], start_idx: int, depth: int, ctypes: Dict[int, CType]
 ) -> int:
     """
     Extracts each tag entry contained within 'lines', creating a dictionary of
-    tag IDs to extracted c_types. This function is called recursively, so each
+    tag IDs to extracted CTypes. This function is called recursively, so each
     time a new indentation level is found, the function will be called again.
 
     :param lines: Lines of dwarfdump output
     :param start_idx: Current line to search from
     :param depth: Recursive depth of the function, or the current number of
-        parent c_types
-    :param c_types: The c_types dictionary to collect c_types into. When a
+        parent CTypes
+    :param ctypes: The ctypes dictionary to collect CTypes into. When a
         greater indentation or depth is found, eat_tag will be called
-        recursively using the 'children' dictionary of the parent c_type, or the
-        c_type whose scope the tag entry belongs to.
+        recursively using the 'children' dictionary of the parent CType, or the
+        CType whose scope the tag entry belongs to.
 
     :return: Next line number to be parsed
     """
@@ -392,9 +393,9 @@ def eat_tag(
             tag_depth = (len(tag_match.group(2)) - BASE_TAG_INDENT) // DEPTH_MULTIPLIER
             if tag_depth == depth:
                 prev_id = int(tag_match.group(1), base=16)
-                c_types[prev_id] = c_type(tag_match.group(3))
+                ctypes[prev_id] = CType(tag_match.group(3))
                 start_idx = eat_attributes(
-                    lines, start_idx + 1, tag_depth, c_types[prev_id].attributes
+                    lines, start_idx + 1, tag_depth, ctypes[prev_id].attributes
                 )
             elif tag_depth < depth:
                 # We are no longer in scope
@@ -402,7 +403,7 @@ def eat_tag(
             elif tag_depth == depth + 1:
                 # This tag is in the scope of last entry
                 start_idx = eat_tag(
-                    lines, start_idx, depth + 1, c_types[prev_id].children
+                    lines, start_idx, depth + 1, ctypes[prev_id].children
                 )
             else:
                 raise ValueError(
@@ -482,7 +483,7 @@ class ConfigStructResolver:
     """
     This class records all configuration structs of a system. As structs are
     added to this class, their target files are dwarf dumped and parsed, and all
-    c_types they contain are collected into a dictionary.
+    CTypes they contain are collected into a dictionary.
 
     Once all structs of the system are added, they are serialised one-by-one
     based on the memory layout of their types derived from the DWARF symbols in
@@ -509,7 +510,7 @@ class ConfigStructResolver:
 
         self.build_dir = build_dir
         self.dwarfdump_name = dwarfdump_name
-        self.files: Dict[pathlib.Path, Dict[int, c_type]] = dict()
+        self.files: Dict[pathlib.Path, Dict[int, CType]] = dict()
         self.config_structs: List[ConfigStruct] = []
 
         try:
@@ -547,9 +548,9 @@ class ConfigStructResolver:
         for s in lst:
             self.add_struct(s)
 
-    def resolve_target_file(self, target_file: pathlib.Path) -> Dict[int, c_type]:
+    def resolve_target_file(self, target_file: pathlib.Path) -> Dict[int, CType]:
         """
-        Dwarf dump a target file, parse the output and collect all c_types into a dictionary.
+        Dwarf dump a target file, parse the output and collect all CTypes into a dictionary.
         """
         try:
             output = subprocess.run(
@@ -563,13 +564,13 @@ class ConfigStructResolver:
                 f"Failed to eat DWARF from {target_file}! Does file exist?"
             ) from e
 
-        type_collector: Dict[int, c_type] = dict()
+        type_collector: Dict[int, CType] = dict()
         eat_tag(output.stdout.splitlines(), 0, 0, type_collector)
 
         return type_collector
 
     def _flatten_and_write(
-        self, c_types: Dict[int, c_type], user_value: Any, type_match: c_type
+        self, ctypes: Dict[int, CType], user_value: Any, type_match: CType
     ) -> bytes:
         """
         Returns the serialised bytes of the C type with value user_value. Used
@@ -649,7 +650,7 @@ class ConfigStructResolver:
                     ) from e
 
             case "array_type":
-                entry_type = find_base_type(c_types, type_match, True)
+                entry_type = find_base_type(ctypes, type_match, True)
                 array_counts = find_array_count(type_match)
 
                 if len(array_counts) != 1:
@@ -669,7 +670,7 @@ class ConfigStructResolver:
 
                 if not entry_type.byte_size:
                     raise ValueError(
-                        f"Can't fill an array with entries of size 0, c_type '{type_match}'"
+                        f"Can't fill an array with entries of size 0, CType '{type_match}'"
                     )
 
                 if (
@@ -683,18 +684,18 @@ class ConfigStructResolver:
                     or len(user_value) > num_entries
                 ):
                     raise ValueError(
-                        f"Can't fill an array with a non-iterable or too-large an iterable '{user_value}', c_type '{type_match}'"
+                        f"Can't fill an array with a non-iterable or too-large an iterable '{user_value}', CType '{type_match}'"
                     )
 
                 out_blob = bytearray()
                 for entry_value in user_value:
                     try:
                         out_blob.extend(
-                            self._flatten_and_write(c_types, entry_value, entry_type)
+                            self._flatten_and_write(ctypes, entry_value, entry_type)
                         )
                     except Exception as e:
                         raise Exception(
-                            f"Exception occurred while filling field of array c_type '{type_match}'`"
+                            f"Exception occurred while filling field of array CType '{type_match}'`"
                         ) from e
 
                 type_size = num_entries * entry_type.byte_size
@@ -706,7 +707,7 @@ class ConfigStructResolver:
                 # Strings must be null-terminated
                 if entry_type.name == "char" and out_blob[-1] != 0:
                     raise ValueError(
-                        f"Arrays of chars must be zero terminated, string '{user_value!r}', c_type '{type_match}'"
+                        f"Arrays of chars must be zero terminated, string '{user_value!r}', CType '{type_match}'"
                     )
 
                 return bytes(out_blob)
@@ -727,7 +728,7 @@ class ConfigStructResolver:
                 # Every member must have a field value, and vice versa
                 if set(user_value.fields) != member_names:
                     raise ValueError(
-                        f"User provided keys '{set(user_value.fields)}' do not match structure type member names '{member_names}', c_type '{type_match}'"
+                        f"User provided keys '{set(user_value.fields)}' do not match structure type member names '{member_names}', CType '{type_match}'"
                     )
 
                 out_blob = bytearray()
@@ -747,25 +748,25 @@ class ConfigStructResolver:
                     out_blob.extend(bytes(member.data_member_location - len(out_blob)))
 
                     member_value = user_value.fields[member.name]
-                    member_type = find_base_type(c_types, member, False)
+                    member_type = find_base_type(ctypes, member, False)
                     try:
                         out_blob.extend(
                             self._flatten_and_write(
-                                c_types,
+                                ctypes,
                                 member_value,
                                 member_type,
                             )
                         )
                     except Exception as e:
                         raise Exception(
-                            f"Exception occurred while filling member {member.name}, (type = {member_type}) with value {member_value} of structure c_type '{type_match}'`"
+                            f"Exception occurred while filling member {member.name}, (type = {member_type}) with value {member_value} of structure CType '{type_match}'`"
                         ) from e
 
                 assert len(out_blob) <= type_match.byte_size
                 out_blob.extend(bytes(type_match.byte_size - len(out_blob)))
                 return bytes(out_blob)
             case _:
-                raise ValueError(f"Trying to flatten unexpected c_type '{type_match}'")
+                raise ValueError(f"Trying to flatten unexpected CType '{type_match}'")
 
     def resolve_and_create_all(self, dump: bool = False):
         """
@@ -782,12 +783,12 @@ class ConfigStructResolver:
                     f"Top level config struct {config_struct} has no type name!"
                 )
 
-            match = find_c_type_by_name(
+            match = find_ctype_by_name(
                 self.files[config_struct.target_file], config_struct.type_name
             )
             if not match:
                 raise ValueError(
-                    f"Could not find c_type match with name {config_struct.type_name}"
+                    f"Could not find CType match with name {config_struct.type_name}"
                 )
             match = find_base_type(self.files[config_struct.target_file], match, False)
 
@@ -797,7 +798,7 @@ class ConfigStructResolver:
                 )
             except Exception as e:
                 raise Exception(
-                    f"Exception occurred while flattening config struct '{config_struct}' into structure c_type '{match}'`"
+                    f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{match}'`"
                 ) from e
 
             blob_name = f"{str(config_struct.target_file).removesuffix('.elf')}_{config_struct.section_name}.data"
