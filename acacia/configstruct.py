@@ -166,6 +166,9 @@ class CType:
         if self.tag_type != other.tag_type:
             return False
 
+        # Construct two new dictionaries for self and other, excluding the
+        # "type" attribute. Ensure the key, value pairs of these two
+        # dictionaries are equal
         if {k: v for k, v in self.attributes.items() if k != "type"} != {
             k: v for k, v in other.attributes.items() if k != "type"
         }:
