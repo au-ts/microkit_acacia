@@ -103,8 +103,9 @@ class c_type:
             # Raw line: DW_AT_count	(0x01), captured value: 0x01
             return int(self.attributes["count"][2:], base=16)
         if "upper_bound" in self.attributes:
-            # Raw line: DW_AT_upper_bound	(0x14), captured value: 0x14 -- this is the last valid index
-            return int(self.attributes["count"][2:], base=16) + 1
+            # Raw line: DW_AT_upper_bound   (0x14), captured value: 0x14
+            # upper bound is the last valid index in an array
+            return int(self.attributes["upper_bound"][2:], base=16) + 1
         return None
 
     @property
