@@ -76,7 +76,7 @@ class c_type:
         Returns the name of the c_type if defined, else None.
         """
         if "name" in self.attributes:
-            # Raw line: DW_AT_name	("usize"), captured value: "usize"
+            # Raw line: DW_AT_name	("usize"), self.attributes["name"] = '"usize"'
             return self.attributes["name"][1:-1]
         return None
 
@@ -88,7 +88,7 @@ class c_type:
         like typedef types or member types.
         """
         if "type" in self.attributes:
-            # Raw line: DW_AT_type	(0x00000068 "usize"), captured value: 0x00000068 "usize"
+            # Raw line: DW_AT_type	(0x00000068 "usize"), self.attributes["type"] = '0x00000068 "usize"'
             return int(self.attributes["type"][2:10], base=16)
         return None
 
@@ -100,10 +100,10 @@ class c_type:
         types.
         """
         if "count" in self.attributes:
-            # Raw line: DW_AT_count	(0x01), captured value: 0x01
+            # Raw line: DW_AT_count	(0x01), self.attributes["count"] = '0x01'
             return int(self.attributes["count"][2:], base=16)
         if "upper_bound" in self.attributes:
-            # Raw line: DW_AT_upper_bound   (0x14), captured value: 0x14
+            # Raw line: DW_AT_upper_bound   (0x14), self.attributes["upper_bound"] = '0x14'
             # upper bound is the last valid index in an array
             return int(self.attributes["upper_bound"][2:], base=16) + 1
         return None
@@ -114,7 +114,7 @@ class c_type:
         Returns the size of the c_type in bytes if defined, else None.
         """
         if "byte_size" in self.attributes:
-            # Raw line: DW_AT_byte_size	(0x08), captured value: 0x08
+            # Raw line: DW_AT_byte_size	(0x08), self.attributes["byte_size"] = '0x08'
             return int(self.attributes["byte_size"][2:], base=16)
         return None
 
@@ -126,7 +126,7 @@ class c_type:
         child types of structure types or union types.
         """
         if "data_member_location" in self.attributes:
-            # Raw line: DW_AT_data_member_location  (0x00), captured value: 0x00
+            # Raw line: DW_AT_data_member_location  (0x00), self.attributes["data_member_location"] = '0x00'
             return int(self.attributes["data_member_location"][2:], base=16)
         return None
 
@@ -137,7 +137,7 @@ class c_type:
         base_types.
         """
         if "encoding" in self.attributes:
-            # Raw line: DW_AT_encoding	(DW_ATE_unsigned), captured value: DW_ATE_unsigned
+            # Raw line: DW_AT_encoding	(DW_ATE_unsigned), self.attributes["encoding"] = 'DW_ATE_unsigned'
             return self.attributes["encoding"][len("DW_ATE_") :]
         return None
 
@@ -148,7 +148,7 @@ class c_type:
         """
         return (
             "declaration" in self.attributes
-            # Raw line: DW_AT_declaration (true), captured value: true
+            # Raw line: DW_AT_declaration (true), self.attributes["declaration"] = 'true'
             and self.attributes["declaration"] == "true"
         )
 
