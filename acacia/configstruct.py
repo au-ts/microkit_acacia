@@ -158,6 +158,40 @@ class CType:
             and self.attributes["declaration"] == "true"
         )
 
+    def calc_byte_size(self) -> int:
+        """
+        Calculates the byte size of a CType. If byte size is defined, it is
+        returned directly. If CType is a pointer type, 8 is returned. If CType
+        is an array type, the byte size is calculated from the number of entries
+        and the size of it's entries. If byte size is not possible to calculate,
+        an exception is raised.
+        """
+        if self.byte_size:
+            return self.byte_size
+        elif self.tag_type == "pointer_type":
+            return 8
+        elif self.tag_type == "array_type":
+            entry_type = self.find_base_type(True)
+            array_counts = self.find_array_count()
+
+            if len(array_counts) != 1:
+                raise ValueError(
+                    f"Acacia does not support config structs with multi-dimensional arrays. Array type '{self}' has dimensions '{array_counts}'"
+                )
+            elif array_counts[0] is None:
+                raise ValueError(
+                    f"Acacia does not support config structs including arrays with no specified number of entries. Array type '{self}'"
+                )
+            elif array_counts[0] == 0:
+                raise ValueError(
+                    f"Acacia does not support config structs including arrays with zero entries. Array type '{self}'"
+                )
+
+            num_entries = array_counts[0]
+            return num_entries * entry_type.calc_byte_size()
+
+        raise ValueError(f"Could not calculate byte size of type {self}")
+
     def __eq__(self, other: object):
         """
         Checks whether another object is equal to a CType. Equality requires
@@ -180,7 +214,8 @@ class CType:
             return False
 
         if (
-            self.base_type_id is not None and other.base_type_id
+            self.base_type_id is not None
+            and other.base_type_id is not None
             and self.ctypes[self.base_type_id] != other.ctypes[other.base_type_id]
         ):
             return False
@@ -603,8 +638,7 @@ class ConfigStructResolver:
         match type_match.tag_type:
             case "pointer_type":
                 try:
-                    # We assume pointers are 8 byte unsigned
-                    return user_value.to_bytes(8, "little")
+                    return user_value.to_bytes(type_match.calc_byte_size(), "little")
                 except Exception as e:
                     raise ValueError(
                         f"Could not create C pointer type from value '{user_value}'"
@@ -671,13 +705,7 @@ class ConfigStructResolver:
                     raise ValueError(
                         f"Acacia does not support config structs including arrays with zero entries. Array type '{type_match}'"
                     )
-
                 num_entries = array_counts[0]
-
-                if not entry_type.byte_size:
-                    raise ValueError(
-                        f"Can't fill an array with entries of size 0, CType '{type_match}'"
-                    )
 
                 if (
                     not (
@@ -704,7 +732,7 @@ class ConfigStructResolver:
                             f"Exception occurred while filling field of array CType '{type_match}'`"
                         ) from e
 
-                type_size = num_entries * entry_type.byte_size
+                type_size = type_match.calc_byte_size()
 
                 # Pad the remaining array entries
                 assert len(out_blob) <= type_size
