@@ -180,7 +180,7 @@ class CType:
             return False
 
         if (
-            self.base_type_id is not None
+            self.base_type_id is not None and other.base_type_id
             and self.ctypes[self.base_type_id] != other.ctypes[other.base_type_id]
         ):
             return False
