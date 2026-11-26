@@ -19,10 +19,13 @@ class CType:
     captured allows Acacia to serialise Python configuration data into the
     format expected by the source program.
 
-    Each CType contains a dictionary of the tag's listed attributes, with the
-    string of the attribute's name as the key. CTypes also contain a dictionary
-    of child CTypes with the child's numeric identifier as the key. Child
-    CTypes are tag entries defined within the scope of the parent tag entry.
+    Each CType contains:
+    * a dictionary containing the CType of each tag entry found in the source
+    elf file, mapping the entry's ID to the corresponding CType
+    * a dictionary of the tag's listed attributes, with the string of the
+    attribute's name as the key
+    * a list of the IDs of tags defined within the scope of this CType, or child
+    CTypes
 
     Examples of such tag entries used by this module include an array entry with
     a subrange child:
@@ -60,15 +63,18 @@ class CType:
     0x000000ef:     NULL
     """
 
-    def __init__(self, tag_type: str):
+    def __init__(self, ctypes: Dict[int, CType], tag_type: str):
         """
+        :param ctypes: Dictionary containing all CTypes found in the source elf
+            file, mapping ID to CType
         :param tag_type: Type of the tag entry, encoded as the string that
             follows 'DW_TAG_'. Examples include 'array_type', 'subrange_type',
             'structure_type', or 'member'
         """
+        self.ctypes = ctypes
         self.tag_type = tag_type
         self.attributes: Dict[str, str] = dict()
-        self.children: Dict[int, CType] = dict()
+        self.children: List[int] = list()
 
     @property
     def name(self) -> Optional[str]:
@@ -155,8 +161,9 @@ class CType:
     def __eq__(self, other: object):
         """
         Checks whether another object is equal to a CType. Equality requires
-        that the object is a CType with equal attributes and children,
-        excluding the base type ID attribute. Types with identical shapes can
+        that the object is a CType with equal attributes and children, excluding
+        the ID of the base type (equality of the CTypes corresponding to the
+        base type ID are recursively checked). Types with identical shapes can
         have different type IDs, thus this field can produce false inequality
         for the purposes of serialising types.
         """
@@ -166,75 +173,77 @@ class CType:
         if self.tag_type != other.tag_type:
             return False
 
-        # Construct two new dictionaries for self and other, excluding the
-        # "type" attribute. Ensure the key, value pairs of these two
-        # dictionaries are equal
-        if {k: v for k, v in self.attributes.items() if k != "type"} != {
-            k: v for k, v in other.attributes.items() if k != "type"
-        }:
+        keys = [k for k in self.attributes if k != "type"]
+        if self.attributes.keys() != other.attributes.keys() or any(
+            self.attributes[k] != other.attributes[k] for k in keys
+        ):
             return False
 
-        # We only consider the values as the key is the tag ID of the child tag
-        return list(self.children.values()) == list(other.children.values())
+        if (
+            self.base_type_id is not None
+            and self.ctypes[self.base_type_id] != other.ctypes[other.base_type_id]
+        ):
+            return False
+
+        return list(self.ctypes[child] for child in self.children) == list(
+            other.ctypes[child] for child in other.children
+        )
 
     def __repr__(self):
         join_string = "\n    "
         repr_string = f"{self.tag_type}: {self.name},\nAttributes:\n    {join_string.join(f'{k}: {v}' for k, v in self.attributes.items())}\n"
 
         if len(self.children):
-            repr_string += f"Children:\n    {join_string.join(f'{k}: {v}' for k, v in self.children.items())}\n"
+            repr_string += f"Children:\n    {join_string.join(f'{child_id}: {self.ctypes[child_id]}' for child_id in self.children)}\n"
 
         return repr_string
 
+    def find_base_type(self, resolve_array_type: bool) -> CType:
+        """
+        Finds the base CType of a given CType using the base type's ID. This
+        function does not resolve the base type of pointer types as Acacia
+        treats all pointer types as 8 byte unsigned encodings. `self` is
+        returned if there is no base type, `self` is a pointer type or `self` is
+        an array type, and array types are not required to be resolved.
 
-def find_ctype_by_id(ctypes: Dict[int, CType], target_id: int) -> Optional[CType]:
-    """
-    Recursively searches for the CType corresponding to target_id in the
-    ctypes dictionary. Once a match is found, the function returns immediately
-    since type ID is unique for each tag entry. Returns None if not found.
+        :param resolve_array_type: Whether array types should be resolved to
+            their entry type or returned without modification
+        """
+        if (
+            not self.base_type_id
+            or (not resolve_array_type and self.tag_type == "array_type")
+            or self.tag_type == "pointer_type"
+        ):
+            return self
 
-    :param ctypes: Dictionary of type IDs to CTypes to search
-    :param target_id: ID of the CType to find
-    """
-    for entry_id in ctypes:
-        if entry_id == target_id:
-            return ctypes[entry_id]
+        base_type = self.ctypes[self.base_type_id]
+        if not base_type:
+            raise ValueError(
+                f"Could not find base type ({self.base_type_id}) of CType {self}"
+            )
 
-        child_match = find_ctype_by_id(ctypes[entry_id].children, target_id)
-        if child_match is not None:
-            return child_match
+        # Only resolve to the original type's entry type, do not resolve
+        # result's entry type
+        return base_type.find_base_type(False)
 
-    return None
+    def find_array_count(self) -> List[Optional[int]]:
+        """
+        Finds the number of entries in each dimension of an array type by examining
+        each subrange type. E.g. array[6][8] will return [6, 8].
+        """
+        if self.tag_type != "array_type":
+            raise ValueError(f"Non array types do not support array counts {self}")
 
+        subrange_counts = list()
+        for subrange_type in [self.ctypes[child_id] for child_id in self.children]:
+            if subrange_type.tag_type != "subrange_type":
+                raise ValueError(
+                    f"ConfigStruct module does not support array types with non-subrange child types {self}"
+                )
 
-def find_base_type(
-    ctypes: Dict[int, CType], raw_type: CType, resolve_array_type: bool
-) -> CType:
-    """
-    Finds the base CType of a given CType using the base type's ID. This
-    function does not resolve the base type of pointer types as Acacia treats
-    all pointer types as 8 byte unsigned encodings. raw_type is returned if a
-    base type does not exist.
+            subrange_counts.append(subrange_type.count)
 
-    :param ctypes: Dictionary of type IDs to CTypes to search
-    :param raw_type: CType to resolve
-    :param resolve_array_type: Whether array types should be resolved to their
-        entry type or returned without modification
-    """
-    if (
-        not raw_type.base_type_id
-        or (not resolve_array_type and raw_type.tag_type == "array_type")
-        or raw_type.tag_type == "pointer_type"
-    ):
-        return raw_type
-
-    base_type = find_ctype_by_id(ctypes, raw_type.base_type_id)
-    if not base_type:
-        raise ValueError(
-            f"Could not find base type ({raw_type.base_type_id}) of CType {raw_type}"
-        )
-
-    return find_base_type(ctypes, base_type, resolve_array_type)
+        return subrange_counts
 
 
 def find_ctype_by_name(ctypes: Dict[int, CType], name: str) -> Optional[CType]:
@@ -250,10 +259,6 @@ def find_ctype_by_name(ctypes: Dict[int, CType], name: str) -> Optional[CType]:
     """
     matches = list()
     for entry in ctypes.values():
-        child_match = find_ctype_by_name(entry.children, name)
-        if child_match:
-            matches.append(child_match)
-
         if entry.name == name:
             matches.append(entry)
 
@@ -273,25 +278,6 @@ def find_ctype_by_name(ctypes: Dict[int, CType], name: str) -> Optional[CType]:
             )
 
     return match
-
-
-def find_array_count(array_type: CType) -> List[Optional[int]]:
-    """
-    Finds the number of entries in each dimension of an array type by examining
-    each subrange type. E.g. array[6][8] will return [6, 8].
-
-    :param array_type: Array type to find the number of entries of
-    """
-    subrange_counts = list()
-    for subrange_type in array_type.children.values():
-        if subrange_type.tag_type != "subrange_type":
-            raise ValueError(
-                f"ConfigStruct module does not support array types with non-subrange child types {array_type}"
-            )
-
-        subrange_counts.append(subrange_type.count)
-
-    return subrange_counts
 
 
 # The following functions parse dwarf dump output relying on:
@@ -377,7 +363,11 @@ def eat_attributes(
 
 
 def eat_tag(
-    lines: List[str], start_idx: int, depth: int, ctypes: Dict[int, CType]
+    lines: List[str],
+    start_idx: int,
+    depth: int,
+    ctypes: Dict[int, CType],
+    child_list: List[int],
 ) -> int:
     """
     Extracts each tag entry contained within 'lines', creating a dictionary of
@@ -388,10 +378,11 @@ def eat_tag(
     :param start_idx: Current line to search from
     :param depth: Recursive depth of the function, or the current number of
         parent CTypes
-    :param ctypes: The ctypes dictionary to collect CTypes into. When a
-        greater indentation or depth is found, eat_tag will be called
-        recursively using the 'children' dictionary of the parent CType, or the
-        CType whose scope the tag entry belongs to.
+    :param ctypes: The dictionary to collect CTypes into.
+    :param child_list: The current list of children IDs to collect IDs into.
+        When a greater indentation or depth is reached, eat_tag will be called
+        recursively using the 'children' list of the parent CType, or the CType
+        whose scope the tag entry belongs to.
 
     :return: Next line number to be parsed
     """
@@ -402,7 +393,8 @@ def eat_tag(
             tag_depth = (len(tag_match.group(2)) - BASE_TAG_INDENT) // DEPTH_MULTIPLIER
             if tag_depth == depth:
                 prev_id = int(tag_match.group(1), base=16)
-                ctypes[prev_id] = CType(tag_match.group(3))
+                ctypes[prev_id] = CType(ctypes, tag_match.group(3))
+                child_list.append(prev_id)
                 start_idx = eat_attributes(
                     lines, start_idx + 1, tag_depth, ctypes[prev_id].attributes
                 )
@@ -412,7 +404,7 @@ def eat_tag(
             elif tag_depth == depth + 1:
                 # This tag is in the scope of last entry
                 start_idx = eat_tag(
-                    lines, start_idx, depth + 1, ctypes[prev_id].children
+                    lines, start_idx, depth + 1, ctypes, ctypes[prev_id].children
                 )
             else:
                 raise ValueError(
@@ -574,7 +566,7 @@ class ConfigStructResolver:
             ) from e
 
         type_collector: Dict[int, CType] = dict()
-        eat_tag(output.stdout.splitlines(), 0, 0, type_collector)
+        eat_tag(output.stdout.splitlines(), 0, 0, type_collector, [])
 
         return type_collector
 
@@ -661,8 +653,8 @@ class ConfigStructResolver:
                     ) from e
 
             case "array_type":
-                entry_type = find_base_type(ctypes, type_match, True)
-                array_counts = find_array_count(type_match)
+                entry_type = type_match.find_base_type(True)
+                array_counts = type_match.find_array_count()
 
                 if len(array_counts) != 1:
                     raise ValueError(
@@ -728,7 +720,9 @@ class ConfigStructResolver:
                         f"Cannot fill a struct with no byte size {type_match}"
                     )
 
-                member_types = list(type_match.children.values())
+                member_types = list(
+                    type_match.ctypes[child_id] for child_id in type_match.children
+                )
                 member_names = set(m.name for m in member_types)
 
                 if None in member_names:
@@ -746,7 +740,9 @@ class ConfigStructResolver:
                 for member in sorted(
                     member_types,
                     key=lambda m: (
-                        m.data_member_location if m.data_member_location != None else 0
+                        m.data_member_location
+                        if m.data_member_location is not None
+                        else 0
                     ),
                 ):
                     if member.data_member_location is None:
@@ -759,7 +755,7 @@ class ConfigStructResolver:
                     out_blob.extend(bytes(member.data_member_location - len(out_blob)))
 
                     member_value = user_value.fields[member.name]
-                    member_type = find_base_type(ctypes, member, False)
+                    member_type = member.find_base_type(False)
                     try:
                         out_blob.extend(
                             self._flatten_and_write(
@@ -801,7 +797,7 @@ class ConfigStructResolver:
                 raise ValueError(
                     f"Could not find CType match with name {config_struct.type_name}"
                 )
-            match = find_base_type(self.files[config_struct.target_file], match, False)
+            match = match.find_base_type(False)
 
             try:
                 blob = self._flatten_and_write(
