@@ -620,7 +620,10 @@ class ConfigStructResolver:
 
                         if isinstance(user_value, str):
                             user_byte_value = user_value.encode()
-                            assert len(user_byte_value) == 1
+                            if len(user_byte_value) != 1:
+                                raise ValueError(
+                                    f"Length 1 string provided `{user_value}` encoded to len={len(user_byte_value)} bytes, should have byte length 1"
+                                )
                             return user_byte_value
                         elif isinstance(user_value, bytes):
                             return user_value
