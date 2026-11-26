@@ -1,10 +1,13 @@
 # Copyright 2026, UNSW
 # SPDX-License-Identifier: BSD-2-Clause
 
+import os
+import pathlib
 from typing import Optional, List
 from acacia import (
     ProtectionDomain,
     Subsystem,
+    SubsystemBuildError,
     Channel,
     Map,
     MemoryRegion,
@@ -14,6 +17,7 @@ from acacia import (
     ConfigStructResolver,
 )
 from acacia.arch import aarch64
+from acacia.configstruct import CType
 from acacia.irq import IRQ, ConventionalIRQ
 from acacia.subsystem import build_hook
 
@@ -99,7 +103,7 @@ class DummyI2C(Subsystem):
     def construct_infrastructure(self, driver_prio: int):
         # Make driver
         self.driver = ProtectionDomain(
-            sdf,
+            self.sdf,
             "i2c_driver",
             "i2c_driver.elf",
             scheduling=SchedulingProperties(driver_prio, passive=True),
@@ -159,21 +163,23 @@ for c in [client1, client2, client3]:
 
 sdf.assemble()
 
+# Config struct target files are resolved against the current directory, as they are when
+# Acacia runs from an sDDF build directory. Run from the prebuilt ELFs' directory so this
+# example works wherever it is launched from.
+os.chdir(pathlib.Path(__file__).resolve().parent / "dummy_configstruct_build")
+
 structs = i2c.generate_config_structs()
-r = ConfigStructResolver("./dummy_configstruct_build")
+r = ConfigStructResolver(pathlib.Path("."))
 for s in structs:
     print(s)
     r.add_struct(s)
 
-# Test struct dumper
-dumper = r.dwarfdump
-
-# Try resolve our config structs
-print("Dwarf structs matching config of dummy i2c driver:")
-driver_dwarf_structs = dumper.find_struct_and_children(
-    i2c.driver.prog_image, structs[0].typedef_name
+# Look up the driver's resource struct type in its DWARF
+print("DWARF type matching config of dummy i2c driver:")
+driver_ctype = CType.find_type_by_name(
+    r.files[structs[0].target_file], structs[0].type_name
 )
-print(driver_dwarf_structs)
+print(driver_ctype)
 
 # try find i2c configs structs
-sdf.make_config_structs("./dummy_configstruct_build/")
+sdf.make_config_structs(pathlib.Path("."))
