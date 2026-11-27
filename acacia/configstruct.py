@@ -83,7 +83,7 @@ class CType:
         """
         if "name" in self.attributes:
             # Raw line: DW_AT_name	("usize"), self.attributes["name"] = '"usize"'
-            return self.attributes["name"][1:-1]
+            return self.attributes["name"].strip('"')
         return None
 
     @property
