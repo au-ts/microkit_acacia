@@ -171,7 +171,7 @@ class CType:
         elif self.tag_type == "pointer_type":
             return 8
         elif self.tag_type == "array_type":
-            entry_type = self.find_base_type(True)
+            entry_type = self.find_base_type(resolve_array_type=True)
             array_counts = self.find_array_count()
 
             if len(array_counts) != 1:
@@ -233,7 +233,7 @@ class CType:
 
         return repr_string
 
-    def find_base_type(self, resolve_array_type: bool) -> CType:
+    def find_base_type(self, *, resolve_array_type: bool = False) -> CType:
         """
         Finds the base CType of a given CType using the base type's ID. This
         function does not resolve the base type of pointer types as Acacia
@@ -259,7 +259,7 @@ class CType:
 
         # Only resolve to the original type's entry type, do not resolve
         # result's entry type
-        return base_type.find_base_type(False)
+        return base_type.find_base_type()
 
     def find_array_count(self) -> List[Optional[int]]:
         """
@@ -690,7 +690,7 @@ class ConfigStructResolver:
                     ) from e
 
             case "array_type":
-                entry_type = type_match.find_base_type(True)
+                entry_type = type_match.find_base_type(resolve_array_type=True)
                 array_counts = type_match.find_array_count()
 
                 if len(array_counts) != 1:
@@ -786,7 +786,7 @@ class ConfigStructResolver:
                     out_blob.extend(bytes(member.data_member_location - len(out_blob)))
 
                     member_value = user_value.fields[member.name]
-                    member_type = member.find_base_type(False)
+                    member_type = member.find_base_type()
                     try:
                         out_blob.extend(
                             self._flatten_and_write(
@@ -828,7 +828,7 @@ class ConfigStructResolver:
                 raise ValueError(
                     f"Could not find CType match with name {config_struct.type_name}"
                 )
-            match = match.find_base_type(False)
+            match = match.find_base_type()
 
             try:
                 blob = self._flatten_and_write(
