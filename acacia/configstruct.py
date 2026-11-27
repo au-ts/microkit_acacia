@@ -226,10 +226,10 @@ class CType:
 
     def __repr__(self):
         join_string = "\n    "
-        repr_string = f"{self.tag_type}: {self.name},\nAttributes:\n    {join_string.join(f'{k}: {v}' for k, v in self.attributes.items())}\n"
+        repr_string = f"{self.tag_type}: {self.name},\nAttributes:{join_string}{join_string.join(f'{k}: {v}' for k, v in self.attributes.items())}\n"
 
         if len(self.children):
-            repr_string += f"Children:\n    {join_string.join(f'{c}: {self.ctypes[c]}' for c in self.children)}\n"
+            repr_string += f"Children:{join_string}{join_string.join(f'{c}: {self.ctypes[c]}' for c in self.children)}\n"
 
         return repr_string
 
