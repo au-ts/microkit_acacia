@@ -270,7 +270,7 @@ class CType:
             raise ValueError(f"Non array types do not support array counts {self}")
 
         subrange_counts = list()
-        for subrange_type in [self.ctypes[child_id] for child_id in self.children]:
+        for subrange_type in [self.ctypes[c] for c in self.children]:
             if subrange_type.tag_type != "subrange_type":
                 raise ValueError(
                     f"ConfigStruct module does not support array types with non-subrange child types {self}"
