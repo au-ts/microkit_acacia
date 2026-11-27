@@ -229,7 +229,7 @@ class CType:
         repr_string = f"{self.tag_type}: {self.name},\nAttributes:\n    {join_string.join(f'{k}: {v}' for k, v in self.attributes.items())}\n"
 
         if len(self.children):
-            repr_string += f"Children:\n    {join_string.join(f'{child_id}: {self.ctypes[child_id]}' for child_id in self.children)}\n"
+            repr_string += f"Children:\n    {join_string.join(f'{c}: {self.ctypes[c]}' for c in self.children)}\n"
 
         return repr_string
 
