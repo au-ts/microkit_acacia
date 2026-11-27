@@ -144,7 +144,7 @@ class CType:
         """
         if "encoding" in self.attributes:
             # Raw line: DW_AT_encoding	(DW_ATE_unsigned), self.attributes["encoding"] = 'DW_ATE_unsigned'
-            return self.attributes["encoding"][len("DW_ATE_") :]
+            return self.attributes["encoding"].lstrip("DW_ATE_")
         return None
 
     @property
