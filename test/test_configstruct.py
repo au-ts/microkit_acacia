@@ -29,20 +29,35 @@ def test_prefill_creates_client_regions_and_blobs(tmp_path):
                 target_file=elf,
                 empty=True,
                 prefill_pd=pd,
-                prefill_symbol="device_resources",
+                setvar="device_resources",
                 build_dir=tmp_path,
             )
+            configs.append(config)
         else:
-            config = ConfigStruct(
-                {}, type_name="device_resources_t", target_file=elf, empty=True
-            )
-            config.reserve_prefill_mr(
-                pd,
-                "device_resources",
-                build_dir=tmp_path,
-                perms="rw" if name == "client3" else "r",
-            )
-        configs.append(config)
+            if name == "client3":
+                config = ConfigStruct(
+                    {},
+                    type_name="device_resources_t",
+                    target_file=elf,
+                    empty=True,
+                    build_dir=tmp_path,
+                    setvar="device_resources",
+                    prefill_pd=pd,
+                    perms="rw",
+                )
+                configs.append(config)
+            else:
+                config = ConfigStruct(
+                    {},
+                    type_name="device_resources_t",
+                    target_file=elf,
+                    empty=True,
+                    build_dir=tmp_path,
+                    setvar="device_resources",
+                    prefill_pd=pd,
+                    perms="r",
+                )
+                configs.append(config)
 
     PrefillSubsystem(sdf, configs)
     sdf.make_config_structs(tmp_path)
