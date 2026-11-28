@@ -10,6 +10,16 @@ import subprocess
 from collections.abc import Iterable, Sized
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+def _extract_dwarf_int(value: str) -> int:
+    """
+    Convert a string containing a base 10 or 16 string to an integer. Base is
+    inferred from whether the string begins with '0x'.
+
+    :param value: String to convert to an integer.
+    """
+    base = 16 if value.startswith('0x') else 10
+    return int(value, base)
+
 
 class CType:
     """
@@ -95,7 +105,7 @@ class CType:
         """
         if "type" in self.attributes:
             # Raw line: DW_AT_type	(0x00000068 "usize"), self.attributes["type"] = '0x00000068 "usize"'
-            return int(self.attributes["type"][2:10], base=16)
+            return _extract_dwarf_int(self.attributes["type"].split(' ')[0])
         return None
 
     @property
@@ -107,11 +117,11 @@ class CType:
         """
         if "count" in self.attributes:
             # Raw line: DW_AT_count	(0x01), self.attributes["count"] = '0x01'
-            return int(self.attributes["count"][2:], base=16)
+            return _extract_dwarf_int(self.attributes["count"])
         if "upper_bound" in self.attributes:
             # Raw line: DW_AT_upper_bound   (0x14), self.attributes["upper_bound"] = '0x14'
             # upper bound is the last valid index in an array
-            return int(self.attributes["upper_bound"][2:], base=16) + 1
+            return _extract_dwarf_int(self.attributes["upper_bound"]) + 1
         return None
 
     @property
@@ -121,7 +131,7 @@ class CType:
         """
         if "byte_size" in self.attributes:
             # Raw line: DW_AT_byte_size	(0x08), self.attributes["byte_size"] = '0x08'
-            return int(self.attributes["byte_size"][2:], base=16)
+            return _extract_dwarf_int(self.attributes["byte_size"])
         return None
 
     @property
@@ -133,7 +143,7 @@ class CType:
         """
         if "data_member_location" in self.attributes:
             # Raw line: DW_AT_data_member_location  (0x00), self.attributes["data_member_location"] = '0x00'
-            return int(self.attributes["data_member_location"][2:], base=16)
+            return _extract_dwarf_int(self.attributes["data_member_location"])
         return None
 
     @property
@@ -423,11 +433,11 @@ def eat_tag(
     """
     prev_id = 0
     while start_idx < len(lines):
-        tag_match = re.match(r"^0x([0-9a-f]{8}):( +)DW_TAG_(.+)", lines[start_idx])
+        tag_match = re.match(r"^(0x[0-9a-f]+):( +)DW_TAG_(.+)", lines[start_idx])
         if tag_match:
             tag_depth = (len(tag_match.group(2)) - BASE_TAG_INDENT) // DEPTH_MULTIPLIER
             if tag_depth == depth:
-                prev_id = int(tag_match.group(1), base=16)
+                prev_id = _extract_dwarf_int(tag_match.group(1))
                 ctypes[prev_id] = CType(ctypes, tag_match.group(3))
                 child_list.append(prev_id)
                 start_idx = eat_attributes(
