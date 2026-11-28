@@ -658,7 +658,7 @@ class ConfigStructResolver:
                     if isinstance(user_value, str) or isinstance(user_value, bytes):
                         if type_match.byte_size != 1 or len(user_value) != 1:
                             raise ValueError(
-                                f"Strings and bytes are only supported for single byte sized encoding, not encoding '{type_match.encoding}' with byte size '{type_match.byte_size}'"
+                                f"Strings and bytes are only supported for single byte sized encodings (e.g. `char`s), not encoding '{type_match.encoding}' with byte size '{type_match.byte_size}'"
                             )
 
                         if isinstance(user_value, str):
