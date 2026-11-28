@@ -91,9 +91,9 @@ class CType:
         """
         Returns the name of the CType if defined, else None.
         """
-        if "name" in self.attributes:
+        if (name := self.attributes.get("name")) is not None:
             # Raw line: DW_AT_name	("usize"), self.attributes["name"] = '"usize"'
-            return self.attributes["name"].strip('"')
+            return name.strip('"')
         return None
 
     @property
@@ -103,9 +103,9 @@ class CType:
         field is used in tags where the type of the entry is defined elsewhere,
         like typedef types or member types.
         """
-        if "type" in self.attributes:
+        if (type_id := self.attributes.get("type")) is not None:
             # Raw line: DW_AT_type	(0x00000068 "usize"), self.attributes["type"] = '0x00000068 "usize"'
-            return _extract_dwarf_int(self.attributes["type"].split(' ')[0])
+            return _extract_dwarf_int(type_id.split(' ')[0])
         return None
 
     @property
@@ -115,13 +115,13 @@ class CType:
         None. This field is used in subrange types, which are children of array
         types.
         """
-        if "count" in self.attributes:
+        if (count := self.attributes.get("count")) is not None:
             # Raw line: DW_AT_count	(0x01), self.attributes["count"] = '0x01'
-            return _extract_dwarf_int(self.attributes["count"])
-        if "upper_bound" in self.attributes:
+            return _extract_dwarf_int(count)
+        if (upper_bound := self.attributes.get("upper_bound")) is not None:
             # Raw line: DW_AT_upper_bound   (0x14), self.attributes["upper_bound"] = '0x14'
             # upper bound is the last valid index in an array
-            return _extract_dwarf_int(self.attributes["upper_bound"]) + 1
+            return _extract_dwarf_int(upper_bound) + 1
         return None
 
     @property
@@ -129,9 +129,9 @@ class CType:
         """
         Returns the size of the CType in bytes if defined, else None.
         """
-        if "byte_size" in self.attributes:
+        if (byte_size := self.attributes.get("byte_size")) is not None:
             # Raw line: DW_AT_byte_size	(0x08), self.attributes["byte_size"] = '0x08'
-            return _extract_dwarf_int(self.attributes["byte_size"])
+            return _extract_dwarf_int(byte_size)
         return None
 
     @property
@@ -141,9 +141,9 @@ class CType:
         parent CType if defined, else None. Used in member types, which are
         child types of structure types or union types.
         """
-        if "data_member_location" in self.attributes:
+        if (data_member_location := self.attributes.get("data_member_location")) is not None:
             # Raw line: DW_AT_data_member_location  (0x00), self.attributes["data_member_location"] = '0x00'
-            return _extract_dwarf_int(self.attributes["data_member_location"])
+            return _extract_dwarf_int(data_member_location)
         return None
 
     @property
@@ -152,9 +152,9 @@ class CType:
         Returns how the CType is encoded if defined, else None. Used in
         base_types.
         """
-        if "encoding" in self.attributes:
+        if (encoding := self.attributes.get("encoding")) is not None:
             # Raw line: DW_AT_encoding	(DW_ATE_unsigned), self.attributes["encoding"] = 'DW_ATE_unsigned'
-            return self.attributes["encoding"].lstrip("DW_ATE_")
+            return encoding.lstrip("DW_ATE_")
         return None
 
     @property
@@ -163,9 +163,8 @@ class CType:
         Returns whether the CType is simply a declaration and not defined.
         """
         return (
-            "declaration" in self.attributes
             # Raw line: DW_AT_declaration (true), self.attributes["declaration"] = 'true'
-            and self.attributes["declaration"] == "true"
+            self.attributes.get("declaration") == "true"
         )
 
     def calc_byte_size(self) -> int:
@@ -176,7 +175,7 @@ class CType:
         and the size of it's entries. If byte size is not possible to calculate,
         an exception is raised.
         """
-        if self.byte_size:
+        if self.byte_size is not None:
             return self.byte_size
         elif self.tag_type == "pointer_type":
             return 8
@@ -255,7 +254,7 @@ class CType:
             their entry type or returned without modification
         """
         if (
-            not self.base_type_id
+            self.base_type_id is None
             or (not resolve_array_type and self.tag_type == "array_type")
             or self.tag_type == "pointer_type"
         ):
