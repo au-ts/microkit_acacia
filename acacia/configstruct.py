@@ -378,6 +378,7 @@ def eat_attributes(
                     f"Expected tag attribute to be indented with {depth * DEPTH_MULTIPLIER + BASE_ATTR_INDENT} spaces, found {indent} spaces"
                 )
 
+            attribute_name = attribute_match.group(2)
             attribute_value = attribute_match.group(3)
             start_idx += 1
             # The following lines handle multi-line attributes, like
@@ -400,7 +401,11 @@ def eat_attributes(
                 attribute_value += multi_line_value_match.group(1)
                 start_idx += 1
 
-            ctype_attrs[attribute_match.group(2)] = attribute_value[1:-1]
+            if not attribute_value.startswith("(") and attribute_value.endswith(")"):
+                raise ValueError(
+                    f"Expected attribute value to be enclosed in parenthesis, found {attribute_value}"
+                )
+            ctype_attrs[attribute_name] = attribute_value[1:-1]
 
         else:
             if len(lines[start_idx]) == 0:
