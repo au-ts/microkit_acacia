@@ -10,6 +10,7 @@ import subprocess
 from collections.abc import Iterable, Sized
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+
 def _extract_dwarf_int(value: str) -> int:
     """
     Convert a string containing a base 10 or 16 string to an integer. Base is
@@ -17,7 +18,7 @@ def _extract_dwarf_int(value: str) -> int:
 
     :param value: String to convert to an integer.
     """
-    base = 16 if value.startswith('0x') else 10
+    base = 16 if value.startswith("0x") else 10
     return int(value, base)
 
 
@@ -105,7 +106,7 @@ class CType:
         """
         if (type_id := self.attributes.get("type")) is not None:
             # Raw line: DW_AT_type	(0x00000068 "usize"), self.attributes["type"] = '0x00000068 "usize"'
-            return _extract_dwarf_int(type_id.split(' ')[0])
+            return _extract_dwarf_int(type_id.split(" ")[0])
         return None
 
     @property
@@ -141,7 +142,9 @@ class CType:
         parent CType if defined, else None. Used in member types, which are
         child types of structure types or union types.
         """
-        if (data_member_location := self.attributes.get("data_member_location")) is not None:
+        if (
+            data_member_location := self.attributes.get("data_member_location")
+        ) is not None:
             # Raw line: DW_AT_data_member_location  (0x00), self.attributes["data_member_location"] = '0x00'
             return _extract_dwarf_int(data_member_location)
         return None
@@ -164,7 +167,8 @@ class CType:
         """
         return (
             # Raw line: DW_AT_declaration (true), self.attributes["declaration"] = 'true'
-            self.attributes.get("declaration") == "true"
+            self.attributes.get("declaration")
+            == "true"
         )
 
     def calc_byte_size(self) -> int:
