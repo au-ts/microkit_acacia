@@ -386,7 +386,9 @@ def eat_attributes(
             #    [0x0000000000205e98, 0x0000000000205eb4): DW_OP_reg12 W12
             #    [0x0000000000205f64, 0x0000000000205f80): DW_OP_reg11 W11)
             while start_idx < len(lines) and len(lines[start_idx]):
-                if re.match(r"^( +)DW_AT_([^\s]+)\t(.*)", lines[start_idx]):
+                if re.match(r"^( +)DW_AT_([^\s]+)\t(.*)", lines[start_idx]) or re.match(
+                    r"^0x[0-9a-f]+: Compile Unit:.*", lines[start_idx]
+                ):
                     break
 
                 multi_line_value_match = re.match(r"^ +([^ ].*)", lines[start_idx])
@@ -401,11 +403,14 @@ def eat_attributes(
             ctype_attrs[attribute_match.group(2)] = attribute_value[1:-1]
 
         else:
-            if not len(lines[start_idx]) == 0:
+            if len(lines[start_idx]) == 0:
+                return start_idx + 1
+            elif re.match(r"^0x[0-9a-f]+: Compile Unit:.*", lines[start_idx]):
+                return start_idx
+            else:
                 raise ValueError(
-                    f"Expected a tag attribute or empty line (line {start_idx}), found {lines[start_idx]}"
+                    f"Expected a tag attribute, empty line or compile unit (line {start_idx}), found {lines[start_idx]}"
                 )
-            return start_idx + 1
 
     return start_idx
 
