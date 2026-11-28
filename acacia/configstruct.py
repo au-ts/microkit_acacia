@@ -11,6 +11,13 @@ from collections.abc import Iterable, Sized
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .pd import ProtectionDomain
+    from .memory import Map, MemoryRegion
+
+
 def _extract_dwarf_int(value: str) -> int:
     """
     Convert a string containing a base 10 or 16 string to an integer. Base is
@@ -501,6 +508,15 @@ class ConfigStruct:
     * `section_name`: The name of the ELF section this belongs to.
        NOTE: this currently is unused! https://github.com/au-ts/microkit_acacia/issues/48
 
+    Acacia will generate a binary blob that can either be patched into an ELF
+    via objcopy or Microkit can prefill a specified memory region. If you would
+    like to manually objcopy then you do not need to supply the prefill_pd,
+    setvar, setvar_prefill_size, or perms arguments. If you would prefer
+    Microkit to prefill a memory region for you allowing you to access
+    configuration information like a standard global variable then you must
+    provide the arguments mentioned in the previous sentence (except for
+    setvar_prefill_size which remains optional).
+
     In the event that a ConfigStruct is unused, or we want to zero-fill a struct inside of another
     `ConfigStruct`, you may set the `empty` field to True. This will cause Acacia to skip trying
     to populate it while suppressing the "missing field" error that would normally appear if you
@@ -511,9 +527,14 @@ class ConfigStruct:
         self,
         fields: Dict[str, Any],
         type_name: Optional[str] = None,
-        section_name: Optional[pathlib.Path] = None,
+        section_name: Optional[str] = None,
         target_file: Optional[pathlib.Path] = None,
         empty: bool = False,
+        prefill_pd: Optional[ProtectionDomain] = None,
+        setvar: Optional[str] = None,
+        setvar_prefill_size: Optional[int] = None,
+        build_dir: pathlib.Path = pathlib.Path("./"),
+        perms: str = "r",
     ):
         """
         :param fields: dictionary of field names -> values. Can be:
@@ -524,7 +545,20 @@ class ConfigStruct:
         :param type_name: type of struct in C
         :param section_name: name of section to patch config struct into
         :param target_file: ELF file this will be patched into
+        :param prefill_pd: PD to reserve and map a prefill region for
+        :param setvar: symbol to receive the prefill mapping's virtual address
+        :param setvar_prefill_size: manually set the prefill MR's size
+        :param build_dir: directory for the prefill data blob
+        :param perms: permissions of the prefill mapping
         """
+        permissions = perms.lower()
+        # "nothing but r, w, and x please"
+        if len(set(permissions).difference((set("rwx")))) != 0:
+            raise ValueError("Only r, w, and x are valid permissions string members!")
+        from .memory import Map
+
+        _p = permissions
+        self.perms = Map.Permissions(r="r" in _p, w="w" in _p, x="x" in _p)
         self.empty = empty
         if self.empty and len(fields):
             raise ValueError("Empty config structs cannot have fields!")
@@ -533,6 +567,55 @@ class ConfigStruct:
         self.type_name = type_name
         self.section_name = section_name
         self.target_file = target_file
+        self.prefill_region: Optional[MemoryRegion] = None
+
+        if prefill_pd is not None or setvar is not None:
+            if prefill_pd is None or setvar is None:
+                raise ValueError("Prefill requires both a PD and a symbol")
+            self._reserve_prefill_mr(prefill_pd, setvar, setvar_prefill_size, build_dir)
+
+    def _reserve_prefill_mr(
+        self,
+        pd: ProtectionDomain,
+        symbol: str,
+        prefill_size: Optional[int],
+        build_dir: pathlib.Path = pathlib.Path("./"),
+    ) -> Map:
+        from .memory import MemoryRegion
+        from .system import AcaciaSystemError
+
+        if self.prefill_region is not None:
+            raise ValueError("This config already has a prefill.")
+        if not pd.sdf.microkit_alloc_allowed:
+            raise AcaciaSystemError(
+                "Cannot reserve a prefill memory region after system finalisation"
+            )
+        if self.type_name is None:
+            raise ValueError("Cannot prefill without a type name")
+        if self.target_file is None:
+            raise ValueError("Cannot prefill without a target file")
+
+        if prefill_size is None:
+            types = ConfigStructResolver.resolve_target_file(self.target_file)
+            c_type = find_ctype_by_name(types, self.type_name)
+            if c_type is None:
+                raise ValueError(f"Could not find type {self.type_name}")
+            size = c_type.find_base_type().byte_size
+            if size is None or size <= 0:
+                raise ValueError(f"Config type {self.type_name} is unsized")
+        else:
+            size = prefill_size
+
+        region = MemoryRegion(
+            pd.sdf,
+            f"{pd.name}_{symbol}",
+            pd.sdf.arch.roundup_to_page(size),
+            prefill_path=os.path.join(build_dir, f"{pd.name}_{symbol}.data"),
+        )
+        mapping = pd.create_automap(region, self.perms)
+        mapping.setvar_vaddr = symbol
+        self.prefill_region = region
+        return mapping
 
     def __repr__(self):
         return f"<ConfigStruct {self.type_name} {self.fields}>"
@@ -584,8 +667,10 @@ class ConfigStructResolver:
         Add a configuration struct to the resolver.
         """
         try:
-            if s.section_name is None:
-                raise ValueError("Cannot emit a config struct without a section name!")
+            if s.section_name is None and s.prefill_region is None:
+                raise ValueError(
+                    "Cannot emit a config struct without a section name or prefill_region!"
+                )
             if s.target_file is None:
                 raise ValueError(
                     "Cannot patch in a config struct without a target file!"
@@ -594,7 +679,9 @@ class ConfigStructResolver:
                 raise ValueError("Cannot patch in a config struct without a type name!")
 
             if s.target_file not in self.files:
-                self.files[s.target_file] = self.resolve_target_file(s.target_file)
+                self.files[s.target_file] = self.resolve_target_file(
+                    s.target_file, self.dwarfdump_name
+                )
         except Exception as e:
             raise RuntimeError(f"Failed to add config struct {s}!") from e
 
@@ -607,13 +694,16 @@ class ConfigStructResolver:
         for s in lst:
             self.add_struct(s)
 
-    def resolve_target_file(self, target_file: pathlib.Path) -> Dict[int, CType]:
+    @staticmethod
+    def resolve_target_file(
+        target_file: pathlib.Path, dwarfdump_name: str = "llvm-dwarfdump"
+    ) -> Dict[int, CType]:
         """
         Dwarf dump a target file, parse the output and collect all CTypes into a dictionary.
         """
         try:
             output = subprocess.run(
-                [self.dwarfdump_name, target_file],
+                [dwarfdump_name, target_file],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -861,9 +951,19 @@ class ConfigStructResolver:
                 raise Exception(
                     f"Exception occurred while flattening config struct '{config_struct}' into structure CType '{match}'`"
                 ) from e
+            prefill_region = config_struct.prefill_region
+            if prefill_region is not None and len(blob) > prefill_region.size:
+                raise ValueError(
+                    f"Config struct {config_struct.type_name} blob ({len(blob)} bytes) "
+                    f"exceeds prefill memory region {prefill_region.name} "
+                    f"({prefill_region.size} bytes)"
+                )
+            if prefill_region and prefill_region.prefill_path is not None:
+                blob_path = prefill_region.prefill_path
+            else:
+                blob_name = f"{str(config_struct.target_file).removesuffix('.elf')}_{config_struct.section_name}.data"
+                blob_path = os.path.join(self.build_dir, blob_name)
 
-            blob_name = f"{str(config_struct.target_file).removesuffix('.elf')}_{config_struct.section_name}.data"
-            blob_path = os.path.join(self.build_dir, blob_name)
             with open(blob_path, "wb") as f:
                 f.write(blob)
 
@@ -873,7 +973,7 @@ class ConfigStructResolver:
                     json.dump(
                         {
                             "type_name": config_struct.type_name,
-                            "section_name": str(config_struct.section_name),
+                            "section_name": config_struct.section_name,
                             "target_file": str(config_struct.target_file),
                             "empty": config_struct.empty,
                             "fields": {
